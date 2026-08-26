@@ -69,8 +69,18 @@ export interface Calibration {
 /**
  * The imported plan background (floor plan, satellite view, etc). Modeled
  * separately from `Layer` / `PlanObject` because it is not a drawable
- * business object — it has no meaning in meters until it is calibrated —
- * even though the UI will present it alongside the layers.
+ * business object — it isn't assigned to a layer, it isn't one of the
+ * `PlanObject` shape types, and (until KL-005's interactive calibration)
+ * its size in meters is only a first guess — even though the UI presents
+ * it alongside the layers.
+ *
+ * `widthPx`/`heightPx` are the source image's native pixel resolution
+ * (kept to derive its aspect ratio and as useful metadata); `xM`/`yM`/
+ * `widthM`/`heightM` are its placement and size in world meters — the
+ * same anchor-plus-size shape as `RectangleObject`, so it reuses the same
+ * metric rendering pipeline. There is no `rotationDeg`: a background is
+ * not rotated in KL-003 (most scanned/photographed plans don't need it;
+ * revisit if a real case comes up).
  */
 export interface BackgroundImage {
   id: string;
@@ -79,6 +89,10 @@ export interface BackgroundImage {
   url: string;
   widthPx: number;
   heightPx: number;
+  xM: Meters;
+  yM: Meters;
+  widthM: Meters;
+  heightM: Meters;
   opacity: number;
   visible: boolean;
   locked: boolean;

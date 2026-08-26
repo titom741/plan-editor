@@ -5,4 +5,5 @@ export * from "./layers";
 export * from "./objects";
 export * from "./labels";
 export * from "./geometry";
+export * from "./background";
 export * from "./project";

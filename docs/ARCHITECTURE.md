@@ -60,11 +60,12 @@ payoff:
   can explain where the scale came from and a `geo`-sourced calibration can
   be added later without a breaking change.
 - **`Background`** — modeled as its own type (`BackgroundImage | null`),
-  deliberately **not** a `Layer` and **not** a `PlanObject`. It has no
-  meaning in meters until the project is calibrated, and it isn't something
-  users draw or edit like a business object. The UI (`LayersPanel`)
-  presents it alongside the layers as a visual convenience, but the model
-  keeps it separate. See [Layer architecture](#layer-architecture).
+  deliberately **not** a `Layer` and **not** a `PlanObject`. The UI
+  (`LayersPanel`) presents it alongside the layers as a visual
+  convenience, but the model keeps it separate. See
+  [Layer architecture](#layer-architecture) and
+  [Background image](#background-image) (KL-003) for its placement fields
+  and why its size is only an approximation until calibration (KL-005).
 - **`Sheet`** — prepared (id, name) but not wired into any feature yet; see
   ROADMAP KL-009.
 
@@ -323,6 +324,77 @@ created, so "draw one shape, immediately see/tweak its real-world
 dimensions in the properties panel" (the mission's worked example) is a
 single, unbroken motion.
 
+## Background image
+
+KL-003 lets the user import a PNG/JPEG as the project's background,
+position it, and scale it — everything short of the precise, guided
+calibration that's KL-005's job. It reuses as much of the existing
+pipeline as possible rather than inventing a parallel one:
+
+- **`domain/background.ts`** gives `BackgroundImage` the same
+  "anchor + size in meters" shape as `RectangleObject`
+  (`xM`/`yM`/`widthM`/`heightM`, no rotation — see
+  [Layer architecture](#layer-architecture)), so `ui/components/BackgroundImageShape.tsx`
+  renders and drags it through the *exact same* `worldToScreen` /
+  `metersToPixels` / `screenToWorld` calls as any `PlanObject`, and its
+  resize handle reuses `domain/geometry.ts`'s
+  `resizeRectangleFromCorner`/`getRectangleResizeHandleWorld` directly
+  (passing `rotationDeg: 0`) rather than duplicating that math.
+- **Aspect ratio is locked.** A background is a photograph or scan of
+  something real — stretching it non-uniformly would distort it and make
+  any later calibration meaningless. `resizeBackgroundFromCorner`,
+  `resizeBackgroundFromWidth`, and `resizeBackgroundFromHeight` (all in
+  `domain/background.ts`) always derive the field the user *didn't* just
+  set from the source image's native `widthPx`/`heightPx` ratio, whether
+  the resize came from dragging the corner handle or typing into the
+  properties panel's Largeur/Hauteur fields — one aspect-ratio rule,
+  reached from either interaction path.
+- **First-guess placement, not calibration.** `computeDefaultBackgroundPlacement`
+  centers the imported image on the viewport's current center and sizes
+  it using the project's *current* `Calibration.pixelsPerMeter` as a naive
+  scale — reasonable enough to look right immediately, but explicitly not
+  a claim about the image's true real-world size. The properties panel
+  says as much ("Taille approximative…"). Getting that right is
+  KL-005's job; until then the size is just a manual, drag-to-adjust
+  approximation, independent of `Calibration` (resizing the background
+  never touches `Calibration.pixelsPerMeter`, and recalibrating later
+  won't retroactively resize an already-imported background).
+- **Loading the image.** `ui/hooks/useHtmlImage.ts` turns a URL (a
+  `data:` URL from `FileReader`, in `App.tsx`'s import handler — kept
+  in-memory only, nothing is written to disk; see
+  [Points à surveiller](#points-à-surveiller-repris-du-rapport-de-mission))
+  into a plain `HTMLImageElement`, which is what react-konva's `<Image>`
+  needs. Small enough not to justify a dependency for it.
+- **Selection is separate from object selection.** A background isn't a
+  `PlanObject`, so it can't share `selectedObjectId`; `App.tsx` tracks a
+  separate `isBackgroundSelected` boolean, kept mutually exclusive with
+  the object selection (selecting one clears the other). `PlanCanvas` and
+  `PropertiesPanel` branch on whichever is set.
+
+## A note on Konva event bubbling (KL-003 bugfix)
+
+While testing background dragging, a real bug surfaced: `<Stage
+onDragMove={handleStageDragMove}>` (see [Rendering architecture](#rendering-architecture))
+was firing not only when the Stage itself was dragged, but also — via
+Konva's normal event bubbling — when *any draggable child* (an object, the
+background) was dragged, with `e.target` set to that child. Read naively,
+`handleStageDragMove` would treat the child's own position as a pan delta
+and fold it into the viewport offset, then forcibly reset the child's
+position to `(0, 0)`, fighting its own drag. Depending on timing this
+could compound across a single drag gesture into a wildly wrong final
+position — a real, reproducible bug, not just a testing artifact.
+
+The fix is a one-line guard: `handleStageDragMove` now returns immediately
+unless `e.target === e.target.getStage()`. Every child's own `onDragMove`
+handler (`PlanObjectShape`, `BackgroundImageShape`, and the
+`SelectionOverlay` handles) also sets `e.cancelBubble = true` as a second,
+defense-in-depth layer. Regular object dragging happened not to exhibit
+this visibly during KL-002's manual testing — plausibly because Konva's
+drag module suppresses this bubbling under normal mouse timing and it only
+surfaced under this project's synthetic, script-driven test events — but
+the underlying gap was real and is now closed for every draggable node,
+not just the background.
+
 ## Calibration concept
 
 `domain/calibration.ts` provides `createDefaultCalibration()` — a
@@ -341,8 +413,10 @@ over-design" instruction. Recalibrating a project only ever needs to change
 `Layer` (structural grouping of `PlanObject`s: Structures, Électricité,
 Sécurité, Annotations by default) and `Background` (the imported plan
 image) are modeled as **separate types** in `domain/types.ts`, joined only
-in the *UI* by `LayersPanel.tsx`, which renders the background as an extra,
-non-toggleable row above the real layers. The reasoning:
+in the *UI* by `LayersPanel.tsx`, which renders the background as an extra
+row above the real layers — clickable to select it, with its own
+visibility/lock icons (KL-003), or an "Importer" button when there isn't
+one yet. The reasoning for keeping the types separate:
 
 - The background isn't addressable the way a layer is — you don't draw
   business objects "on" it in the data model, you draw them in *world
@@ -364,10 +438,12 @@ disables its inputs instead. `domain/layers.ts`'s
 `getDefaultTargetLayer(layers)` picks which layer a newly-created object
 lands on: the first unlocked layer in order, falling back to the very
 first layer if everything happens to be locked. There is no UI yet to
-*choose* a target layer explicitly — that's KL-006.
+*choose* a target layer explicitly — that's KL-006. KL-003 gives the
+background the same lock semantics (selectable and read-only when locked,
+otherwise fully editable) for consistency.
 
 ## Points à surveiller (repris du rapport de mission)
 
-See the KL-002 mission report (delivered alongside this document) for the
-full, current list of deferred functionality and known limitations —
-kept there rather than duplicated here so it doesn't drift out of sync.
+See the current mission report (delivered alongside this document) for
+the full, up-to-date list of deferred functionality and known limitations
+— kept there rather than duplicated here so it doesn't drift out of sync.

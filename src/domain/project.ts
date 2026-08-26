@@ -2,7 +2,7 @@ import { createDefaultCalibration } from "./calibration";
 import { createId } from "./ids";
 import { createDefaultLayers } from "./layers";
 import { createRectangleObject } from "./objects";
-import type { PlanObject, PlanObjectPatch, Project } from "./types";
+import type { BackgroundImage, PlanObject, PlanObjectPatch, Project } from "./types";
 
 export interface CreateProjectInput {
   name: string;
@@ -95,4 +95,25 @@ export function patchObject(project: Project, id: string, patch: PlanObjectPatch
   });
   if (!changed) return project;
   return { ...project, objects, updatedAt: new Date().toISOString() };
+}
+
+/** Returns a new project with `background` set, replacing any existing one. */
+export function setBackground(project: Project, background: BackgroundImage): Project {
+  return { ...project, background, updatedAt: new Date().toISOString() };
+}
+
+/** Returns a new project with the background removed. A no-op if there wasn't one. */
+export function removeBackground(project: Project): Project {
+  if (!project.background) return project;
+  return { ...project, background: null, updatedAt: new Date().toISOString() };
+}
+
+/** Returns a new project with the background patched. A no-op if there isn't one. */
+export function patchBackground(project: Project, patch: Partial<BackgroundImage>): Project {
+  if (!project.background) return project;
+  return {
+    ...project,
+    background: { ...project.background, ...patch },
+    updatedAt: new Date().toISOString(),
+  };
 }

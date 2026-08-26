@@ -8,11 +8,13 @@ dimensions in meters.
 Deliberately **not** a general-purpose CAD tool — it's scoped to fast,
 simple event-layout drafting.
 
-Current mission: **KL-002 (Metric Geometry Engine & Object Editing)** —
-create, select, move, resize, rotate, and delete rectangles, circles,
-lines, polygons, and text on the canvas, all working in real-world
-dimensions with undo/redo. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-for how it's built and [`docs/ROADMAP.md`](docs/ROADMAP.md) for what's next.
+Current mission: **KL-003 (Canvas & Background)** — import a PNG/JPEG
+background, position/scale/adjust its opacity, and draw on top of it, on
+top of everything KL-002 already delivers: create, select, move, resize,
+rotate, and delete rectangles, circles, lines, polygons, and text, all
+working in real-world dimensions with undo/redo. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how it's built and
+[`docs/ROADMAP.md`](docs/ROADMAP.md) for what's next.
 
 ## Stack
 
@@ -70,6 +72,14 @@ resizing, rotating, deleting, and property edits.
 layer's visibility or lock it (a locked layer's objects can be selected
 but not edited or deleted).
 
+**Background** — click "Importer un fond de plan…" in the layers bar (or
+"Remplacer" in the properties panel once one exists) to choose a PNG/JPEG.
+It's placed centered on the current view at an approximate size; select it
+to drag it into place, drag its corner handle to resize (aspect ratio is
+always preserved — a background is a photo/scan, not a shape to stretch),
+and adjust its opacity from the properties panel. Its size is a manual
+approximation until interactive calibration arrives (KL-005).
+
 ## Test
 
 ```bash
@@ -81,7 +91,8 @@ world↔screen conversion round-trips; zoom/pan behavior and zoom's
 non-mutation of the business model; the metric grid; object geometry
 factories and labels; the resize/rotate solve functions in
 `domain/geometry.ts` (including drift-free round-tripping under
-rotation); and the generic undo/redo stack in `history/`.
+rotation); the generic undo/redo stack in `history/`; and the background
+placement/resize/aspect-ratio logic in `domain/background.ts`.
 
 ## Lint & build
 

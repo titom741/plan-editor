@@ -11,7 +11,7 @@ half-finished features spanning missions.
   layers, a basic desktop layout, a pannable/zoomable canvas with a metric
   grid, and the "Chapiteau principal" 10 × 5 m demo object.
 
-- **KL-002 — Metric Geometry Engine & Object Editing** *(this mission)*
+- **KL-002 — Metric Geometry Engine & Object Editing** *(done)*
   `domain/geometry.ts`: pure resize/rotate solve functions
   (`resizeRectangleFromCorner`, `resizeCircleFromHandle`,
   `computeRotationFromPointer`) plus the vector primitives behind them.
@@ -19,12 +19,17 @@ half-finished features spanning missions.
   create rectangles/circles/lines/polygons/text from the tools palette,
   select, drag to move, resize (rectangle/circle), rotate, delete —
   editable live from the properties panel too, with per-layer lock
-  enforcement. See the KL-002 mission report for the full list of
-  interaction and architecture decisions.
+  enforcement.
 
-- **KL-003 — Canvas & Background**
-  Import a PNG/JPEG background, position and scale it, render it as the
-  bottom layer beneath the grid and objects.
+- **KL-003 — Canvas & Background** *(this mission)*
+  Import a PNG/JPEG background (`domain/background.ts`,
+  `ui/hooks/useHtmlImage.ts`), render it beneath the grid and objects,
+  select/move/resize it (aspect-ratio-locked) and adjust its opacity from
+  the properties panel, replace or remove it, per-background visibility/
+  lock like a layer. Its placement/size is a manual first-guess — precise,
+  guided calibration is KL-005. See the KL-003 mission report for the full
+  list of decisions, including a real Konva event-bubbling bug found and
+  fixed along the way.
 
 - **KL-004 — Advanced Object Editing**
   What KL-002 deliberately deferred: multi-selection, additional resize
@@ -34,8 +39,9 @@ half-finished features spanning missions.
 
 - **KL-005 — Calibration**
   Interactive calibration UI: click two points on the background, enter
-  the real distance (or a known scale), compute and store
-  `Calibration.pixelsPerMeter`.
+  the real distance (or a known scale), compute and store the
+  background's true `widthM`/`heightM` precisely (KL-003 only offers a
+  manual, approximate resize).
 
 - **KL-006 — Layers**
   Full layer management UI: create/rename/reorder/delete layers, assign

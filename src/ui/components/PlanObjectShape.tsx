@@ -51,6 +51,7 @@ export function PlanObjectShape({
   };
 
   const handleDragMove = (e: Konva.KonvaEventObject<DragEvent>) => {
+    e.cancelBubble = true;
     const node = e.target;
     const world = screenToWorld({ x: node.x(), y: node.y() }, viewport);
     onMoveLive(world.xM, world.yM);

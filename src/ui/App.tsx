@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { computeDefaultBackgroundPlacement, createBackgroundImage } from "../domain/background";
 import { getDefaultTargetLayer } from "../domain/layers";
 import { nextObjectName } from "../domain/labels";
 import {
@@ -8,8 +9,17 @@ import {
   createRectangleObject,
   createTextObject,
 } from "../domain/objects";
-import { addObject, createDemoProject, patchObject, removeObject } from "../domain/project";
-import type { PlanObjectPatch, Project } from "../domain/types";
+import {
+  addObject,
+  createDemoProject,
+  patchBackground,
+  patchObject,
+  removeBackground,
+  removeObject,
+  setBackground,
+} from "../domain/project";
+import type { BackgroundImage, PlanObjectPatch, Project } from "../domain/types";
+import { screenToWorld } from "../rendering/viewport";
 import { LayersPanel } from "./components/LayersPanel";
 import { PlanCanvas } from "./components/PlanCanvas";
 import type { NewObjectSpec } from "./components/PlanCanvas";
@@ -58,6 +68,8 @@ export default function App() {
 
   const [activeTool, setActiveTool] = useState<ToolId>("select");
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [isBackgroundSelected, setIsBackgroundSelected] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { viewport, containerRef, stageSize, zoomAt, pan } = useViewport(
     project.calibration.pixelsPerMeter,
@@ -72,14 +84,29 @@ export default function App() {
     [project.layers, selectedObject],
   );
   const isSelectedLocked = selectedLayer?.locked === true;
+  const isBackgroundLocked = project.background?.locked === true;
 
   const handleSelectTool = useCallback((toolId: ToolId) => {
     setActiveTool(toolId);
-    if (toolId !== "select") setSelectedObjectId(null);
+    if (toolId !== "select") {
+      setSelectedObjectId(null);
+      setIsBackgroundSelected(false);
+    }
   }, []);
 
   const handleSelectObject = useCallback((id: string | null) => {
     setSelectedObjectId(id);
+    if (id) setIsBackgroundSelected(false);
+  }, []);
+
+  const handleSelectBackground = useCallback(() => {
+    setIsBackgroundSelected(true);
+    setSelectedObjectId(null);
+  }, []);
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedObjectId(null);
+    setIsBackgroundSelected(false);
   }, []);
 
   const handleCreateObject = useCallback(
@@ -106,19 +133,40 @@ export default function App() {
     [applyLiveEdit],
   );
 
+  const handleBackgroundLiveUpdate = useCallback(
+    (patch: Partial<BackgroundImage>) => {
+      applyLiveEdit((currentProject) => patchBackground(currentProject, patch));
+    },
+    [applyLiveEdit],
+  );
+
+  const handleBackgroundMoveLive = useCallback(
+    (xM: number, yM: number) => handleBackgroundLiveUpdate({ xM, yM }),
+    [handleBackgroundLiveUpdate],
+  );
+
+  const handleBackgroundResizeLive = useCallback(
+    (widthM: number, heightM: number) => handleBackgroundLiveUpdate({ widthM, heightM }),
+    [handleBackgroundLiveUpdate],
+  );
+
   const handleDeleteSelected = useCallback(() => {
+    if (isBackgroundSelected) {
+      if (isBackgroundLocked) return;
+      commitChange((currentProject) => removeBackground(currentProject));
+      setIsBackgroundSelected(false);
+      return;
+    }
     if (!selectedObjectId || isSelectedLocked) return;
     commitChange((currentProject) => removeObject(currentProject, selectedObjectId));
     setSelectedObjectId(null);
-  }, [selectedObjectId, isSelectedLocked, commitChange]);
-
-  const handleDeselect = useCallback(() => setSelectedObjectId(null), []);
+  }, [isBackgroundSelected, isBackgroundLocked, selectedObjectId, isSelectedLocked, commitChange]);
 
   useEditorShortcuts({
     onUndo: undo,
     onRedo: redo,
     onDelete: handleDeleteSelected,
-    onDeselect: handleDeselect,
+    onDeselect: handleDeselectAll,
   });
 
   const handleToggleLayerVisible = useCallback(
@@ -147,8 +195,88 @@ export default function App() {
     [setProjectDirect],
   );
 
+  const handleToggleBackgroundVisible = useCallback(() => {
+    setProjectDirect((currentProject) =>
+      currentProject.background
+        ? {
+            ...currentProject,
+            background: { ...currentProject.background, visible: !currentProject.background.visible },
+            updatedAt: new Date().toISOString(),
+          }
+        : currentProject,
+    );
+  }, [setProjectDirect]);
+
+  const handleToggleBackgroundLocked = useCallback(() => {
+    setProjectDirect((currentProject) =>
+      currentProject.background
+        ? {
+            ...currentProject,
+            background: { ...currentProject.background, locked: !currentProject.background.locked },
+            updatedAt: new Date().toISOString(),
+          }
+        : currentProject,
+    );
+  }, [setProjectDirect]);
+
+  const handleRequestBackgroundImport = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleImportBackgroundFile = useCallback(
+    (file: File) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const url = typeof reader.result === "string" ? reader.result : null;
+        if (!url) return;
+        const img = new Image();
+        img.onload = () => {
+          const centerWorld = screenToWorld({ x: stageSize.widthPx / 2, y: stageSize.heightPx / 2 }, viewport);
+          commitChange((currentProject) => {
+            const placement = computeDefaultBackgroundPlacement(
+              img.naturalWidth,
+              img.naturalHeight,
+              currentProject.calibration.pixelsPerMeter,
+              centerWorld,
+            );
+            const background = createBackgroundImage({
+              url,
+              widthPx: img.naturalWidth,
+              heightPx: img.naturalHeight,
+              ...placement,
+            });
+            return setBackground(currentProject, background);
+          });
+          setIsBackgroundSelected(true);
+          setSelectedObjectId(null);
+          setActiveTool("select");
+        };
+        img.src = url;
+      };
+      reader.readAsDataURL(file);
+    },
+    [commitChange, stageSize, viewport],
+  );
+
+  const handleFileInputChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (file) handleImportBackgroundFile(file);
+      // Reset so choosing the same file again still fires a change event.
+      event.target.value = "";
+    },
+    [handleImportBackgroundFile],
+  );
+
   return (
     <div className="app-layout">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg"
+        className="visually-hidden"
+        onChange={handleFileInputChange}
+      />
       <Toolbar
         projectName={project.name}
         zoom={viewport.zoom}
@@ -166,25 +294,39 @@ export default function App() {
         onPan={pan}
         objects={project.objects}
         layers={project.layers}
+        background={project.background}
         activeTool={activeTool}
         selectedObjectId={selectedObjectId}
+        isBackgroundSelected={isBackgroundSelected}
         onSelectObject={handleSelectObject}
+        onSelectBackground={handleSelectBackground}
+        onDeselectAll={handleDeselectAll}
         onCreateObject={handleCreateObject}
         onBeginObjectEdit={handleBeginObjectEdit}
         onObjectLiveUpdate={handleObjectLiveUpdate}
+        onBackgroundMoveLive={handleBackgroundMoveLive}
+        onBackgroundResizeLive={handleBackgroundResizeLive}
       />
       <PropertiesPanel
-        selected={selectedObject}
-        isLocked={isSelectedLocked}
+        selected={isBackgroundSelected ? null : selectedObject}
+        selectedBackground={isBackgroundSelected ? project.background : null}
+        isLocked={isBackgroundSelected ? isBackgroundLocked : isSelectedLocked}
         onBeginEdit={handleBeginObjectEdit}
         onLiveUpdate={(patch) => selectedObjectId && handleObjectLiveUpdate(selectedObjectId, patch)}
+        onBackgroundLiveUpdate={handleBackgroundLiveUpdate}
         onDelete={handleDeleteSelected}
+        onRequestReplaceBackground={handleRequestBackgroundImport}
       />
       <LayersPanel
         background={project.background}
+        isBackgroundSelected={isBackgroundSelected}
         layers={project.layers}
         onToggleVisible={handleToggleLayerVisible}
         onToggleLocked={handleToggleLayerLocked}
+        onSelectBackground={handleSelectBackground}
+        onToggleBackgroundVisible={handleToggleBackgroundVisible}
+        onToggleBackgroundLocked={handleToggleBackgroundLocked}
+        onRequestImportBackground={handleRequestBackgroundImport}
       />
     </div>
   );

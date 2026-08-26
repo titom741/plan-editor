@@ -12,6 +12,19 @@
   color: var(--text-h);
 }
 
+/* Utility */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Toolbar */
 .toolbar {
   grid-area: toolbar;
@@ -250,6 +263,51 @@
   cursor: not-allowed;
 }
 
+.properties-panel__hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.properties-panel__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.properties-panel__actions .properties-panel__delete {
+  margin-top: 0;
+  flex: 1;
+}
+
+.properties-panel__button {
+  flex: 1;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  color: inherit;
+  background: transparent;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.properties-panel__button:not(:disabled):hover {
+  background: var(--accent-bg);
+}
+
+.properties-panel__button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.properties-panel__field input[type="range"] {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
 /* Layers panel */
 .layers-panel {
   grid-area: layers;
@@ -282,6 +340,11 @@
   font-style: italic;
 }
 
+.layers-panel__row--background.is-selected {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
 .layers-panel__icon-button {
   border: none;
   background: transparent;
@@ -293,4 +356,19 @@
 
 .layers-panel__name {
   white-space: nowrap;
+}
+
+.layers-panel__name-button {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-style: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 0;
+}
+
+.layers-panel__name-button:hover {
+  text-decoration: underline;
 }

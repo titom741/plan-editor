@@ -4,7 +4,8 @@ import type Konva from "konva";
 import { computeGridLines } from "../../rendering/grid";
 import { metersToPixels, screenToWorld, worldToScreen } from "../../rendering/viewport";
 import type { ScreenPoint, Viewport } from "../../rendering/viewport";
-import type { Layer, PlanObject, PlanObjectPatch, PointM } from "../../domain/types";
+import type { Background, Layer, PlanObject, PlanObjectPatch, PointM } from "../../domain/types";
+import { BackgroundImageShape } from "./BackgroundImageShape";
 import { PlanObjectShape } from "./PlanObjectShape";
 import { SelectionOverlay } from "./SelectionOverlay";
 import type { StageSize } from "../hooks/useViewport";
@@ -26,12 +27,18 @@ interface PlanCanvasProps {
   onPan: (deltaXPx: number, deltaYPx: number) => void;
   objects: PlanObject[];
   layers: Layer[];
+  background: Background;
   activeTool: ToolId;
   selectedObjectId: string | null;
+  isBackgroundSelected: boolean;
   onSelectObject: (id: string | null) => void;
+  onSelectBackground: () => void;
+  onDeselectAll: () => void;
   onCreateObject: (spec: NewObjectSpec) => void;
   onBeginObjectEdit: () => void;
   onObjectLiveUpdate: (id: string, patch: PlanObjectPatch) => void;
+  onBackgroundMoveLive: (xM: number, yM: number) => void;
+  onBackgroundResizeLive: (widthM: number, heightM: number) => void;
 }
 
 /** Multiplicative zoom step applied per wheel notch. */
@@ -53,12 +60,18 @@ export function PlanCanvas({
   onPan,
   objects,
   layers,
+  background,
   activeTool,
   selectedObjectId,
+  isBackgroundSelected,
   onSelectObject,
+  onSelectBackground,
+  onDeselectAll,
   onCreateObject,
   onBeginObjectEdit,
   onObjectLiveUpdate,
+  onBackgroundMoveLive,
+  onBackgroundResizeLive,
 }: PlanCanvasProps) {
   const [draft, setDraft] = useState<Draft | null>(null);
 
@@ -109,8 +122,17 @@ export function PlanCanvas({
   // fold its displacement into the viewport's offset (the single source of
   // truth for pan) and snap the node back to (0, 0), so world→screen
   // conversion is never applied twice.
+  //
+  // Konva's drag events bubble like any other Konva event, so dragging a
+  // *child* node (an object, the background) also fires this handler —
+  // with `e.target` set to that child, not the Stage. Without the guard
+  // below, `node.x()/y()` would read the child's own position (which has
+  // nothing to do with panning) and `node.position({x:0,y:0})` would
+  // fight the child's own drag by resetting it every frame. Only treat
+  // this as a pan when the Stage itself is what's actually being dragged.
   const handleStageDragMove = useCallback(
     (e: Konva.KonvaEventObject<DragEvent>) => {
+      if (e.target !== e.target.getStage()) return;
       const node = e.target;
       onPan(node.x(), node.y());
       node.position({ x: 0, y: 0 });
@@ -121,7 +143,7 @@ export function PlanCanvas({
   const handleMouseDown = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
       if (activeTool === "select") {
-        if (e.target === e.target.getStage()) onSelectObject(null);
+        if (e.target === e.target.getStage()) onDeselectAll();
         return;
       }
       if (activeTool === "rectangle" || activeTool === "circle" || activeTool === "line") {
@@ -132,7 +154,7 @@ export function PlanCanvas({
         else setDraft({ tool: "line", startWorld: world, currentWorld: world });
       }
     },
-    [activeTool, onSelectObject, getPointerWorld],
+    [activeTool, onDeselectAll, getPointerWorld],
   );
 
   const handleMouseMove = useCallback(
@@ -232,6 +254,20 @@ export function PlanCanvas({
           onMouseUp={handleMouseUp}
           onClick={handleClick}
         >
+          <KonvaLayer>
+            {background?.visible && (
+              <BackgroundImageShape
+                background={background}
+                viewport={viewport}
+                selected={isBackgroundSelected}
+                draggable={activeTool === "select" && !background.locked}
+                onSelect={onSelectBackground}
+                onBeginEdit={onBeginObjectEdit}
+                onMoveLive={onBackgroundMoveLive}
+                onResizeLive={onBackgroundResizeLive}
+              />
+            )}
+          </KonvaLayer>
           <KonvaLayer listening={false}>
             {grid.vertical.map((line) => (
               <Line

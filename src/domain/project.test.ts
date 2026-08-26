@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { createBackgroundImage } from "./background";
 import { getObjectDimensionSummary, getObjectDisplayLabel, nextObjectName } from "./labels";
 import { createCircleObject, createRectangleObject } from "./objects";
 import { createDefaultLayers, DEFAULT_LAYER_NAMES, getDefaultTargetLayer } from "./layers";
-import { addObject, createDemoProject, createEmptyProject, patchObject, removeObject } from "./project";
+import {
+  addObject,
+  createDemoProject,
+  createEmptyProject,
+  patchBackground,
+  patchObject,
+  removeBackground,
+  removeObject,
+  setBackground,
+} from "./project";
 
 describe("createEmptyProject", () => {
   it("creates the default layer set", () => {
@@ -168,5 +178,45 @@ describe("getDefaultTargetLayer", () => {
   it("falls back to the first layer if every layer is locked", () => {
     const layers = createDefaultLayers().map((l) => ({ ...l, locked: true }));
     expect(getDefaultTargetLayer(layers)?.id).toBe(layers[0]?.id);
+  });
+});
+
+describe("setBackground / removeBackground / patchBackground", () => {
+  const sampleBackground = createBackgroundImage({
+    url: "data:image/png;base64,xyz",
+    widthPx: 2000,
+    heightPx: 1000,
+    xM: 0,
+    yM: 0,
+    widthM: 40,
+    heightM: 20,
+  });
+
+  it("setBackground replaces any existing background without mutating the original project", () => {
+    const project = createEmptyProject({ name: "Test" });
+    const next = setBackground(project, sampleBackground);
+    expect(project.background).toBeNull(); // original untouched
+    expect(next.background).toBe(sampleBackground);
+  });
+
+  it("removeBackground clears it and is a no-op when there isn't one", () => {
+    const withBackground = setBackground(createEmptyProject({ name: "Test" }), sampleBackground);
+    const removed = removeBackground(withBackground);
+    expect(removed.background).toBeNull();
+
+    const alreadyEmpty = createEmptyProject({ name: "Test" });
+    expect(removeBackground(alreadyEmpty)).toBe(alreadyEmpty);
+  });
+
+  it("patchBackground merges fields and is a no-op when there isn't one", () => {
+    const withBackground = setBackground(createEmptyProject({ name: "Test" }), sampleBackground);
+    const patched = patchBackground(withBackground, { xM: 5, yM: 5, opacity: 0.5 });
+    expect(patched.background?.xM).toBe(5);
+    expect(patched.background?.yM).toBe(5);
+    expect(patched.background?.opacity).toBe(0.5);
+    expect(patched.background?.widthM).toBe(40); // untouched fields survive the merge
+
+    const empty = createEmptyProject({ name: "Test" });
+    expect(patchBackground(empty, { xM: 1 })).toBe(empty);
   });
 });

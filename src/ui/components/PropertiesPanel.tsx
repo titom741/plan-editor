@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from "react";
+import { resizeBackgroundFromHeight, resizeBackgroundFromWidth } from "../../domain/background";
 import { getObjectDimensionSummary } from "../../domain/labels";
-import type { PlanObject, PlanObjectPatch } from "../../domain/types";
+import type { BackgroundImage, PlanObject, PlanObjectPatch } from "../../domain/types";
 
 interface PropertiesPanelProps {
   selected: PlanObject | null;
-  /** True when the selected object's layer is locked — properties become read-only. */
+  selectedBackground: BackgroundImage | null;
+  /** True when the selection's layer (or the background) is locked — properties become read-only. */
   isLocked: boolean;
   onBeginEdit: () => void;
   onLiveUpdate: (patch: PlanObjectPatch) => void;
+  onBackgroundLiveUpdate: (patch: Partial<BackgroundImage>) => void;
   onDelete: () => void;
+  onRequestReplaceBackground: () => void;
 }
 
 const TYPE_LABELS: Record<PlanObject["type"], string> = {
@@ -75,26 +79,99 @@ function NumberField({ label, valueM, step = 0.1, disabled, onCommit }: NumberFi
   );
 }
 
-export function PropertiesPanel({ selected, isLocked, onBeginEdit, onLiveUpdate, onDelete }: PropertiesPanelProps) {
+export function PropertiesPanel({
+  selected,
+  selectedBackground,
+  isLocked,
+  onBeginEdit,
+  onLiveUpdate,
+  onBackgroundLiveUpdate,
+  onDelete,
+  onRequestReplaceBackground,
+}: PropertiesPanelProps) {
   // Snapshots undo history at most once per focus session across all
-  // fields: the first change after a field gains focus pushes the "before"
-  // snapshot, subsequent keystrokes just live-update. Resets whenever a
-  // different object is selected.
+  // fields: the first change after a field gains focus pushes the
+  // "before" snapshot, subsequent keystrokes just live-update. Resets
+  // whenever the selection changes (a different object, the background,
+  // or nothing).
   const hasSnapshotRef = useRef(false);
+  const selectionKey = selectedBackground ? "background" : selected?.id;
   useEffect(() => {
     hasSnapshotRef.current = false;
-  }, [selected?.id]);
+  }, [selectionKey]);
 
-  const applyPatch = (patch: PlanObjectPatch) => {
+  const withSnapshot = (apply: () => void) => {
     if (!hasSnapshotRef.current) {
       onBeginEdit();
       hasSnapshotRef.current = true;
     }
-    onLiveUpdate(patch);
+    apply();
   };
+  const applyPatch = (patch: PlanObjectPatch) => withSnapshot(() => onLiveUpdate(patch));
+  const applyBackgroundPatch = (patch: Partial<BackgroundImage>) =>
+    withSnapshot(() => onBackgroundLiveUpdate(patch));
   const resetSnapshotOnFocus = () => {
     hasSnapshotRef.current = false;
   };
+
+  if (selectedBackground) {
+    const bg = selectedBackground;
+    return (
+      <aside className="properties-panel">
+        <h2 className="panel__title">Propriétés</h2>
+        <div className="properties-panel__body">
+          {isLocked && <p className="properties-panel__locked-notice">🔒 Fond de plan verrouillé — lecture seule.</p>}
+
+          <div className="properties-panel__static">
+            <span>Type</span>
+            <span>Fond de plan</span>
+          </div>
+
+          <NumberField label="Position X" valueM={bg.xM} disabled={isLocked} onCommit={(v) => applyBackgroundPatch({ xM: v })} />
+          <NumberField label="Position Y" valueM={bg.yM} disabled={isLocked} onCommit={(v) => applyBackgroundPatch({ yM: v })} />
+          <NumberField
+            label="Largeur"
+            valueM={bg.widthM}
+            disabled={isLocked}
+            onCommit={(v) => applyBackgroundPatch(resizeBackgroundFromWidth(bg, Math.max(0.1, v)))}
+          />
+          <NumberField
+            label="Hauteur"
+            valueM={bg.heightM}
+            disabled={isLocked}
+            onCommit={(v) => applyBackgroundPatch(resizeBackgroundFromHeight(bg, Math.max(0.1, v)))}
+          />
+
+          <label className="properties-panel__field">
+            <span>Opacité ({Math.round(bg.opacity * 100)} %)</span>
+            <input
+              type="range"
+              min={0.1}
+              max={1}
+              step={0.05}
+              value={bg.opacity}
+              disabled={isLocked}
+              onFocus={resetSnapshotOnFocus}
+              onChange={(e) => applyBackgroundPatch({ opacity: Number.parseFloat(e.target.value) })}
+            />
+          </label>
+
+          <p className="properties-panel__hint">
+            Taille approximative — la calibration précise arrivera dans une prochaine mission.
+          </p>
+
+          <div className="properties-panel__actions">
+            <button type="button" className="properties-panel__button" onClick={onRequestReplaceBackground} disabled={isLocked}>
+              🖼 Remplacer
+            </button>
+            <button type="button" className="properties-panel__delete" onClick={onDelete} disabled={isLocked}>
+              🗑 Supprimer
+            </button>
+          </div>
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside className="properties-panel">
