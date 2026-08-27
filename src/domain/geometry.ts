@@ -69,31 +69,262 @@ export function translatePoint(anchor: PointM, deltaM: VectorM): PointM {
 }
 
 /**
- * Resizes a rectangle by dragging its bottom-right corner (in its own
- * rotated frame) to `pointerWorld`. The anchor (top-left) and rotation
- * never change — only `widthM`/`heightM` are derived, fresh, from the
- * pointer's position un-rotated into the rectangle's local frame. Clamped
- * to `MIN_SIZE_M` so a resize can never collapse the object to zero (or
- * negative) size.
+ * Expresses a world point in an object's own unrotated frame, relative to
+ * its anchor. The inverse of `objectLocalToWorld`.
+ *
+ * Every interactive edit that has to reason about "where the pointer is on
+ * the shape" goes through this pair rather than doing its own trigonometry,
+ * so a rotated object behaves exactly like an unrotated one.
+ */
+export function worldToObjectLocal(
+  object: { xM: number; yM: number; rotationDeg: number },
+  world: PointM,
+): VectorM {
+  return rotateVector(subtractPoints(world, { xM: object.xM, yM: object.yM }), -object.rotationDeg);
+}
+
+/** Expresses a point of an object's own unrotated frame in world coordinates. The inverse of `worldToObjectLocal`. */
+export function objectLocalToWorld(
+  object: { xM: number; yM: number; rotationDeg: number },
+  local: VectorM,
+): PointM {
+  return addVector({ xM: object.xM, yM: object.yM }, rotateVector(local, object.rotationDeg));
+}
+
+// ---------------------------------------------------------------------------
+// Rectangle resize handles (KL-004)
+// ---------------------------------------------------------------------------
+
+/** The eight points a rectangle can be resized from: four corners and four edge midpoints, named by compass direction in the object's own frame. */
+export type ResizeHandleId = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
+
+/** All eight handles, clockwise from the top-left. */
+export const RESIZE_HANDLE_IDS: readonly ResizeHandleId[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+
+/**
+ * Where each handle sits in the rectangle's own frame, as a fraction of
+ * its width and height: 0 = the near edge, 1 = the far edge, 0.5 = the
+ * middle of an edge (which is what makes a handle an *edge* handle — it
+ * doesn't drive that axis at all).
+ */
+const HANDLE_UNIT: Record<ResizeHandleId, { u: number; v: number }> = {
+  nw: { u: 0, v: 0 },
+  n: { u: 0.5, v: 0 },
+  ne: { u: 1, v: 0 },
+  e: { u: 1, v: 0.5 },
+  se: { u: 1, v: 1 },
+  s: { u: 0.5, v: 1 },
+  sw: { u: 0, v: 1 },
+  w: { u: 0, v: 0.5 },
+};
+
+/** True for the four corner handles, which drive both axes (and so can preserve an aspect ratio). */
+export function isCornerHandle(handle: ResizeHandleId): boolean {
+  const unit = HANDLE_UNIT[handle];
+  return unit.u !== 0.5 && unit.v !== 0.5;
+}
+
+/** World position of one of a rectangle's eight resize handles. */
+export function getRectangleHandleWorld(
+  object: Pick<RectangleObject, "xM" | "yM" | "widthM" | "heightM" | "rotationDeg">,
+  handle: ResizeHandleId,
+): PointM {
+  const unit = HANDLE_UNIT[handle];
+  return objectLocalToWorld(object, { xM: unit.u * object.widthM, yM: unit.v * object.heightM });
+}
+
+/**
+ * Resizes a rectangle by dragging any one of its eight handles to
+ * `pointerWorld`.
+ *
+ * The rule the whole thing rests on: **the diagonally opposite handle
+ * stays exactly where it is in world space**. That is what makes dragging
+ * the north-west corner grow the rectangle up and to the left instead of
+ * dragging the whole object around, and it holds at any rotation because
+ * the pointer is un-rotated into the rectangle's own frame first. The
+ * anchor (`xM`/`yM`) therefore *does* move for six of the eight handles —
+ * which is why this returns a full placement, unlike the bottom-right-only
+ * `resizeRectangleFromCorner` it replaces, where the anchor is the fixed
+ * point and never moves.
+ *
+ * `keepAspectRatio` (the Shift modifier in the UI) scales both axes
+ * together from the object's current proportions. On an edge handle that
+ * means the axis you are *not* dragging follows along; on a corner it
+ * means the larger of the two requested scales wins, so the shape keeps up
+ * with the pointer instead of lagging behind it.
+ *
+ * Nothing accumulates: every call recomputes from the object's current
+ * geometry and the pointer's current world position, so a resize is
+ * drift-free across zoom changes and dropped frames alike.
+ */
+export function resizeRectangleFromHandle(
+  object: Pick<RectangleObject, "xM" | "yM" | "widthM" | "heightM" | "rotationDeg">,
+  handle: ResizeHandleId,
+  pointerWorld: PointM,
+  options: { keepAspectRatio?: boolean } = {},
+): { xM: number; yM: number; widthM: number; heightM: number } {
+  const unit = HANDLE_UNIT[handle];
+  const opposite = { u: 1 - unit.u, v: 1 - unit.v };
+  const fixedWorld = objectLocalToWorld(object, {
+    xM: opposite.u * object.widthM,
+    yM: opposite.v * object.heightM,
+  });
+
+  // The pointer in the rectangle's own unrotated frame, measured from the
+  // handle that must not move.
+  const local = rotateVector(subtractPoints(pointerWorld, fixedWorld), -object.rotationDeg);
+
+  let widthM = object.widthM;
+  let heightM = object.heightM;
+  if (unit.u === 1) widthM = local.xM;
+  else if (unit.u === 0) widthM = -local.xM;
+  if (unit.v === 1) heightM = local.yM;
+  else if (unit.v === 0) heightM = -local.yM;
+
+  if (options.keepAspectRatio && object.widthM > 0 && object.heightM > 0) {
+    const drivesWidth = unit.u !== 0.5;
+    const drivesHeight = unit.v !== 0.5;
+    const widthScale = widthM / object.widthM;
+    const heightScale = heightM / object.heightM;
+    let scale = drivesWidth && drivesHeight ? Math.max(widthScale, heightScale) : drivesWidth ? widthScale : heightScale;
+    // Clamping the *scale* rather than each side keeps the ratio exact at
+    // the minimum size — clamping the sides independently would quietly
+    // distort the shape the modifier exists to protect.
+    scale = Math.max(scale, MIN_SIZE_M / object.widthM, MIN_SIZE_M / object.heightM);
+    widthM = object.widthM * scale;
+    heightM = object.heightM * scale;
+  } else {
+    widthM = Math.max(MIN_SIZE_M, widthM);
+    heightM = Math.max(MIN_SIZE_M, heightM);
+  }
+
+  // Place the anchor so the fixed handle lands back on the same world point.
+  const nextAnchor = addVector(
+    fixedWorld,
+    rotateVector({ xM: -opposite.u * widthM, yM: -opposite.v * heightM }, object.rotationDeg),
+  );
+  return { xM: nextAnchor.xM, yM: nextAnchor.yM, widthM, heightM };
+}
+
+// ---------------------------------------------------------------------------
+// Circle resize handles (KL-004)
+// ---------------------------------------------------------------------------
+
+/** The four points a circle can be resized from. Deliberately axis-aligned in world space: a circle looks the same at every rotation, so rotating its handles would only make them harder to hit. */
+export type CircleHandleId = "n" | "e" | "s" | "w";
+
+export const CIRCLE_HANDLE_IDS: readonly CircleHandleId[] = ["n", "e", "s", "w"];
+
+const CIRCLE_HANDLE_DIRECTION: Record<CircleHandleId, VectorM> = {
+  n: { xM: 0, yM: -1 },
+  e: { xM: 1, yM: 0 },
+  s: { xM: 0, yM: 1 },
+  w: { xM: -1, yM: 0 },
+};
+
+/** World position of one of a circle's four resize handles, on its circumference. */
+export function getCircleHandleWorld(
+  object: Pick<CircleObject, "xM" | "yM" | "radiusM">,
+  handle: CircleHandleId,
+): PointM {
+  const direction = CIRCLE_HANDLE_DIRECTION[handle];
+  return { xM: object.xM + direction.xM * object.radiusM, yM: object.yM + direction.yM * object.radiusM };
+}
+
+// ---------------------------------------------------------------------------
+// Line / polygon vertices (KL-004)
+// ---------------------------------------------------------------------------
+
+/** The shape of a line or polygon, as far as vertex editing is concerned. */
+export interface VertexGeometry {
+  xM: number;
+  yM: number;
+  rotationDeg: number;
+  pointsM: PointM[];
+}
+
+/** Fewest vertices each multi-point type may be reduced to — below this the object stops being one. */
+export const MIN_LINE_POINTS = 2;
+export const MIN_POLYGON_POINTS = 3;
+
+/** World position of vertex `index`, or `null` if there is no such vertex. */
+export function getVertexWorld(object: VertexGeometry, index: number): PointM | null {
+  const point = object.pointsM[index];
+  if (!point) return null;
+  return objectLocalToWorld(object, point);
+}
+
+/**
+ * Moves vertex `index` so it lands exactly on `pointerWorld`, returning
+ * the new `pointsM`. Returns `null` for an index that doesn't exist.
+ *
+ * The object's anchor deliberately stays put, even when vertex 0 (which
+ * normally sits at the anchor) is the one being dragged. Re-normalising
+ * the anchor mid-drag would move the rotation pivot under the user's hand
+ * and make the shape swim; the anchor is just the local origin, and the
+ * model has never required a vertex to sit on it.
+ */
+export function moveVertexTo(object: VertexGeometry, index: number, pointerWorld: PointM): { pointsM: PointM[] } | null {
+  if (!object.pointsM[index]) return null;
+  const local = worldToObjectLocal(object, pointerWorld);
+  const pointsM = object.pointsM.map((point, i) => (i === index ? { xM: local.xM, yM: local.yM } : point));
+  return { pointsM };
+}
+
+/** How many segments the shape has: a polygon's last vertex joins back to its first, a line's doesn't. */
+export function getSegmentCount(object: VertexGeometry, closed: boolean): number {
+  const count = object.pointsM.length;
+  if (count < 2) return 0;
+  return closed ? count : count - 1;
+}
+
+/** World midpoint of segment `index` (the segment leaving vertex `index`), or `null` if there is no such segment. */
+export function getSegmentMidpointWorld(object: VertexGeometry, index: number, closed: boolean): PointM | null {
+  if (index < 0 || index >= getSegmentCount(object, closed)) return null;
+  const start = object.pointsM[index];
+  const end = object.pointsM[(index + 1) % object.pointsM.length];
+  if (!start || !end) return null;
+  return objectLocalToWorld(object, { xM: (start.xM + end.xM) / 2, yM: (start.yM + end.yM) / 2 });
+}
+
+/** Inserts a new vertex just after `index` — i.e. splits the segment leaving it — at `pointerWorld`. */
+export function insertVertexAfter(object: VertexGeometry, index: number, pointerWorld: PointM): { pointsM: PointM[] } {
+  const local = worldToObjectLocal(object, pointerWorld);
+  const pointsM = [...object.pointsM];
+  pointsM.splice(index + 1, 0, { xM: local.xM, yM: local.yM });
+  return { pointsM };
+}
+
+/** Removes vertex `index`, or returns `null` when doing so would leave fewer than `minimumPoints` — the caller then simply refuses, rather than producing a degenerate object. */
+export function removeVertexAt(object: VertexGeometry, index: number, minimumPoints: number): { pointsM: PointM[] } | null {
+  if (!object.pointsM[index]) return null;
+  if (object.pointsM.length <= minimumPoints) return null;
+  return { pointsM: object.pointsM.filter((_, i) => i !== index) };
+}
+
+/**
+ * Resizes a rectangle by dragging its bottom-right corner — the narrow
+ * case `SelectionOverlay` used before KL-004 added the other seven
+ * handles. Kept because it reads well at the call site and because the
+ * bottom-right corner is the one that never moves the anchor; it is now
+ * just `resizeRectangleFromHandle(…, "se", …)` so there is a single
+ * implementation of the resize math.
  */
 export function resizeRectangleFromCorner(
   object: Pick<RectangleObject, "xM" | "yM" | "rotationDeg">,
   pointerWorld: PointM,
 ): { widthM: number; heightM: number } {
-  const worldDelta = subtractPoints(pointerWorld, { xM: object.xM, yM: object.yM });
-  const local = rotateVector(worldDelta, -object.rotationDeg);
-  return {
-    widthM: Math.max(MIN_SIZE_M, local.xM),
-    heightM: Math.max(MIN_SIZE_M, local.yM),
-  };
+  // Width/height are irrelevant for "se": its fixed opposite handle is the
+  // anchor itself, so they never enter the computation.
+  const resized = resizeRectangleFromHandle({ ...object, widthM: 0, heightM: 0 }, "se", pointerWorld);
+  return { widthM: resized.widthM, heightM: resized.heightM };
 }
 
-/** World position of a rectangle's resize handle (its rotated bottom-right corner). */
+/** World position of a rectangle's bottom-right resize handle. */
 export function getRectangleResizeHandleWorld(
   object: Pick<RectangleObject, "xM" | "yM" | "widthM" | "heightM" | "rotationDeg">,
 ): PointM {
-  const corner = rotateVector({ xM: object.widthM, yM: object.heightM }, object.rotationDeg);
-  return addVector({ xM: object.xM, yM: object.yM }, corner);
+  return getRectangleHandleWorld(object, "se");
 }
 
 /**
@@ -109,9 +340,9 @@ export function resizeCircleFromHandle(
   return { radiusM: Math.max(MIN_SIZE_M / 2, vectorLength(delta)) };
 }
 
-/** World position of a circle's resize handle (on its circumference, to the right of center). */
+/** World position of a circle's eastern resize handle — the one that existed before KL-004 added the other three. */
 export function getCircleResizeHandleWorld(object: Pick<CircleObject, "xM" | "yM" | "radiusM">): PointM {
-  return { xM: object.xM + object.radiusM, yM: object.yM };
+  return getCircleHandleWorld(object, "e");
 }
 
 /**

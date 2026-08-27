@@ -209,12 +209,19 @@ rotate handle turns into new `PlanObject` fields. It has two layers:
 - **Vector primitives** — `rotateVector`, `subtractPoints`, `addVector`,
   `vectorLength`, `normalizeAngleDeg` — plain 2D math, in meters, no
   knowledge of any specific shape.
-- **Solve functions** — `resizeRectangleFromCorner(object, pointerWorld)`,
-  `resizeCircleFromHandle(object, pointerWorld)`,
-  `computeRotationFromPointer(pivotWorld, pointerWorld)` — each takes the
-  object's *current* geometry plus the pointer's current world position
-  and returns the new field(s) (`widthM`/`heightM`, `radiusM`,
-  `rotationDeg`), fresh, every call.
+- **Frame conversions** — `worldToObjectLocal` / `objectLocalToWorld`
+  (added in KL-004), which express a world point in an object's own
+  unrotated frame and back. Everything that has to reason about "where
+  the pointer is *on the shape*" goes through this pair instead of doing
+  its own trigonometry, which is why a rotated object behaves exactly
+  like an unrotated one everywhere.
+- **Solve functions** — `resizeRectangleFromHandle(object, handle,
+  pointerWorld, options)`, `resizeCircleFromHandle(object, pointerWorld)`,
+  `computeRotationFromPointer(pivotWorld, pointerWorld)`,
+  `moveVertexTo(object, index, pointerWorld)` — each takes the object's
+  *current* geometry plus the pointer's current world position and
+  returns the new field(s) (`xM`/`yM`/`widthM`/`heightM`, `radiusM`,
+  `rotationDeg`, `pointsM`), fresh, every call.
 
 That "fresh every call" property is what keeps editing **drift-free**: a
 resize handle drag doesn't accumulate a chain of small deltas (each with
@@ -236,13 +243,125 @@ below) — by design: dragging the bottom-right resize handle keeps that
 anchor fixed and only changes `widthM`/`heightM`, which is both the
 simplest possible formula and matches the object's existing rotation
 pivot, so resize and rotate never disagree about which point is "fixed."
-KL-002 only exposes *this one* corner handle (plus a single radius handle
+KL-002 only exposed *this one* corner handle (plus a single radius handle
 for circles) rather than a full 8-handle transformer — enough to satisfy
 "resize a rectangle or circle with the mouse," while a fully general
-"drag any corner, opposite corner stays put, works under rotation" solver
-is meaningfully more math for a KL-002-scale mission. See
-[Points à surveiller](#points-à-surveiller-repris-du-rapport-de-mission)
-in the mission report for what's deferred.
+solver was meaningfully more math for a KL-002-scale mission. KL-004
+generalises it: see [Advanced editing](#advanced-editing-kl-004) below.
+`resizeRectangleFromCorner` and `getRectangleResizeHandleWorld` survive as
+one-line wrappers over the general functions, so there is exactly one
+implementation of the resize maths and the KL-002 tests still pin it.
+
+## Advanced editing (KL-004)
+
+KL-004 is the mission that goes back for everything KL-002 deferred:
+eight resize handles instead of one, editable line/polygon vertices,
+multi-selection, copy/paste, and arrow-key nudging.
+
+### The rule that makes eight handles one function
+
+`resizeRectangleFromHandle(object, handle, pointerWorld, options)` covers
+all eight handles with a single rule: **the diagonally opposite handle
+stays exactly where it is in world space.** Everything else follows from
+it — the pointer is un-rotated into the rectangle's own frame relative to
+that fixed point, the new width/height read straight off the result, and
+the anchor is then placed so the fixed handle lands back where it was.
+
+That last step is the substantive change from KL-002: for six of the eight
+handles the anchor *moves*, so the function returns a full placement
+(`xM`, `yM`, `widthM`, `heightM`) rather than just a size. Edge handles
+fall out of the same formula for free — an edge handle is simply one whose
+unit coordinate is `0.5` on the axis it doesn't drive.
+
+`keepAspectRatio` (Shift in the UI) scales both axes together. It clamps
+the *scale* rather than each side, because clamping the sides
+independently would distort the shape at the minimum size — quietly
+breaking the one property the modifier exists to protect.
+
+### Vertices, and why the anchor doesn't move
+
+`getVertexWorld` / `moveVertexTo` / `insertVertexAfter` / `removeVertexAt`
+edit a line's or polygon's `pointsM`. Dragging vertex 0 deliberately does
+*not* re-normalise the anchor, even though vertex 0 normally sits on it:
+the anchor is the rotation pivot, and moving it mid-drag would make the
+shape swim under the user's hand. The model has never required a vertex to
+sit on the anchor, so nothing else has to change.
+
+`removeVertexAt` refuses rather than obliges when the result would have
+fewer than `MIN_LINE_POINTS` / `MIN_POLYGON_POINTS` points. A polygon with
+two vertices is not a degenerate polygon, it is not a polygon.
+
+### Selection as a value
+
+`domain/selection.ts` holds the questions that only become geometry once
+more than one object can be selected: `toggleSelection` (the Shift-click
+rule), `boundsFromCorners` (a marquee dragged up-and-left is the same box
+as one dragged down-and-right), `objectIdsWithinBounds`, and
+`getSelectionBoundsM`.
+
+Marquee hit-testing is done against each object's axis-aligned bounding
+box, not its true outline. A marquee is a rough gesture, and the failure
+it produces — catching slightly too much — is the forgiving one.
+
+### Copy/paste
+
+`domain/clipboard.ts`'s `duplicateObjects` gives each copy a fresh id, a
+paste offset, and a home: an object whose layer has since been deleted is
+rehomed onto the default target layer instead of becoming invisible and
+unreachable. Names are carried over unchanged — two objects called
+"Chapiteau principal" after a copy is honest, and "(copie) (copie)" on the
+second paste would be worse than the ambiguity it avoids.
+
+The editor's clipboard is a `useRef` holding real `PlanObject`s. This is a
+single-window, offline app: there is no system clipboard round-trip to
+survive, and therefore nothing to serialise or re-validate.
+
+### Group moves are solved from an origin, never accumulated
+
+`Editor.handleBeginObjectDrag` snapshots every selected object's position
+when a drag starts; each frame then computes `origin + total delta` for
+all of them. Applying this frame's delta to the previous positions would
+drift — and drift differently for each member of the group, which is worse
+than drifting uniformly, because the arrangement the user built comes
+apart.
+
+Arrow-key nudging takes the opposite precaution for the opposite reason:
+the new positions are computed *inside* the state updater, from the
+project as it is at that moment, so a key repeating faster than React
+re-renders can't lose presses to a stale snapshot. Presses less than
+`NUDGE_COALESCE_MS` apart collapse into one undo entry, so holding an
+arrow down doesn't bury every earlier edit under fifty history steps.
+
+### Two defects the browser found (and the unit tests could not)
+
+1. **The selection didn't follow a paste.** `pasteObjects` read the new
+   ids back out of the `commitChange` updater — which only works while
+   React takes its eager-evaluation path. It doesn't always. The copies
+   appeared, the selection stayed on the originals. Fixed by building the
+   copies *before* the state update; `handleCreateObject` had the same
+   latent bug and got the same fix.
+2. **The marquee panned the plan instead.** Konva decides a node is being
+   dragged inside the same `pointerdown` dispatch, so flipping the Stage's
+   `draggable` prop from the mousedown handler is a render too late — and
+   once Konva is dragging, it stops delivering plain `mousemove` events, so
+   the rubber band never followed the pointer either. Fixed by tracking
+   Shift globally (`keydown`/`keyup`/`blur`) and having `draggable` already
+   be `false` before the mouse goes down.
+
+### Why Shift+drag, and not plain drag, draws the marquee
+
+The fashionable choice would have been plain drag for the marquee with
+panning moved to a modifier. This app is panned constantly, by the same
+people, all day; changing that would have been a daily regression in
+exchange for matching a convention from tools that are used differently.
+Shift already means "add to the selection" for a click, so it means the
+same thing for a drag.
+
+One consequence had to be handled explicitly: an imported plan covers the
+whole canvas, so "empty space" is in practice the *background image*, not
+the bare Stage. `PlanCanvas` therefore treats a pointer event on the node
+named `BACKGROUND_NODE_NAME` as empty space, and `BackgroundImageShape`
+refuses to start its own drag while Shift is held.
 
 ## Undo/redo
 
@@ -322,8 +441,11 @@ No resize/rotate math lives in this component — it only positions handles
 `PlanCanvas` switches its pointer behavior on:
 
 - **select** — click an object to select it (click empty canvas to
-  deselect), drag an object to move it, drag a handle to resize/rotate,
-  drag empty canvas to pan.
+  deselect), `Shift`/`Ctrl`/`Cmd`+click to add or remove one,
+  `Shift`+drag on empty canvas to rubber-band several; drag an object (or
+  any member of a multi-selection) to move it, drag a handle to
+  resize/rotate, drag a vertex to reshape a line or polygon, drag empty
+  canvas to pan.
 - **rectangle / circle / line** — press-drag-release on the canvas draws
   a live dashed preview (`DraftPreview`, local `PlanCanvas` state, never
   touching `Project`) and commits an actual object only on release, and

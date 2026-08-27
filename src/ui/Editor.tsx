@@ -2,6 +2,8 @@ import { useCallback, useMemo, useRef, useState, type ChangeEvent } from "react"
 import type Konva from "konva";
 import { computeDefaultBackgroundPlacement, createBackgroundImage, worldDistanceToImagePixels } from "../domain/background";
 import { getProjectBoundsM } from "../domain/bounds";
+import { duplicateObjects } from "../domain/clipboard";
+import { getSelectionBoundsM, toggleSelection } from "../domain/selection";
 import { calibrationFromKnownDistance } from "../domain/calibration";
 import { createSheet } from "../domain/sheets";
 import { getDefaultTargetLayer } from "../domain/layers";
@@ -15,15 +17,17 @@ import {
 } from "../domain/objects";
 import {
   addObject,
+  addObjects,
   applyCalibration,
   createEmptyProject,
   patchBackground,
   patchObject,
+  patchObjects,
   removeBackground,
-  removeObject,
+  removeObjects,
   setBackground,
 } from "../domain/project";
-import type { BackgroundImage, PlanObjectPatch, PointM, Project, Sheet } from "../domain/types";
+import type { BackgroundImage, PlanObject, PlanObjectPatch, PointM, Project, Sheet } from "../domain/types";
 import { computePrintRaster, computeSheetLayout } from "../printing/sheetLayout";
 import { DEFAULT_SCREEN_PIXELS_PER_METER, screenToWorld } from "../rendering/viewport";
 import { CalibrationDialog } from "./components/CalibrationDialog";
@@ -46,6 +50,17 @@ import "./App.css";
 
 /** Screen CSS pixels per inch — the reference for turning a print DPI into a stroke/label multiplier. */
 const CSS_PIXELS_PER_INCH = 96;
+
+/** How far each successive paste is offset from the original, in metres, so copies fan out instead of stacking invisibly. */
+const PASTE_OFFSET_M = 0.5;
+
+/**
+ * Arrow-key presses closer together than this are folded into a single
+ * undo step. Holding an arrow down fires the key at the OS repeat rate, and
+ * without this one nudge across a room would bury every earlier edit under
+ * fifty history entries.
+ */
+const NUDGE_COALESCE_MS = 700;
 
 /** Builds the actual `PlanObject` (naming, layer assignment) from a gesture the canvas reports — see `PlanCanvas`'s `NewObjectSpec`. */
 function buildObjectFromSpec(project: Project, spec: NewObjectSpec) {
@@ -98,7 +113,7 @@ export default function Editor({
   } = useProjectHistory(initialProject);
 
   const [activeTool, setActiveTool] = useState<ToolId>("select");
-  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBackgroundSelected, setIsBackgroundSelected] = useState(false);
   const [calibrationPoints, setCalibrationPoints] = useState<{ pointA: PointM; pointB: PointM } | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -106,6 +121,14 @@ export default function Editor({
   const [printGrid, setPrintGrid] = useState(false);
   /** Non-null while the off-screen print stage is mounted and we're waiting for it to be ready to rasterise. */
   const [pendingExport, setPendingExport] = useState<"pdf" | "png" | null>(null);
+  /** The editor's own clipboard. Copies live in memory: this is a single-window, offline app, so there is no system clipboard to round-trip through. */
+  const clipboardRef = useRef<PlanObject[]>([]);
+  /** How many times the current clipboard has been pasted, so each paste lands a little further along instead of on top of the last. */
+  const pasteCountRef = useRef(0);
+  /** Every selected object's position at the moment a drag started, so a group move is recomputed from the origin rather than accumulated. */
+  const dragOriginRef = useRef<{ positions: Map<string, PointM> } | null>(null);
+  /** When the last arrow-key nudge happened, for coalescing a burst into one undo step. */
+  const lastNudgeAtRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const projectFileInputRef = useRef<HTMLInputElement>(null);
   const printStageRef = useRef<Konva.Stage>(null);
@@ -118,53 +141,84 @@ export default function Editor({
   // drawn on screen.
   const { viewport, containerRef, stageSize, zoomAt, pan } = useViewport(DEFAULT_SCREEN_PIXELS_PER_METER);
 
-  const selectedObject = useMemo(
-    () => project.objects.find((object) => object.id === selectedObjectId) ?? null,
-    [project.objects, selectedObjectId],
+  const lockedLayerIds = useMemo(
+    () => new Set(project.layers.filter((layer) => layer.locked).map((layer) => layer.id)),
+    [project.layers],
   );
-  const selectedLayer = useMemo(
-    () => project.layers.find((layer) => layer.id === selectedObject?.layerId),
-    [project.layers, selectedObject],
+  const visibleLayerIds = useMemo(
+    () => new Set(project.layers.filter((layer) => layer.visible).map((layer) => layer.id)),
+    [project.layers],
   );
-  const isSelectedLocked = selectedLayer?.locked === true;
+  const selectedObjects = useMemo(() => {
+    const wanted = new Set(selectedIds);
+    return project.objects.filter((object) => wanted.has(object.id));
+  }, [project.objects, selectedIds]);
+  /** The properties panel edits one object at a time; a group gets a summary instead. */
+  const selectedObject = selectedObjects.length === 1 ? (selectedObjects[0] ?? null) : null;
+  const selectionBounds = useMemo(
+    () => (selectedObjects.length > 1 ? getSelectionBoundsM(selectedObjects) : null),
+    [selectedObjects],
+  );
+  const isSelectedLocked = selectedObject !== null && lockedLayerIds.has(selectedObject.layerId);
   const isBackgroundLocked = project.background?.locked === true;
 
   const handleSelectTool = useCallback((toolId: ToolId) => {
     setActiveTool(toolId);
     if (toolId !== "select") {
-      setSelectedObjectId(null);
+      setSelectedIds([]);
       setIsBackgroundSelected(false);
     }
   }, []);
 
-  const handleSelectObject = useCallback((id: string | null) => {
-    setSelectedObjectId(id);
-    if (id) setIsBackgroundSelected(false);
-  }, []);
-
-  const handleSelectBackground = useCallback(() => {
-    setIsBackgroundSelected(true);
-    setSelectedObjectId(null);
-  }, []);
-
-  const handleDeselectAll = useCallback(() => {
-    setSelectedObjectId(null);
+  const handleSelectObject = useCallback((id: string, additive: boolean) => {
+    setSelectedIds((current) => (additive ? toggleSelection(current, id) : [id]));
     setIsBackgroundSelected(false);
   }, []);
 
+  const handleSelectMany = useCallback((ids: string[], additive: boolean) => {
+    if (!additive) {
+      setSelectedIds(ids);
+    } else if (ids.length > 0) {
+      setSelectedIds((current) => [...current, ...ids.filter((id) => !current.includes(id))]);
+    }
+    if (ids.length > 0) setIsBackgroundSelected(false);
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    // Objects on a hidden layer aren't on screen; sweeping them into the
+    // selection would mean the next Delete removes things the user can't see.
+    setSelectedIds(
+      project.objects.filter((object) => visibleLayerIds.has(object.layerId)).map((object) => object.id),
+    );
+    setIsBackgroundSelected(false);
+  }, [project.objects, visibleLayerIds]);
+
+  const handleSelectBackground = useCallback(() => {
+    setIsBackgroundSelected(true);
+    setSelectedIds([]);
+  }, []);
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedIds([]);
+    setIsBackgroundSelected(false);
+  }, []);
+
+  // The object is built *before* the state update, not read back out of
+  // its updater: React may defer an updater to the next render, and
+  // recovering an id from inside one only works while React happens to
+  // take its eager path. The paste below was caught doing exactly that in
+  // the browser — the copies appeared, but the selection stayed on the
+  // originals.
   const handleCreateObject = useCallback(
     (spec: NewObjectSpec) => {
-      let createdId: string | null = null;
-      commitChange((currentProject) => {
-        const object = buildObjectFromSpec(currentProject, spec);
-        if (!object) return currentProject;
-        createdId = object.id;
-        return addObject(currentProject, object);
-      });
-      if (createdId) setSelectedObjectId(createdId);
+      const object = buildObjectFromSpec(project, spec);
+      if (object) {
+        commitChange((currentProject) => addObject(currentProject, object));
+        setSelectedIds([object.id]);
+      }
       setActiveTool("select");
     },
-    [commitChange],
+    [project, commitChange],
   );
 
   const handleBeginObjectEdit = useCallback(() => beginEdit(), [beginEdit]);
@@ -174,6 +228,81 @@ export default function Editor({
       applyLiveEdit((currentProject) => patchObject(currentProject, id, patch));
     },
     [applyLiveEdit],
+  );
+
+  const handleObjectCommitUpdate = useCallback(
+    (id: string, patch: PlanObjectPatch) => {
+      commitChange((currentProject) => patchObject(currentProject, id, patch));
+    },
+    [commitChange],
+  );
+
+  /**
+   * A shape's drag begins: snapshot where every object that will move is
+   * *now*, so each frame can be solved as "origin + total delta" rather
+   * than "previous position + this frame's delta". The second form drifts,
+   * and drifts differently for each member of a group.
+   */
+  const handleBeginObjectDrag = useCallback(
+    (id: string) => {
+      beginEdit();
+      const moving = selectedIds.includes(id) ? new Set(selectedIds) : new Set([id]);
+      const positions = new Map<string, PointM>();
+      for (const object of project.objects) {
+        if (!moving.has(object.id)) continue;
+        if (lockedLayerIds.has(object.layerId)) continue;
+        positions.set(object.id, { xM: object.xM, yM: object.yM });
+      }
+      dragOriginRef.current = { positions };
+    },
+    [beginEdit, selectedIds, project.objects, lockedLayerIds],
+  );
+
+  const handleObjectMoveLive = useCallback(
+    (id: string, xM: number, yM: number) => {
+      const origin = dragOriginRef.current;
+      const start = origin?.positions.get(id);
+      if (origin && start && origin.positions.size > 1) {
+        const deltaXM = xM - start.xM;
+        const deltaYM = yM - start.yM;
+        const patches = new Map<string, PlanObjectPatch>();
+        for (const [movingId, position] of origin.positions) {
+          patches.set(movingId, { xM: position.xM + deltaXM, yM: position.yM + deltaYM });
+        }
+        applyLiveEdit((currentProject) => patchObjects(currentProject, patches));
+        return;
+      }
+      applyLiveEdit((currentProject) => patchObject(currentProject, id, { xM, yM }));
+    },
+    [applyLiveEdit],
+  );
+
+  /**
+   * Arrow-key movement. The new positions are computed inside the updater,
+   * from the project as it is at that moment, so a key repeating faster
+   * than React re-renders still moves the selection once per press instead
+   * of losing the presses that shared a stale snapshot.
+   */
+  const handleNudge = useCallback(
+    (deltaXM: number, deltaYM: number) => {
+      if (selectedIds.length === 0) return;
+      const moving = new Set(selectedIds);
+      const nudge = (currentProject: Project) => {
+        const patches = new Map<string, PlanObjectPatch>();
+        for (const object of currentProject.objects) {
+          if (!moving.has(object.id) || lockedLayerIds.has(object.layerId)) continue;
+          patches.set(object.id, { xM: object.xM + deltaXM, yM: object.yM + deltaYM });
+        }
+        return patchObjects(currentProject, patches);
+      };
+
+      const now = Date.now();
+      const continuesBurst = now - lastNudgeAtRef.current < NUDGE_COALESCE_MS;
+      lastNudgeAtRef.current = now;
+      if (continuesBurst) applyLiveEdit(nudge);
+      else commitChange(nudge);
+    },
+    [selectedIds, lockedLayerIds, applyLiveEdit, commitChange],
   );
 
   const handleBackgroundLiveUpdate = useCallback(
@@ -195,7 +324,7 @@ export default function Editor({
 
   const handleRequestCalibration = useCallback(() => {
     if (!project.background || isBackgroundLocked) return;
-    setSelectedObjectId(null);
+    setSelectedIds([]);
     setIsBackgroundSelected(false);
     setCalibrationPoints(null);
     setActiveTool("calibrate");
@@ -237,16 +366,67 @@ export default function Editor({
       setIsBackgroundSelected(false);
       return;
     }
-    if (!selectedObjectId || isSelectedLocked) return;
-    commitChange((currentProject) => removeObject(currentProject, selectedObjectId));
-    setSelectedObjectId(null);
-  }, [isBackgroundSelected, isBackgroundLocked, selectedObjectId, isSelectedLocked, commitChange]);
+    // A locked layer's objects can be selected (to inspect them) but not
+    // deleted, so a mixed selection deletes the unlocked part and leaves
+    // the rest — rather than refusing the whole gesture.
+    const deletable = selectedObjects
+      .filter((object) => !lockedLayerIds.has(object.layerId))
+      .map((object) => object.id);
+    if (deletable.length === 0) return;
+    commitChange((currentProject) => removeObjects(currentProject, deletable));
+    setSelectedIds([]);
+  }, [isBackgroundSelected, isBackgroundLocked, selectedObjects, lockedLayerIds, commitChange]);
+
+  /**
+   * Adds copies of `sources` to the project and selects them, as one undo
+   * step. `step` scales the offset so a repeated paste walks across the
+   * plan instead of hiding each copy under the previous one.
+   */
+  const pasteObjects = useCallback(
+    (sources: readonly PlanObject[], step: number) => {
+      if (sources.length === 0) return;
+      const fallbackLayer = getDefaultTargetLayer(project.layers);
+      if (!fallbackLayer) return;
+      const copies = duplicateObjects(sources, {
+        offsetM: { xM: PASTE_OFFSET_M * step, yM: PASTE_OFFSET_M * step },
+        existingLayerIds: new Set(project.layers.map((layer) => layer.id)),
+        fallbackLayerId: fallbackLayer.id,
+      });
+      commitChange((currentProject) => addObjects(currentProject, copies));
+      setSelectedIds(copies.map((copy) => copy.id));
+      setIsBackgroundSelected(false);
+      setActiveTool("select");
+    },
+    [project.layers, commitChange],
+  );
+
+  const handleCopy = useCallback(() => {
+    if (selectedObjects.length === 0) return;
+    // Snapshot the objects as they are now: a later edit to the originals
+    // must not reach into what has already been copied.
+    clipboardRef.current = selectedObjects.map((object) => ({ ...object }));
+    pasteCountRef.current = 0;
+  }, [selectedObjects]);
+
+  const handlePaste = useCallback(() => {
+    pasteCountRef.current += 1;
+    pasteObjects(clipboardRef.current, pasteCountRef.current);
+  }, [pasteObjects]);
+
+  const handleDuplicate = useCallback(() => {
+    pasteObjects(selectedObjects, 1);
+  }, [pasteObjects, selectedObjects]);
 
   useEditorShortcuts({
     onUndo: undo,
     onRedo: redo,
     onDelete: handleDeleteSelected,
     onDeselect: handleDeselectAll,
+    onSelectAll: handleSelectAll,
+    onNudge: handleNudge,
+    onCopy: handleCopy,
+    onPaste: handlePaste,
+    onDuplicate: handleDuplicate,
   });
 
   const handleToggleLayerVisible = useCallback(
@@ -328,7 +508,7 @@ export default function Editor({
             return setBackground(currentProject, background);
           });
           setIsBackgroundSelected(true);
-          setSelectedObjectId(null);
+          setSelectedIds([]);
           setActiveTool("select");
         };
         img.src = url;
@@ -354,7 +534,7 @@ export default function Editor({
   const replaceDocument = useCallback(
     (nextProject: Project) => {
       resetHistory(nextProject);
-      setSelectedObjectId(null);
+      setSelectedIds([]);
       setIsBackgroundSelected(false);
       setCalibrationPoints(null);
       setActiveTool("select");
@@ -518,14 +698,18 @@ export default function Editor({
         layers={project.layers}
         background={project.background}
         activeTool={activeTool}
-        selectedObjectId={selectedObjectId}
+        selectedIds={selectedIds}
         isBackgroundSelected={isBackgroundSelected}
         onSelectObject={handleSelectObject}
+        onSelectMany={handleSelectMany}
         onSelectBackground={handleSelectBackground}
         onDeselectAll={handleDeselectAll}
         onCreateObject={handleCreateObject}
         onBeginObjectEdit={handleBeginObjectEdit}
+        onBeginObjectDrag={handleBeginObjectDrag}
         onObjectLiveUpdate={handleObjectLiveUpdate}
+        onObjectCommitUpdate={handleObjectCommitUpdate}
+        onObjectMoveLive={handleObjectMoveLive}
         onBackgroundMoveLive={handleBackgroundMoveLive}
         onBackgroundResizeLive={handleBackgroundResizeLive}
         onCalibrationMeasured={handleCalibrationMeasured}
@@ -533,13 +717,16 @@ export default function Editor({
       />
       <PropertiesPanel
         selected={isBackgroundSelected ? null : selectedObject}
+        selectionCount={isBackgroundSelected ? 0 : selectedObjects.length}
+        selectionBounds={selectionBounds}
         selectedBackground={isBackgroundSelected ? project.background : null}
         calibration={project.calibration}
         isLocked={isBackgroundSelected ? isBackgroundLocked : isSelectedLocked}
         onBeginEdit={handleBeginObjectEdit}
-        onLiveUpdate={(patch) => selectedObjectId && handleObjectLiveUpdate(selectedObjectId, patch)}
+        onLiveUpdate={(patch) => selectedObject && handleObjectLiveUpdate(selectedObject.id, patch)}
         onBackgroundLiveUpdate={handleBackgroundLiveUpdate}
         onDelete={handleDeleteSelected}
+        onDuplicate={handleDuplicate}
         onRequestReplaceBackground={handleRequestBackgroundImport}
         onRequestCalibration={handleRequestCalibration}
       />

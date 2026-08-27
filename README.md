@@ -8,11 +8,12 @@ dimensions in meters.
 Deliberately **not** a general-purpose CAD tool — it's scoped to fast,
 simple event-layout drafting.
 
-Current mission: **KL-009 (Export)** — print the plan to a PDF at a true
-scale, so a 20 m stage measures exactly 100 mm on paper at 1:200. On top
-of everything the earlier missions deliver: draw and edit in real-world
-dimensions with undo/redo, import and calibrate a background, and have the
-project saved automatically and exportable as a portable file. See
+Current mission: **KL-004 (Édition avancée)** — the editing the first
+pass deferred: eight resize handles, editable line and polygon vertices,
+multi-selection, copy/paste and arrow-key nudging. On top of everything
+the earlier missions deliver: draw and edit in real-world dimensions with
+undo/redo, import and calibrate a background, save the project
+automatically, and print it to a true-scale PDF. See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how it's built and
 [`docs/ROADMAP.md`](docs/ROADMAP.md) for what's next.
 
@@ -44,11 +45,37 @@ model → viewport → Konva) is visible immediately.
 - **Scroll / wheel** to zoom, centered on the cursor.
 - **Drag** empty canvas to pan (select tool only).
 - **Click** an object to select it; **drag** it to move it.
-- **Drag the corner handle** on a selected rectangle or the edge handle on
-  a selected circle to resize; **drag the handle above a selection** to
-  rotate it.
-- **Delete** / **Backspace** deletes the selected object; **Escape**
-  deselects.
+- **Drag any of the eight handles** on a selected rectangle — four corners
+  and four edge midpoints — to resize it; hold **Maj** to keep its
+  proportions. A circle has four handles, one per compass point. The
+  handle **above** a selection rotates it.
+- **Drag a vertex** of a selected line or polygon to reshape it; **click a
+  small dashed dot** on a segment to add a vertex there; **double-click a
+  vertex** to remove it (a line keeps at least 2 points, a polygon 3).
+- **Delete** / **Backspace** deletes the selection; **Escape** deselects.
+
+**Selecting several objects**
+
+- **Maj + clic** (or `Ctrl`/`Cmd` + clic) adds an object to the selection,
+  or removes it if it's already in.
+- **Maj + glisser** on empty canvas — or over the background — draws a
+  rubber band and selects everything it touches. A plain drag still pans,
+  because that's what you do all day.
+- **`Ctrl`/`Cmd` + A** selects everything on the visible layers.
+- Dragging any member of a multi-selection moves the whole group, keeping
+  its arrangement exactly.
+- The properties panel shows how many objects are selected and how much
+  ground they cover; the per-object fields come back as soon as one is
+  selected on its own.
+
+**Moving and copying**
+
+- **Arrow keys** nudge the selection by 10 cm, or by 1 m with **Maj**.
+  Holding a key down is one undo step, not fifty.
+- **`Ctrl`/`Cmd` + C** / **+ V** copy and paste; **+ D** duplicates in
+  place. Each successive paste is offset a little further so copies don't
+  stack invisibly, and the copies become the new selection. The clipboard
+  lives in the page, so it doesn't cross between tabs.
 
 **Creating objects** — pick a tool in the left panel, then:
 
@@ -123,8 +150,13 @@ Runs the unit tests (`vitest run`) covering: meters↔pixels and
 world↔screen conversion round-trips; zoom/pan behavior and zoom's
 non-mutation of the business model; the metric grid; object geometry
 factories and labels; the resize/rotate solve functions in
-`domain/geometry.ts` (including drift-free round-tripping under
-rotation); the generic undo/redo stack in `history/`; the background
+`domain/geometry.ts` — including drift-free round-tripping under
+rotation, and the property the eight-handle resize rests on: the opposite
+handle stays put for every handle at every rotation, the dragged handle
+lands under the pointer, and the aspect-ratio lock holds exactly even when
+the drag is clamped to the minimum size; vertex editing, marquee
+hit-testing and the copy/paste rules in `domain/selection.ts` and
+`domain/clipboard.ts`; the generic undo/redo stack in `history/`; the background
 placement/resize/aspect-ratio logic in `domain/background.ts`; and
 calibration — deriving `pixelsPerMeter` from a measured distance,
 applying it to the background without touching the plan's objects, and

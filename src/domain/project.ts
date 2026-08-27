@@ -98,6 +98,45 @@ export function patchObject(project: Project, id: string, patch: PlanObjectPatch
   return { ...project, objects, updatedAt: new Date().toISOString() };
 }
 
+/** Returns a new project with several objects appended at once — one undo step for a paste of many. */
+export function addObjects(project: Project, objects: readonly PlanObject[]): Project {
+  if (objects.length === 0) return project;
+  return { ...project, objects: [...project.objects, ...objects], updatedAt: new Date().toISOString() };
+}
+
+/** Returns a new project with every object in `ids` removed. A no-op if none of them are present. */
+export function removeObjects(project: Project, ids: readonly string[]): Project {
+  const doomed = new Set(ids);
+  if (!project.objects.some((object) => doomed.has(object.id))) return project;
+  return {
+    ...project,
+    objects: project.objects.filter((object) => !doomed.has(object.id)),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Returns a new project with each object patched by its own entry in
+ * `patches`. Used for anything that edits a multi-selection — moving five
+ * objects has to be a single state transition, or the four that aren't
+ * being dragged would lag a frame behind the one that is.
+ *
+ * Same soundness argument as `patchObject`: the caller builds each patch
+ * from the object's own already-narrowed type.
+ */
+export function patchObjects(project: Project, patches: ReadonlyMap<string, PlanObjectPatch>): Project {
+  if (patches.size === 0) return project;
+  let changed = false;
+  const objects = project.objects.map((object) => {
+    const patch = patches.get(object.id);
+    if (!patch) return object;
+    changed = true;
+    return { ...object, ...patch } as PlanObject;
+  });
+  if (!changed) return project;
+  return { ...project, objects, updatedAt: new Date().toISOString() };
+}
+
 /** Returns a new project with `background` set, replacing any existing one. */
 export function setBackground(project: Project, background: BackgroundImage): Project {
   return { ...project, background, updatedAt: new Date().toISOString() };

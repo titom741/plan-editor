@@ -6,13 +6,16 @@ import { createCircleObject, createRectangleObject } from "./objects";
 import { createDefaultLayers, DEFAULT_LAYER_NAMES, getDefaultTargetLayer } from "./layers";
 import {
   addObject,
+  addObjects,
   applyCalibration,
   createDemoProject,
   createEmptyProject,
   patchBackground,
   patchObject,
+  patchObjects,
   removeBackground,
   removeObject,
+  removeObjects,
   setBackground,
 } from "./project";
 
@@ -304,5 +307,64 @@ describe("applyCalibration", () => {
 
     expect(second.calibration.pixelsPerMeter).toBeCloseTo(first.calibration.pixelsPerMeter, 9);
     expect(second.background?.widthM).toBeCloseTo(bg.widthM, 9);
+  });
+});
+
+describe("multi-object operations (KL-004)", () => {
+  function projectWithThree() {
+    const base = createEmptyProject({ name: "P" });
+    const layerId = base.layers[0]!.id;
+    const make = (name: string, xM: number) =>
+      createRectangleObject({ layerId, name, xM, yM: 0, widthM: 1, heightM: 1 });
+    const objects = [make("a", 0), make("b", 10), make("c", 20)];
+    return { project: { ...base, objects }, objects };
+  }
+
+  it("appends several objects in one go", () => {
+    const { project, objects } = projectWithThree();
+    const extra = createRectangleObject({ layerId: objects[0]!.layerId, name: "d", xM: 30, yM: 0, widthM: 1, heightM: 1 });
+    const next = addObjects(project, [extra]);
+    expect(next.objects).toHaveLength(4);
+    expect(next.objects[3]).toBe(extra);
+  });
+
+  it("treats adding nothing as a no-op, without touching updatedAt", () => {
+    const { project } = projectWithThree();
+    expect(addObjects(project, [])).toBe(project);
+  });
+
+  it("removes every id it is given, and only those", () => {
+    const { project, objects } = projectWithThree();
+    const next = removeObjects(project, [objects[0]!.id, objects[2]!.id]);
+    expect(next.objects.map((object) => object.name)).toEqual(["b"]);
+  });
+
+  it("is a no-op when none of the ids are present", () => {
+    const { project } = projectWithThree();
+    expect(removeObjects(project, ["nope", "also-nope"])).toBe(project);
+  });
+
+  it("applies a different patch to each object in one state transition", () => {
+    const { project, objects } = projectWithThree();
+    const next = patchObjects(
+      project,
+      new Map([
+        [objects[0]!.id, { xM: 1 }],
+        [objects[2]!.id, { xM: 21 }],
+      ]),
+    );
+    expect(next.objects.map((object) => object.xM)).toEqual([1, 10, 21]);
+  });
+
+  it("is a no-op for an empty patch map or ids that don't exist", () => {
+    const { project } = projectWithThree();
+    expect(patchObjects(project, new Map())).toBe(project);
+    expect(patchObjects(project, new Map([["ghost", { xM: 5 }]]))).toBe(project);
+  });
+
+  it("keeps the objects it doesn't patch identical by reference", () => {
+    const { project, objects } = projectWithThree();
+    const next = patchObjects(project, new Map([[objects[0]!.id, { xM: 1 }]]));
+    expect(next.objects[1]).toBe(project.objects[1]);
   });
 });

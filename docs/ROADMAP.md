@@ -31,11 +31,26 @@ half-finished features spanning missions.
   list of decisions, including a real Konva event-bubbling bug found and
   fixed along the way.
 
-- **KL-004 — Advanced Object Editing**
-  What KL-002 deliberately deferred: multi-selection, additional resize
-  handles (edges, all four corners with a `Shift`-to-keep-aspect-ratio
-  modifier), editable line/polygon vertices, copy/paste, keyboard nudging
-  and arrow-key movement.
+- **KL-004 — Advanced Object Editing** *(this mission)*
+  What KL-002 deliberately deferred. `resizeRectangleFromHandle` covers
+  all eight handles (four corners, four edges, `Shift` to keep the aspect
+  ratio) with one rule — the opposite handle never moves — so the anchor
+  is solved for rather than assumed. Editable line/polygon vertices
+  (drag to move, click a midpoint to insert, double-click to remove, with
+  a floor on how few points a shape may keep). Two new domain modules:
+  `selection.ts` (Shift-click toggling, marquee hit-testing, selection
+  extent) and `clipboard.ts` (copy/paste/duplicate with fresh ids and a
+  layer fallback). Multi-selection with `Shift`+click and `Shift`+drag
+  marquee, group moves solved from a drag-start snapshot, arrow-key
+  nudging (`Shift` = 1 m) coalesced into a single undo step, and
+  `Ctrl`/`Cmd`+`A`/`C`/`V`/`D`. See the KL-004 mission report for the two
+  defects only the browser found.
+
+  Not covered, and still open: resizing or rotating a multi-selection as
+  a group (what "resize" means for a circle and a text label in the same
+  gesture is a design question, not a missing function); snapping, which
+  belongs to KL-007; and the system clipboard — copies live in memory, so
+  they don't cross between browser tabs.
 
 - **KL-005 — Calibration** *(done)*
   Interactive calibration: pick two points a known distance apart on the
@@ -76,7 +91,7 @@ half-finished features spanning missions.
   Not covered, and still open: multiple named projects (there is one
   autosave slot), and a "recently opened" list.
 
-- **KL-009 — Export** *(this mission)*
+- **KL-009 — Export** *(done)*
   `Sheet` becomes functional (paper size, orientation, print scale,
   margin) and a new `printing/` layer puts the plan on paper: a
   hand-written one-page PDF writer, sheet layout with frame, title block
@@ -93,7 +108,8 @@ half-finished features spanning missions.
 
 ---
 
-The roadmap as first drafted is complete. Natural next steps, in rough
-order of usefulness: KL-004 (advanced object editing) and KL-006 (layer
-management), both deferred from their original missions; then multi-sheet
-plans, a legend/schedule of objects, and vector PDF output.
+The roadmap as first drafted is complete, and KL-004 has closed the
+larger of the two features deferred from it. Natural next steps, in rough
+order of usefulness: KL-006 (layer management), then KL-007 (measurement
+and snapping), then multi-sheet plans, a legend/schedule of objects, and
+vector PDF output.

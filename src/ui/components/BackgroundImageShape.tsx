@@ -25,6 +25,14 @@ const HANDLE_RADIUS_PX = 6;
 const HANDLE_STROKE = "#e0470f";
 
 /**
+ * Konva node name for the background image, so `PlanCanvas` can recognise
+ * a pointer event that landed on it. An imported plan usually covers the
+ * whole visible canvas, which means "empty space" — where a marquee is
+ * drawn — is in practice the background, not the bare Stage.
+ */
+export const BACKGROUND_NODE_NAME = "kl-background";
+
+/**
  * Renders the project's background image, converting its metric placement
  * through `rendering/viewport.ts` exactly like `PlanObjectShape` does for
  * business objects — a background is not a `PlanObject`, but it shares
@@ -52,12 +60,23 @@ export function BackgroundImageShape({
     // to the Stage so the active tool can handle it — the background
     // isn't the only thing that can sit under a click.
     if (!selectable) return;
+    // Shift belongs to the selection gestures, not to the background: a
+    // Shift-click here is the degenerate case of a marquee, and must not
+    // throw away the selection the user is building.
+    if (e.evt.shiftKey) return;
     e.cancelBubble = true;
     onSelect();
   };
 
   const handleDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
+    if (e.evt.shiftKey) {
+      // Shift-dragging across the background draws a marquee (see
+      // `PlanCanvas`). Without this the background would slide out from
+      // under the plan every time the user rubber-banded a selection.
+      e.target.stopDrag();
+      return;
+    }
     onSelect();
     onBeginEdit();
   };
@@ -99,6 +118,7 @@ export function BackgroundImageShape({
         y={anchor.y}
         width={widthPx}
         height={heightPx}
+        name={BACKGROUND_NODE_NAME}
         opacity={background.opacity}
         stroke={selected ? HANDLE_STROKE : undefined}
         strokeWidth={selected ? 2 : 0}

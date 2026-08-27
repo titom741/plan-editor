@@ -21,7 +21,8 @@ interface PlanObjectShapeProps {
    * paper instead of a hairline (see `PrintCanvas`).
    */
   renderScale?: number;
-  onSelect: () => void;
+  /** `additive` is true when Shift (or Ctrl/Cmd) was held — the caller then toggles this object in the selection instead of replacing it. */
+  onSelect: (additive: boolean) => void;
   /** Snapshots undo history once, at the start of a drag gesture. */
   onBeginEdit: () => void;
   /** Called continuously while dragging, with the object's new anchor in world coordinates. */
@@ -29,6 +30,11 @@ interface PlanObjectShapeProps {
 }
 
 const SELECTED_STROKE = "#e0470f";
+
+/** Shift (or Ctrl/Cmd, for the platform habits people arrive with) means "add to / remove from the selection" rather than "replace it". */
+function isAdditive(event: MouseEvent | TouchEvent): boolean {
+  return event.shiftKey || event.metaKey || event.ctrlKey;
+}
 
 /**
  * Renders one `PlanObject` as a Konva shape. This is the only place that
@@ -59,12 +65,15 @@ export function PlanObjectShape({
     // or picking a calibration point, on top of an existing object).
     if (!selectable) return;
     e.cancelBubble = true;
-    onSelect();
+    onSelect(isAdditive(e.evt));
   };
 
   const handleDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
-    onSelect();
+    // Dragging an object that is already part of a multi-selection must
+    // move the whole group, so only an unselected object claims the
+    // selection for itself here.
+    if (!selected) onSelect(false);
     onBeginEdit();
   };
 

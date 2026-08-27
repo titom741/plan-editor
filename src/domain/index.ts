@@ -6,6 +6,8 @@ export * from "./objects";
 export * from "./labels";
 export * from "./geometry";
 export * from "./bounds";
+export * from "./selection";
+export * from "./clipboard";
 export * from "./background";
 export * from "./sheets";
 export * from "./project";

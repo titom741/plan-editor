@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useState, type Ref } from "react";
+import { useCallback, useEffect, useMemo, useState, type Ref } from "react";
 import { Layer as KonvaLayer, Line, Rect as KonvaRect, Circle as KonvaCircle, Stage, Text } from "react-konva";
 import type Konva from "konva";
 import { computeGridLines } from "../../rendering/grid";
 import { metersToPixels, screenToWorld, worldToScreen } from "../../rendering/viewport";
 import type { ScreenPoint, Viewport } from "../../rendering/viewport";
 import type { Background, Layer, PlanObject, PlanObjectPatch, PointM } from "../../domain/types";
-import { BackgroundImageShape } from "./BackgroundImageShape";
+import { boundsAreaM2, boundsFromCorners, getSelectionBoundsM, objectIdsWithinBounds } from "../../domain/selection";
+import { BACKGROUND_NODE_NAME, BackgroundImageShape } from "./BackgroundImageShape";
 import { PlanObjectShape } from "./PlanObjectShape";
-import { SelectionOverlay } from "./SelectionOverlay";
+import { MultiSelectionOutline, SelectionOverlay } from "./SelectionOverlay";
 import type { StageSize } from "../hooks/useViewport";
 import type { ToolId } from "../tools";
 
@@ -29,14 +30,23 @@ interface PlanCanvasProps {
   layers: Layer[];
   background: Background;
   activeTool: ToolId;
-  selectedObjectId: string | null;
+  selectedIds: readonly string[];
   isBackgroundSelected: boolean;
-  onSelectObject: (id: string | null) => void;
+  /** `additive` (Shift/Ctrl/Cmd) toggles the object in the selection instead of replacing it. */
+  onSelectObject: (id: string, additive: boolean) => void;
+  /** Result of a marquee: the ids it caught, to add to the selection (`additive`) or to become it. */
+  onSelectMany: (ids: string[], additive: boolean) => void;
   onSelectBackground: () => void;
   onDeselectAll: () => void;
   onCreateObject: (spec: NewObjectSpec) => void;
   onBeginObjectEdit: () => void;
+  /** Fired when a *shape* starts being dragged, so the editor can snapshot every selected object's position and move the whole group together. */
+  onBeginObjectDrag: (id: string) => void;
   onObjectLiveUpdate: (id: string, patch: PlanObjectPatch) => void;
+  /** Same as `onObjectLiveUpdate` but as its own undo step — for one-shot structural edits like adding or removing a vertex. */
+  onObjectCommitUpdate: (id: string, patch: PlanObjectPatch) => void;
+  /** A shape being dragged to a new anchor. Separate from `onObjectLiveUpdate` because the editor turns it into a *group* move when several objects are selected. */
+  onObjectMoveLive: (id: string, xM: number, yM: number) => void;
   onBackgroundMoveLive: (xM: number, yM: number) => void;
   onBackgroundResizeLive: (widthM: number, heightM: number) => void;
   /** Fired once the second calibration point is clicked — App.tsx takes it from there (asks for the real distance, computes and commits the calibration). */
@@ -55,7 +65,8 @@ type Draft =
   | { tool: "circle"; centerWorld: PointM; currentWorld: PointM }
   | { tool: "line"; startWorld: PointM; currentWorld: PointM }
   | { tool: "polygon"; anchorWorld: PointM; pointsM: PointM[]; previewWorld: PointM | null }
-  | { tool: "calibrate"; pointsWorld: PointM[]; previewWorld: PointM | null };
+  | { tool: "calibrate"; pointsWorld: PointM[]; previewWorld: PointM | null }
+  | { tool: "marquee"; startWorld: PointM; currentWorld: PointM };
 
 export function PlanCanvas({
   containerRef,
@@ -67,20 +78,47 @@ export function PlanCanvas({
   layers,
   background,
   activeTool,
-  selectedObjectId,
+  selectedIds,
   isBackgroundSelected,
   onSelectObject,
+  onSelectMany,
   onSelectBackground,
   onDeselectAll,
   onCreateObject,
   onBeginObjectEdit,
+  onBeginObjectDrag,
   onObjectLiveUpdate,
+  onObjectCommitUpdate,
+  onObjectMoveLive,
   onBackgroundMoveLive,
   onBackgroundResizeLive,
   onCalibrationMeasured,
   onCancelCalibration,
 }: PlanCanvasProps) {
   const [draft, setDraft] = useState<Draft | null>(null);
+  /**
+   * Whether Shift is currently held, tracked globally because the Stage's
+   * `draggable` prop has to be right *before* the mouse goes down: Konva
+   * decides a node is being dragged inside the same pointerdown dispatch,
+   * and a Stage that is still draggable at that instant pans instead of
+   * letting the marquee run — and then stops sending plain mousemove
+   * events at all, so the rubber band would never even follow the pointer.
+   */
+  const [isShiftHeld, setIsShiftHeld] = useState(false);
+  useEffect(() => {
+    const syncShift = (event: KeyboardEvent) => setIsShiftHeld(event.shiftKey);
+    // Releasing Shift outside the window (Cmd+Tab and back) never reaches
+    // keyup, which would leave panning disabled with nothing to explain it.
+    const clearShift = () => setIsShiftHeld(false);
+    window.addEventListener("keydown", syncShift);
+    window.addEventListener("keyup", syncShift);
+    window.addEventListener("blur", clearShift);
+    return () => {
+      window.removeEventListener("keydown", syncShift);
+      window.removeEventListener("keyup", syncShift);
+      window.removeEventListener("blur", clearShift);
+    };
+  }, []);
 
   // Whenever the tool switches away from "calibrate" — confirmed,
   // cancelled, or another tool picked directly — drop any leftover local
@@ -96,11 +134,22 @@ export function PlanCanvas({
   }
 
   const grid = computeGridLines(viewport, stageSize.widthPx || 1, stageSize.heightPx || 1);
-  const layersById = new Map(layers.map((layer) => [layer.id, layer]));
-  const visibleLayerIds = new Set(layers.filter((layer) => layer.visible).map((layer) => layer.id));
-  const selectedObject = objects.find((object) => object.id === selectedObjectId) ?? null;
+  const layersById = useMemo(() => new Map(layers.map((layer) => [layer.id, layer])), [layers]);
+  // Memoised because the marquee's mouse-up handler closes over it: a set
+  // rebuilt every render would make that callback a new function every
+  // render too.
+  const visibleLayerIds = useMemo(
+    () => new Set(layers.filter((layer) => layer.visible).map((layer) => layer.id)),
+    [layers],
+  );
+  const selectedIdSet = new Set(selectedIds);
+  const selectedObjects = objects.filter((object) => selectedIdSet.has(object.id));
+  // Handles are only shown for a selection of exactly one: see
+  // `MultiSelectionOutline` for why a group gets an outline instead.
+  const selectedObject = selectedObjects.length === 1 ? (selectedObjects[0] ?? null) : null;
   const selectedLayer = selectedObject ? layersById.get(selectedObject.layerId) : undefined;
   const canEditSelection = activeTool === "select" && selectedObject !== null && selectedLayer?.locked !== true;
+  const multiSelectionBounds = selectedObjects.length > 1 ? getSelectionBoundsM(selectedObjects) : null;
 
   const getPointerWorld = useCallback(
     (stage: Konva.Stage | null): PointM | null => {
@@ -168,16 +217,43 @@ export function PlanCanvas({
     (e: Konva.KonvaEventObject<DragEvent>) => {
       if (e.target !== e.target.getStage()) return;
       const node = e.target;
+      // A marquee and a pan are the same gesture with a different modifier,
+      // and Konva has already decided it is a drag by the time the marquee
+      // draft exists — the `draggable` prop goes false a render too late.
+      // Refusing to pan here is what actually stops the view sliding out
+      // from under the rubber band.
+      if (draft?.tool === "marquee") {
+        node.position({ x: 0, y: 0 });
+        return;
+      }
       onPan(node.x(), node.y());
       node.position({ x: 0, y: 0 });
     },
-    [onPan],
+    [draft, onPan],
   );
 
   const handleMouseDown = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
       if (activeTool === "select") {
-        if (e.target === e.target.getStage()) onDeselectAll();
+        const stage = e.target.getStage();
+        // "Empty canvas" means the bare Stage *or* the background image:
+        // once a plan is imported it covers everything, and a marquee that
+        // only worked on the few bare pixels around it would be useless
+        // exactly when it's needed.
+        const isEmptySpace = e.target === stage || e.target.name() === BACKGROUND_NODE_NAME;
+        // Shift on empty canvas starts a marquee; a plain drag keeps
+        // panning (or moving the background), which is what this app is
+        // used for minute to minute. Overloading the plain drag onto
+        // selection would have been the more fashionable choice and a
+        // daily regression for the user.
+        if (e.evt.shiftKey && isEmptySpace) {
+          const world = getPointerWorld(stage);
+          if (!world) return;
+          setDraft({ tool: "marquee", startWorld: world, currentWorld: world });
+          return;
+        }
+        if (e.target !== stage) return;
+        onDeselectAll();
         return;
       }
       if (activeTool === "rectangle" || activeTool === "circle" || activeTool === "line") {
@@ -198,6 +274,8 @@ export function PlanCanvas({
       if (!world) return;
       if (draft.tool === "polygon") {
         setDraft({ ...draft, previewWorld: world });
+      } else if (draft.tool === "marquee") {
+        setDraft({ ...draft, currentWorld: world });
       } else if (draft.tool === "calibrate") {
         // Once both points are picked, the segment is frozen — stop
         // following the pointer while App.tsx's distance dialog is open.
@@ -248,9 +326,23 @@ export function PlanCanvas({
         });
       }
       setDraft(null);
+    } else if (draft.tool === "marquee") {
+      const marquee = boundsFromCorners(draft.startWorld, draft.currentWorld);
+      // A zero-area marquee is a Shift-click on empty canvas, not a
+      // gesture — selecting nothing (and wiping the selection) would be a
+      // surprising thing to do with a modifier held down.
+      if (boundsAreaM2(marquee) > 0) {
+        onSelectMany(
+          objectIdsWithinBounds(objects, marquee, {
+            isEligible: (object) => visibleLayerIds.has(object.layerId),
+          }),
+          true,
+        );
+      }
+      setDraft(null);
     }
     // Polygon isn't finalized on mouseup — it's click-to-add-point, handled in handleClick.
-  }, [draft, onCreateObject]);
+  }, [draft, objects, visibleLayerIds, onCreateObject, onSelectMany]);
 
   const handleClick = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -299,7 +391,7 @@ export function PlanCanvas({
           height={stageSize.heightPx}
           x={0}
           y={0}
-          draggable={activeTool === "select"}
+          draggable={activeTool === "select" && !isShiftHeld && draft?.tool !== "marquee"}
           onWheel={handleWheel}
           onDragMove={handleStageDragMove}
           onMouseDown={handleMouseDown}
@@ -350,12 +442,12 @@ export function PlanCanvas({
                     key={object.id}
                     object={object}
                     viewport={viewport}
-                    selected={object.id === selectedObjectId}
+                    selected={selectedIdSet.has(object.id)}
                     draggable={activeTool === "select" && layer?.locked !== true}
                     selectable={activeTool === "select"}
-                    onSelect={() => onSelectObject(object.id)}
-                    onBeginEdit={onBeginObjectEdit}
-                    onMoveLive={(xM, yM) => onObjectLiveUpdate(object.id, { xM, yM })}
+                    onSelect={(additive) => onSelectObject(object.id, additive)}
+                    onBeginEdit={() => onBeginObjectDrag(object.id)}
+                    onMoveLive={(xM, yM) => onObjectMoveLive(object.id, xM, yM)}
                   />
                 );
               })}
@@ -365,8 +457,10 @@ export function PlanCanvas({
                 viewport={viewport}
                 onBeginEdit={onBeginObjectEdit}
                 onLiveUpdate={(patch) => onObjectLiveUpdate(selectedObject.id, patch)}
+                onCommit={(patch) => onObjectCommitUpdate(selectedObject.id, patch)}
               />
             )}
+            {multiSelectionBounds && <MultiSelectionOutline bounds={multiSelectionBounds} viewport={viewport} />}
           </KonvaLayer>
           <KonvaLayer listening={false}>
             <DraftPreview draft={draft} viewport={viewport} />
@@ -424,6 +518,30 @@ function DraftPreview({ draft, viewport }: { draft: Draft | null; viewport: View
     const start = worldToScreen(draft.startWorld, viewport);
     const end = worldToScreen(draft.currentWorld, viewport);
     return <Line points={[start.x, start.y, end.x, end.y]} stroke="#0f172a" strokeWidth={2} dash={[6, 4]} />;
+  }
+
+  if (draft.tool === "marquee") {
+    const topLeft = worldToScreen(
+      {
+        xM: Math.min(draft.startWorld.xM, draft.currentWorld.xM),
+        yM: Math.min(draft.startWorld.yM, draft.currentWorld.yM),
+      },
+      viewport,
+    );
+    const widthPx = metersToPixels(Math.abs(draft.currentWorld.xM - draft.startWorld.xM), viewport);
+    const heightPx = metersToPixels(Math.abs(draft.currentWorld.yM - draft.startWorld.yM), viewport);
+    return (
+      <KonvaRect
+        x={topLeft.x}
+        y={topLeft.y}
+        width={widthPx}
+        height={heightPx}
+        fill="rgba(224, 71, 15, 0.10)"
+        stroke="#e0470f"
+        strokeWidth={1}
+        dash={[4, 3]}
+      />
+    );
   }
 
   if (draft.tool === "calibrate") {

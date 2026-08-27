@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { resizeBackgroundFromHeight, resizeBackgroundFromWidth } from "../../domain/background";
-import { getObjectDimensionSummary } from "../../domain/labels";
+import { boundsSizeM } from "../../domain/bounds";
+import type { BoundsM } from "../../domain/bounds";
+import { formatMeters, getObjectDimensionSummary } from "../../domain/labels";
 import type { BackgroundImage, Calibration, PlanObject, PlanObjectPatch } from "../../domain/types";
 
 interface PropertiesPanelProps {
+  /** The single selected object, or `null` when nothing — or more than one thing — is selected. */
   selected: PlanObject | null;
+  /** How many objects are selected. Above one, the panel shows a summary of the group instead of editable fields. */
+  selectionCount: number;
+  /** Extent of a multi-selection, for the summary. `null` for zero or one object. */
+  selectionBounds: BoundsM | null;
   selectedBackground: BackgroundImage | null;
   /** Only read to describe the background's current size source (default guess vs. a known measured distance) — irrelevant to the object branch. */
   calibration: Calibration;
@@ -14,6 +21,7 @@ interface PropertiesPanelProps {
   onLiveUpdate: (patch: PlanObjectPatch) => void;
   onBackgroundLiveUpdate: (patch: Partial<BackgroundImage>) => void;
   onDelete: () => void;
+  onDuplicate: () => void;
   onRequestReplaceBackground: () => void;
   onRequestCalibration: () => void;
 }
@@ -84,6 +92,8 @@ function NumberField({ label, valueM, step = 0.1, disabled, onCommit }: NumberFi
 
 export function PropertiesPanel({
   selected,
+  selectionCount,
+  selectionBounds,
   selectedBackground,
   calibration,
   isLocked,
@@ -91,6 +101,7 @@ export function PropertiesPanel({
   onLiveUpdate,
   onBackgroundLiveUpdate,
   onDelete,
+  onDuplicate,
   onRequestReplaceBackground,
   onRequestCalibration,
 }: PropertiesPanelProps) {
@@ -185,10 +196,50 @@ export function PropertiesPanel({
     );
   }
 
+  if (selectionCount > 1) {
+    const size = selectionBounds ? boundsSizeM(selectionBounds) : null;
+    return (
+      <aside className="properties-panel">
+        <h2 className="panel__title">Propriétés</h2>
+        <div className="properties-panel__body">
+          <div className="properties-panel__static">
+            <span>Sélection</span>
+            <span>{selectionCount} objets</span>
+          </div>
+          {size && (
+            <div className="properties-panel__static">
+              <span>Emprise</span>
+              <span>
+                {formatMeters(size.widthM)} × {formatMeters(size.heightM)} m
+              </span>
+            </div>
+          )}
+          <p className="properties-panel__hint">
+            Déplacez le groupe en le faisant glisser ou avec les flèches (Maj = pas de 1 m). Les champs
+            de position et de dimension reviennent dès qu&apos;un seul objet est sélectionné.
+          </p>
+          <div className="properties-panel__actions">
+            <button type="button" className="properties-panel__button" onClick={onDuplicate}>
+              ⧉ Dupliquer
+            </button>
+          </div>
+          <button type="button" className="properties-panel__delete" onClick={onDelete}>
+            🗑 Supprimer
+          </button>
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <aside className="properties-panel">
       <h2 className="panel__title">Propriétés</h2>
-      {!selected && <p className="properties-panel__empty">Sélectionnez un objet sur le plan.</p>}
+      {!selected && (
+        <p className="properties-panel__empty">
+          Sélectionnez un objet sur le plan. Maj + clic pour en ajouter, Maj + glisser pour encadrer
+          plusieurs objets.
+        </p>
+      )}
       {selected && (
         <div className="properties-panel__body">
           {isLocked && <p className="properties-panel__locked-notice">🔒 Calque verrouillé — lecture seule.</p>}
@@ -278,6 +329,11 @@ export function PropertiesPanel({
             </div>
           )}
 
+          <div className="properties-panel__actions">
+            <button type="button" className="properties-panel__button" onClick={onDuplicate} disabled={isLocked}>
+              ⧉ Dupliquer
+            </button>
+          </div>
           <button type="button" className="properties-panel__delete" onClick={onDelete} disabled={isLocked}>
             🗑 Supprimer
           </button>
