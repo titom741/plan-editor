@@ -62,7 +62,7 @@ half-finished features spanning missions.
   On-canvas measurement tool (distance, area) and snapping to grid/objects,
   built on the KL-002 geometry primitives.
 
-- **KL-008 — Persistence** *(this mission)*
+- **KL-008 — Persistence** *(done)*
   A new `persistence/` layer: `projectFile.ts` (pure — a versioned
   envelope, plus validation that treats every stored or opened file as
   untrusted and never throws) and `projectStorage.ts` (IndexedDB, chosen
@@ -76,5 +76,24 @@ half-finished features spanning missions.
   Not covered, and still open: multiple named projects (there is one
   autosave slot), and a "recently opened" list.
 
-- **KL-009 — Export**
-  PDF export, PNG/JPEG export, print scale, and making `Sheet` functional.
+- **KL-009 — Export** *(this mission)*
+  `Sheet` becomes functional (paper size, orientation, print scale,
+  margin) and a new `printing/` layer puts the plan on paper: a
+  hand-written one-page PDF writer, sheet layout with frame, title block
+  and a true scale bar, and `domain/bounds.ts` to frame the drawing. PDF
+  and PNG export, with the dialog warning — before you print — when the
+  plan won't fit at the chosen scale. Verified against real PDFs: page
+  exactly 420 × 297 mm on A3 landscape, scale bar exactly 50.000 mm for
+  "10 m" at 1:200. See the KL-009 mission report for the three defects the
+  first printed sheet revealed.
+
+  Not covered, and still open: vector (rather than raster) drawing inside
+  the PDF, multiple sheets per project, and a print preview of the sheet
+  before exporting.
+
+---
+
+The roadmap as first drafted is complete. Natural next steps, in rough
+order of usefulness: KL-004 (advanced object editing) and KL-006 (layer
+management), both deferred from their original missions; then multi-sheet
+plans, a legend/schedule of objects, and vector PDF output.

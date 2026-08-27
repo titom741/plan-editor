@@ -1,6 +1,9 @@
 import { useCallback, useMemo, useRef, useState, type ChangeEvent } from "react";
+import type Konva from "konva";
 import { computeDefaultBackgroundPlacement, createBackgroundImage, worldDistanceToImagePixels } from "../domain/background";
+import { getProjectBoundsM } from "../domain/bounds";
 import { calibrationFromKnownDistance } from "../domain/calibration";
+import { createSheet } from "../domain/sheets";
 import { getDefaultTargetLayer } from "../domain/layers";
 import { nextObjectName } from "../domain/labels";
 import {
@@ -20,15 +23,19 @@ import {
   removeObject,
   setBackground,
 } from "../domain/project";
-import type { BackgroundImage, PlanObjectPatch, PointM, Project } from "../domain/types";
+import type { BackgroundImage, PlanObjectPatch, PointM, Project, Sheet } from "../domain/types";
+import { computePrintRaster, computeSheetLayout } from "../printing/sheetLayout";
 import { DEFAULT_SCREEN_PIXELS_PER_METER, screenToWorld } from "../rendering/viewport";
 import { CalibrationDialog } from "./components/CalibrationDialog";
+import { ExportDialog } from "./components/ExportDialog";
 import { LayersPanel } from "./components/LayersPanel";
 import { PlanCanvas } from "./components/PlanCanvas";
 import type { NewObjectSpec } from "./components/PlanCanvas";
+import { PrintCanvas } from "./components/PrintCanvas";
 import { PropertiesPanel } from "./components/PropertiesPanel";
 import { Toolbar } from "./components/Toolbar";
 import { ToolsPanel } from "./components/ToolsPanel";
+import { downloadPng, downloadSheetPdf } from "./exportSheet";
 import { useAutosave } from "./hooks/useAutosave";
 import { useEditorShortcuts } from "./hooks/useEditorShortcuts";
 import { useProjectHistory } from "./hooks/useProjectHistory";
@@ -36,6 +43,9 @@ import { useViewport } from "./hooks/useViewport";
 import { describeParseError, downloadProjectFile, readProjectFile } from "./projectFileActions";
 import type { ToolId } from "./tools";
 import "./App.css";
+
+/** Screen CSS pixels per inch — the reference for turning a print DPI into a stroke/label multiplier. */
+const CSS_PIXELS_PER_INCH = 96;
 
 /** Builds the actual `PlanObject` (naming, layer assignment) from a gesture the canvas reports — see `PlanCanvas`'s `NewObjectSpec`. */
 function buildObjectFromSpec(project: Project, spec: NewObjectSpec) {
@@ -92,8 +102,13 @@ export default function Editor({
   const [isBackgroundSelected, setIsBackgroundSelected] = useState(false);
   const [calibrationPoints, setCalibrationPoints] = useState<{ pointA: PointM; pointB: PointM } | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [printGrid, setPrintGrid] = useState(false);
+  /** Non-null while the off-screen print stage is mounted and we're waiting for it to be ready to rasterise. */
+  const [pendingExport, setPendingExport] = useState<"pdf" | "png" | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const projectFileInputRef = useRef<HTMLInputElement>(null);
+  const printStageRef = useRef<Konva.Stage>(null);
 
   const saveStatus = useAutosave(project, autosaveEnabled);
 
@@ -387,6 +402,69 @@ export default function Editor({
     replaceDocument(createEmptyProject({ name: "Nouveau projet" }));
   }, [replaceDocument]);
 
+  // --- Export --------------------------------------------------------------
+
+  // The project carries at most one sheet for now; it's created lazily on
+  // first export so existing projects don't need migrating, and stored on
+  // the project so the chosen paper and scale persist like any other
+  // setting rather than resetting every session.
+  const sheet = useMemo(() => project.sheets[0] ?? createSheet(), [project.sheets]);
+  const contentBounds = useMemo(() => getProjectBoundsM(project), [project]);
+  const sheetLayout = useMemo(() => computeSheetLayout(sheet, contentBounds), [sheet, contentBounds]);
+  const printRaster = useMemo(() => computePrintRaster(sheetLayout), [sheetLayout]);
+
+  const handleSheetChange = useCallback(
+    (patch: Partial<Sheet>) => {
+      commitChange((currentProject) => {
+        const current = currentProject.sheets[0] ?? createSheet();
+        return {
+          ...currentProject,
+          sheets: [{ ...current, ...patch }, ...currentProject.sheets.slice(1)],
+          updatedAt: new Date().toISOString(),
+        };
+      });
+    },
+    [commitChange],
+  );
+
+  /**
+   * Rasterises the off-screen print stage and hands the result to the
+   * chosen writer. Called only from `PrintCanvas`'s `onReady`, so the
+   * background image is guaranteed to have decoded — capturing earlier
+   * would quietly produce a plan with a blank backdrop.
+   */
+  const handlePrintCanvasReady = useCallback(() => {
+    const target = pendingExport;
+    const stage = printStageRef.current;
+    if (!target || !stage) return;
+    // Clear first: whatever happens below, the off-screen stage must come
+    // down, or a failure would leave a huge canvas mounted forever.
+    setPendingExport(null);
+    try {
+      if (target === "png") {
+        downloadPng(stage.toDataURL({ mimeType: "image/png", pixelRatio: 1 }), project);
+        return;
+      }
+      downloadSheetPdf({
+        project,
+        sheet,
+        layout: sheetLayout,
+        drawingJpegDataUrl: stage.toDataURL({ mimeType: "image/jpeg", quality: 0.92, pixelRatio: 1 }),
+        pixelWidth: printRaster.pixelWidth,
+        pixelHeight: printRaster.pixelHeight,
+        now: new Date(),
+      });
+    } catch (error) {
+      setFileError(
+        `L'export a échoué : ${error instanceof Error ? error.message : String(error)}. Essayez un format de papier plus petit.`,
+      );
+    }
+  }, [pendingExport, project, sheet, sheetLayout, printRaster]);
+
+  const handleOpenExport = useCallback(() => {
+    setIsExportOpen(true);
+  }, []);
+
   return (
     <div className="app-layout">
       <input
@@ -414,6 +492,7 @@ export default function Editor({
         onNewProject={handleNewProject}
         onOpenProject={handleRequestOpenProject}
         onSaveToFile={handleSaveToFile}
+        onExport={handleOpenExport}
       />
       {(restoreNotice || fileError) && (
         <div className="app-notice" role="status">
@@ -485,6 +564,41 @@ export default function Editor({
         onToggleBackgroundLocked={handleToggleBackgroundLocked}
         onRequestImportBackground={handleRequestBackgroundImport}
       />
+      {isExportOpen && (
+        <ExportDialog
+          sheet={sheet}
+          contentBounds={contentBounds}
+          busy={pendingExport !== null}
+          onChange={handleSheetChange}
+          showGrid={printGrid}
+          onShowGridChange={setPrintGrid}
+          onExportPdf={() => setPendingExport("pdf")}
+          onExportPng={() => setPendingExport("png")}
+          onClose={() => setIsExportOpen(false)}
+        />
+      )}
+      {/*
+        The print stage is mounted only for the instant it takes to
+        rasterise, and kept out of the layout entirely — it is far larger
+        than the window (thousands of pixels a side) and must not affect
+        what the user sees or reflow anything.
+      */}
+      {pendingExport && (
+        <div className="print-canvas-host" aria-hidden="true">
+          <PrintCanvas
+            stageRef={printStageRef}
+            pixelWidth={printRaster.pixelWidth}
+            pixelHeight={printRaster.pixelHeight}
+            viewport={printRaster.viewport}
+            objects={project.objects}
+            layers={project.layers}
+            background={project.background}
+            showGrid={printGrid}
+            renderScale={printRaster.effectiveDpi / CSS_PIXELS_PER_INCH}
+            onReady={handlePrintCanvasReady}
+          />
+        </div>
+      )}
     </div>
   );
 }

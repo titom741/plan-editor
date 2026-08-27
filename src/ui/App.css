@@ -534,3 +534,68 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* Export dialog */
+.export-dialog {
+  width: min(400px, 92vw);
+}
+
+.calibration-dialog__field select {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.export-dialog__check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.export-dialog__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.2rem;
+}
+
+.export-dialog__warning {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #b45309;
+}
+
+.export-dialog__link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: inherit;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/*
+  The print stage is thousands of pixels a side. It is taken out of flow
+  and pushed off-screen so it can never reflow the editor or be seen —
+  `display: none` is not an option, since Konva cannot rasterise a canvas
+  that was never laid out.
+*/
+.print-canvas-host {
+  position: fixed;
+  left: -100000px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  pointer-events: none;
+}

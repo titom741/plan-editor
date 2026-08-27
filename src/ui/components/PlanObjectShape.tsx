@@ -13,6 +13,14 @@ interface PlanObjectShapeProps {
   draggable: boolean;
   /** True only when the select tool is active — regardless of lock state, unlike `draggable`. Gates whether a click here claims the event or lets it bubble to the Stage for another tool (e.g. polygon point-picking, calibration) to handle — an object can sit under a click made with any tool, not just Selection. */
   selectable: boolean;
+  /**
+   * Multiplier for sizes that are in *screen* pixels rather than metres —
+   * label text and stroke widths. 1 on screen; on a print raster it's the
+   * ratio of print resolution to screen resolution, so a line that reads
+   * as one pixel on a monitor comes out the same physical thickness on
+   * paper instead of a hairline (see `PrintCanvas`).
+   */
+  renderScale?: number;
   onSelect: () => void;
   /** Snapshots undo history once, at the start of a drag gesture. */
   onBeginEdit: () => void;
@@ -36,11 +44,14 @@ export function PlanObjectShape({
   selected,
   draggable,
   selectable,
+  renderScale = 1,
   onSelect,
   onBeginEdit,
   onMoveLive,
 }: PlanObjectShapeProps) {
   const anchor = worldToScreen({ xM: object.xM, yM: object.yM }, viewport);
+  /** A width given in screen pixels, converted to this render target's pixels. */
+  const px = (screenPx: number) => screenPx * renderScale;
 
   const handleSelect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     // Outside the select tool, let the click bubble up to the Stage so
@@ -99,7 +110,7 @@ export function PlanObjectShape({
             height={heightPx}
             fill={object.style?.fill ?? "#dbeafe"}
             stroke={selected ? SELECTED_STROKE : (object.style?.stroke ?? "#2563eb")}
-            strokeWidth={selected ? 3 : (object.style?.strokeWidth ?? 2)}
+            strokeWidth={px(selected ? 3 : (object.style?.strokeWidth ?? 2))}
             opacity={object.style?.opacity ?? 1}
           />
           <Text
@@ -108,7 +119,7 @@ export function PlanObjectShape({
             height={heightPx}
             align="center"
             verticalAlign="middle"
-            fontSize={14}
+            fontSize={px(14)}
             fill="#0f172a"
             listening={false}
           />
@@ -123,16 +134,16 @@ export function PlanObjectShape({
             radius={radiusPx}
             fill={object.style?.fill ?? "#dcfce7"}
             stroke={selected ? SELECTED_STROKE : (object.style?.stroke ?? "#16a34a")}
-            strokeWidth={selected ? 3 : (object.style?.strokeWidth ?? 2)}
+            strokeWidth={px(selected ? 3 : (object.style?.strokeWidth ?? 2))}
             opacity={object.style?.opacity ?? 1}
           />
           <Text
             text={getObjectDisplayLabel(object)}
             x={-radiusPx}
-            y={-8}
+            y={px(-8)}
             width={radiusPx * 2}
             align="center"
-            fontSize={13}
+            fontSize={px(13)}
             fill="#0f172a"
             listening={false}
           />
@@ -149,7 +160,7 @@ export function PlanObjectShape({
           <Line
             points={points}
             stroke={selected ? SELECTED_STROKE : (object.style?.stroke ?? "#0f172a")}
-            strokeWidth={selected ? 3 : (object.style?.strokeWidth ?? 2)}
+            strokeWidth={px(selected ? 3 : (object.style?.strokeWidth ?? 2))}
             hitStrokeWidth={Math.max(12, object.style?.strokeWidth ?? 2)}
           />
         </Group>
@@ -167,7 +178,7 @@ export function PlanObjectShape({
             closed
             fill={object.style?.fill ?? "#fef9c3"}
             stroke={selected ? SELECTED_STROKE : (object.style?.stroke ?? "#ca8a04")}
-            strokeWidth={selected ? 3 : (object.style?.strokeWidth ?? 2)}
+            strokeWidth={px(selected ? 3 : (object.style?.strokeWidth ?? 2))}
           />
         </Group>
       );

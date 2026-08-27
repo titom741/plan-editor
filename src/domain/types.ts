@@ -199,12 +199,37 @@ type DistributivePartial<T> = T extends unknown ? Partial<T> : never;
 export type PlanObjectPatch = DistributivePartial<PlanObject>;
 
 // ---------------------------------------------------------------------------
-// Sheets (prepared, not functional yet — see KL-009)
+// Sheets — a printable page of the plan (KL-009)
 // ---------------------------------------------------------------------------
 
+/** ISO 216 paper sizes, the ones an event plan is realistically printed on. */
+export type PaperSize = "A4" | "A3" | "A2" | "A1" | "A0";
+
+export type Orientation = "portrait" | "landscape";
+
+/**
+ * How the plan is put on paper: which sheet, which way round, and — the
+ * part that actually matters — at what scale.
+ *
+ * `scaleDenominator` is the S in 1:S. At 1:100, one metre on the ground is
+ * ten millimetres on the page, so a printed plan can be measured with a
+ * ruler. That is the whole point of exporting from this app rather than
+ * screenshotting it, and it's why the scale is stored on the project
+ * (persisted, re-used, shown on the sheet) instead of being a transient
+ * dialog setting.
+ *
+ * Made functional in KL-009; `Sheet` existed as a placeholder (`id` +
+ * `name`) from KL-001 onwards.
+ */
 export interface Sheet {
   id: string;
   name: string;
+  paperSize: PaperSize;
+  orientation: Orientation;
+  /** The S in 1:S. 100 means one metre on the ground is 10 mm on paper. */
+  scaleDenominator: number;
+  /** White border kept on every edge, in millimetres — printers can't reach the paper edge. */
+  marginMm: number;
 }
 
 // ---------------------------------------------------------------------------

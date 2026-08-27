@@ -8,13 +8,11 @@ dimensions in meters.
 Deliberately **not** a general-purpose CAD tool — it's scoped to fast,
 simple event-layout drafting.
 
-Current mission: **KL-008 (Persistence)** — your project is saved
-automatically and reopens where you left off, and can be exported to a
-portable `.kl.json` file. On top of everything the earlier missions
-deliver: import a PNG/JPEG background, calibrate it against a known
-distance, and create, select, move, resize, rotate, and delete rectangles,
-circles, lines, polygons, and text, all in real-world dimensions with
-undo/redo. See
+Current mission: **KL-009 (Export)** — print the plan to a PDF at a true
+scale, so a 20 m stage measures exactly 100 mm on paper at 1:200. On top
+of everything the earlier missions deliver: draw and edit in real-world
+dimensions with undo/redo, import and calibrate a background, and have the
+project saved automatically and exportable as a portable file. See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how it's built and
 [`docs/ROADMAP.md`](docs/ROADMAP.md) for what's next.
 
@@ -81,6 +79,19 @@ current work is left untouched; opening or creating a project clears the
 undo history, since undo can't meaningfully cross from one document into
 another.
 
+**Exporting to paper** — **🖨 Exporter…** puts the plan on a sheet: pick a
+paper size, orientation and scale, and export a **PDF** or a **PNG**. The
+dialog tells you how much ground the sheet covers and how big your plan
+actually is, and warns you *before* you print if it won't fit at the
+chosen scale (with a one-click "Ajuster" to the nearest standard scale
+that does). The scale is never changed for you — a sheet labelled 1:200
+is at 1:200.
+
+Print the PDF **without** "fit to page" or any scaling and it is
+dimensionally true: at 1:200, one metre on the ground is 5 mm on the
+paper. Every sheet carries a title block with the project name, location,
+scale, paper size, date, and a scale bar you can check with a ruler.
+
 **Layers** — click the eye / lock icons in the bottom bar to toggle a
 layer's visibility or lock it (a locked layer's objects can be selected
 but not edited or deleted).
@@ -122,7 +133,11 @@ staying stable (not drifting) when the same segment is recalibrated.
 object type round-trips unchanged, and the reader is tested against the
 files it will really meet — truncated, hand-edited, written by a newer
 version, someone else's JSON, `NaN` that JSON turned into `null`, and a
-project whose objects reference a layer that isn't there.
+project whose objects reference a layer that isn't there. `printing/`
+pins the property the whole export rests on: a metre is the right number
+of millimetres on paper at every scale and resolution, the scale bar is
+always exactly as long as its label claims, and the PDF's byte offsets
+survive accented characters.
 
 ## Lint & build
 
@@ -139,6 +154,7 @@ src/
 ├── rendering/    meters ↔ pixels conversion, viewport, grid — no React/Konva
 ├── history/      generic undo/redo stack — no React, no domain knowledge
 ├── persistence/  project file format + validation, and local storage — no React
+├── printing/     paper geometry, sheet layout, and a minimal PDF writer — no React, no DOM
 └── ui/           React components + react-konva
 ```
 

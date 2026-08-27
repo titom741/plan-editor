@@ -19,11 +19,13 @@
  * on disk for them to keep or send on.
  */
 
+import { PAPER_SIZE_ORDER } from "../domain/sheets";
 import type {
   Background,
   Calibration,
   CalibrationSource,
   Layer,
+  PaperSize,
   PlanObject,
   PointM,
   Project,
@@ -261,11 +263,38 @@ function readObject(value: unknown, path: string): PlanObject {
   }
 }
 
+/**
+ * Sheets gained their print settings in KL-009, having been a bare
+ * `{ id, name }` placeholder since KL-001. Rather than bump
+ * `SCHEMA_VERSION` for it, the missing fields are filled with the same
+ * defaults `createSheet` uses: no file in the wild can contain a sheet
+ * (nothing ever created one before KL-009), so a version bump would buy a
+ * migration that could never run, while reading tolerantly here costs four
+ * lines and is what a future optional field would want anyway. A *present*
+ * field is still validated strictly.
+ */
 function readSheet(value: unknown, path: string): Sheet {
   const record = readRecord(value, path);
+  const defaults = { paperSize: "A3", orientation: "landscape", scaleDenominator: 200, marginMm: 10 } as const;
+
+  const paperSize = record.paperSize === undefined ? defaults.paperSize : readString(record.paperSize, `${path}.paperSize`);
+  if (!PAPER_SIZE_ORDER.includes(paperSize as PaperSize)) fail(`${path}.paperSize`);
+
+  const orientation =
+    record.orientation === undefined ? defaults.orientation : readString(record.orientation, `${path}.orientation`);
+  if (orientation !== "portrait" && orientation !== "landscape") fail(`${path}.orientation`);
+
   return {
     id: readString(record.id, `${path}.id`),
     name: readString(record.name, `${path}.name`),
+    paperSize: paperSize as PaperSize,
+    orientation,
+    scaleDenominator:
+      record.scaleDenominator === undefined
+        ? defaults.scaleDenominator
+        : readPositiveNumber(record.scaleDenominator, `${path}.scaleDenominator`),
+    marginMm:
+      record.marginMm === undefined ? defaults.marginMm : readFiniteNumber(record.marginMm, `${path}.marginMm`),
   };
 }
 

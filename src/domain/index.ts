@@ -5,5 +5,7 @@ export * from "./layers";
 export * from "./objects";
 export * from "./labels";
 export * from "./geometry";
+export * from "./bounds";
 export * from "./background";
+export * from "./sheets";
 export * from "./project";

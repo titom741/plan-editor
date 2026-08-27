@@ -11,6 +11,7 @@ interface ToolbarProps {
   onNewProject: () => void;
   onOpenProject: () => void;
   onSaveToFile: () => void;
+  onExport: () => void;
 }
 
 function formatTime(iso: string): string {
@@ -76,6 +77,7 @@ export function Toolbar({
   onNewProject,
   onOpenProject,
   onSaveToFile,
+  onExport,
 }: ToolbarProps) {
   const save = describeSaveStatus(saveStatus);
 
@@ -104,6 +106,14 @@ export function Toolbar({
           title="Enregistrer le projet dans un fichier"
         >
           Enregistrer un fichier
+        </button>
+        <button
+          type="button"
+          className="toolbar__button"
+          onClick={onExport}
+          title="Exporter le plan en PDF ou PNG, à l'échelle"
+        >
+          🖨 Exporter…
         </button>
       </div>
       <div className="toolbar__history">

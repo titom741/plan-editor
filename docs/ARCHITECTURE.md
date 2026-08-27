@@ -12,6 +12,7 @@ src/
 ├── rendering/    meters ↔ pixels conversion, viewport, grid — no React, no Konva
 ├── history/      generic undo/redo stack — no React, no domain knowledge
 ├── persistence/  saving and (above all) safely re-reading a project — no React
+├── printing/     paper geometry and a minimal PDF writer — no React, no DOM
 └── ui/           React components + react-konva — the only layer allowed to import React/Konva
 ```
 
@@ -21,6 +22,7 @@ The dependency direction is strictly:
 ui/  ──depends on──▶  rendering/  ──depends on──▶  domain/
 ui/  ──depends on──▶  history/
 ui/  ──depends on──▶  persistence/  ──depends on──▶  domain/
+ui/  ──depends on──▶  printing/     ──depends on──▶  domain/, rendering/
 ```
 
 `domain/` never imports from `rendering/`, `history/`, `persistence/`, or
@@ -31,7 +33,9 @@ ui/  ──depends on──▶  persistence/  ──depends on──▶  domain/
 peer of `domain/`/`rendering/` rather than tucked inside either.
 `persistence/` is new in KL-008 — see [Persistence](#persistence). It is
 the one non-`ui/` layer allowed to touch a browser API, and even there the
-concession is confined to a single file.
+concession is confined to a single file. `printing/` is new in KL-009 —
+see [Printing and export](#printing-and-export) — and touches nothing but
+numbers and bytes.
 
 This is enforced by convention and code review in KL-001 (no lint rule wires
 it up yet — see [Points to watch](../README.md) in the final report). The
@@ -73,8 +77,9 @@ payoff:
   [Layer architecture](#layer-architecture),
   [Background image](#background-image) (KL-003) for its placement fields
   and [Calibration](#calibration) (KL-005) for how its true size is set.
-- **`Sheet`** — prepared (id, name) but not wired into any feature yet; see
-  ROADMAP KL-009.
+- **`Sheet`** — a printable page: paper size, orientation, print scale and
+  margin. A placeholder (`id`, `name`) until KL-009 made it functional —
+  see [Printing and export](#printing-and-export).
 
 Object construction goes through factory functions in `domain/objects.ts`
 (`createRectangleObject`, `createCircleObject`, …) rather than object
@@ -596,6 +601,93 @@ Two races were designed out rather than papered over:
 Opening a file or starting a new project calls `resetHistory`, which
 *discards* the undo stack: an edit history spanning two documents isn't a
 history, it's a trap.
+
+## Printing and export
+
+KL-009 turns a plan into a sheet of paper: a PDF whose page is a true
+A-series size and whose drawing sits on it at a true scale, so a printed
+20 m stage measures exactly 100 mm at 1:200. That property — not file
+size, not fidelity of colour — is the whole point of exporting from here
+rather than screenshotting.
+
+### `Sheet` becomes real
+
+`Sheet` had been an `{ id, name }` placeholder since KL-001. It now
+carries `paperSize`, `orientation`, `scaleDenominator` and `marginMm`, and
+`domain/sheets.ts` holds the arithmetic: ISO 216 sizes, the printable area
+after margins, `metersToPaperMm` (the definition of 1:S), the ground area
+a sheet covers, and `fitScaleDenominator`.
+
+Two decisions there are worth stating:
+
+- **Scales come from a ladder** (1:20 … 1:5000), never a free number. A
+  plan marked 1:137 is one nobody can check against a ruler.
+- **`fitScaleDenominator` rounds *up* the ladder**, and the UI never calls
+  it on its own — "Ajuster" is a button. Silently rescaling to make a plan
+  fit would turn the printed "1:200" into a lie, which is worse than a
+  plan that doesn't fit and says so.
+
+The sheet is stored on the project, so paper and scale persist like any
+other setting. A pre-KL-009 file's bare sheet is read with defaults rather
+than bumping `SCHEMA_VERSION` — see `readSheet` for why a version bump
+there would buy a migration that could never run.
+
+### One renderer, not two
+
+The obvious way to write a PDF is to translate the model into PDF drawing
+operators. That would be a **second renderer**: every fill, stroke, label
+and rotation re-implemented against a different API, drifting from the
+Konva one every time either changed.
+
+Instead `ui/components/PrintCanvas.tsx` renders the plan with the *same*
+`PlanObjectShape` the editor uses, into an off-screen stage sized to the
+sheet's drawing area, and that raster is embedded in the PDF. What you
+print is what you saw, by construction.
+
+`computePrintRaster` is the join: `rendering/` already turns metres into
+pixels given a `Viewport`, so printing supplies a viewport whose scale
+comes from paper instead of from the user's zoom. Nothing about drawing is
+duplicated.
+
+The trade-off, stated plainly: the drawing in the PDF is a raster, so it
+doesn't stay crisp magnified far beyond its export resolution and its text
+isn't selectable. Everything *around* the drawing — frame, title block,
+captions and the scale bar — is real PDF vector at exact point
+coordinates, so the bar a user measures is dimensionally true whatever the
+raster's resolution.
+
+`printing/pdf.ts` is a hand-written one-page writer (catalog, page,
+content stream, a `DCTDecode` JPEG, one standard font). It is small
+precisely *because* the drawing is a raster. Two details it gets right and
+that are easy to get wrong:
+
+- **Offsets are counted in bytes, not characters.** The cross-reference
+  table records where each object starts; one accented character in a
+  project name counted as a character would shift every later offset and
+  produce a file that opens blank. Everything is assembled as
+  `Uint8Array`, and a test pins it.
+- **Text is encoded as WinAnsi, not Latin-1.** The two differ exactly
+  where French lives: `œ`, the typographic apostrophe, the em dash, the
+  ellipsis. Getting this wrong prints "Cœur — l'entrée…" as
+  "C?ur ? l'entr?e?".
+
+### Three defects the first printed sheet revealed
+
+Worth recording, because none of them showed up in unit tests — they
+needed an actual PDF, rendered:
+
+- **The drawing came out solid black.** A Konva stage is transparent where
+  nothing is drawn and JPEG has no alpha channel, so every uncovered pixel
+  encoded as black. `PrintCanvas` now paints an explicit white ground.
+- **The title block printed on top of itself** — project name, location
+  and scale bar all at nearly the same coordinates. The block is now laid
+  out as three columns and two baselines in `TitleBlockLayout`, so the
+  geometry is in one place and testable.
+- **The scale bar ran into the date on A4 portrait.** Its allowance is now
+  the width actually available between columns rather than a fixed 50 mm,
+  and the candidate ladder gained sub-metre steps for fine scales where
+  even a 1 m bar is 50 mm of ink. A test now sweeps every paper size ×
+  orientation × scale and asserts the bar clears the right column.
 
 ## Points à surveiller (repris du rapport de mission)
 
