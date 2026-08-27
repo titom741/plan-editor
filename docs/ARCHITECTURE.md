@@ -636,11 +636,50 @@ properties) but not dragged, resized, rotated, edited from the properties
 panel, or deleted — `PropertiesPanel` shows a "🔒 read-only" notice and
 disables its inputs instead. `domain/layers.ts`'s
 `getDefaultTargetLayer(layers)` picks which layer a newly-created object
-lands on: the first unlocked layer in order, falling back to the very
-first layer if everything happens to be locked. There is no UI yet to
-*choose* a target layer explicitly — that's KL-006. KL-003 gives the
+lands on *by default*: the first unlocked layer in order, falling back to
+the very first layer if everything happens to be locked. KL-003 gives the
 background the same lock semantics (selectable and read-only when locked,
 otherwise fully editable) for consistency.
+
+### Layer management (KL-006)
+
+KL-006 makes the layer bar do what it looks like it does: create, rename
+(double-click), reorder (◀ ▶), delete (✕), pick the **active** layer that
+new objects land on, and move a selection between layers from the
+properties panel. The bar reads left to right in draw order — leftmost is
+drawn first, so it sits at the back — with the background first, because
+it is always behind everything.
+
+Four decisions worth recording:
+
+- **`order` is the truth, and it is always contiguous.** Every reordering
+  goes through `normalizeLayerOrder`, which rewrites `order` to 0, 1, 2…
+  A duplicate `order` would make the draw order depend on
+  `Array.prototype.sort`'s tie-breaking — the kind of thing that works
+  until the day it doesn't.
+- **Deleting a layer keeps its objects**, moving them to the layer below
+  (or to the new bottom layer). Deleting a container is not a request to
+  destroy its contents. `removeLayer` refuses outright to delete the last
+  remaining layer: every object needs a home, and an empty `layers` array
+  would leave the next created object nowhere to go. The confirm dialog
+  says how many objects will move, so the behaviour is stated before it
+  happens rather than discovered afterwards.
+- **Visibility and lock stay outside the undo stack; everything else goes
+  in.** Toggling an eye is a way of *looking* at the plan. Creating,
+  renaming, reordering and deleting a layer are changes *to* it. That
+  split was already implicit in KL-002 and is now explicit in `Editor`.
+- **Draw order is applied where drawing happens, not in the model.**
+  `Editor` sorts objects by their layer's rank into `orderedObjects` and
+  hands that to both `PlanCanvas` and `PrintCanvas`, so what you export
+  is stacked exactly like what you see. `project.objects` itself stays in
+  creation order — reshuffling the stored array on every layer move would
+  make the file churn for no reason.
+
+The active layer is a piece of *editor* state, not project state: it is
+where the next object goes, not a fact about the document. It is kept
+valid by the same "adjust during render" pattern used elsewhere — if the
+layer it names no longer exists (another project opened, that layer
+deleted), it falls back to `getDefaultTargetLayer`.
 
 ## Persistence
 

@@ -6,7 +6,7 @@ import { duplicateObjects } from "../domain/clipboard";
 import { getSelectionBoundsM, toggleSelection } from "../domain/selection";
 import { calibrationFromKnownDistance } from "../domain/calibration";
 import { createSheet } from "../domain/sheets";
-import { getDefaultTargetLayer } from "../domain/layers";
+import { getDefaultTargetLayer, sortLayersByOrder } from "../domain/layers";
 import { nextObjectName } from "../domain/labels";
 import {
   createCircleObject,
@@ -16,15 +16,21 @@ import {
   createTextObject,
 } from "../domain/objects";
 import {
+  addLayer,
   addObject,
   addObjects,
   applyCalibration,
+  assignObjectsToLayer,
   createEmptyProject,
+  moveLayer,
   patchBackground,
+  patchLayer,
   patchObject,
   patchObjects,
   removeBackground,
+  removeLayer,
   removeObjects,
+  renameLayer,
   setBackground,
 } from "../domain/project";
 import type { BackgroundImage, PlanObject, PlanObjectPatch, PointM, Project, Sheet } from "../domain/types";
@@ -63,11 +69,9 @@ const PASTE_OFFSET_M = 0.5;
 const NUDGE_COALESCE_MS = 700;
 
 /** Builds the actual `PlanObject` (naming, layer assignment) from a gesture the canvas reports — see `PlanCanvas`'s `NewObjectSpec`. */
-function buildObjectFromSpec(project: Project, spec: NewObjectSpec) {
-  const layer = getDefaultTargetLayer(project.layers);
-  if (!layer) return null;
+function buildObjectFromSpec(project: Project, spec: NewObjectSpec, layerId: string) {
   const name = nextObjectName(project, spec.type);
-  const common = { layerId: layer.id, name, xM: spec.xM, yM: spec.yM };
+  const common = { layerId, name, xM: spec.xM, yM: spec.yM };
 
   switch (spec.type) {
     case "rectangle":
@@ -114,6 +118,8 @@ export default function Editor({
 
   const [activeTool, setActiveTool] = useState<ToolId>("select");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  /** The layer new objects land on. KL-002 always used the first unlocked layer; KL-006 makes it the user's choice. */
+  const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
   const [isBackgroundSelected, setIsBackgroundSelected] = useState(false);
   const [calibrationPoints, setCalibrationPoints] = useState<{ pointA: PointM; pointB: PointM } | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -140,6 +146,31 @@ export default function Editor({
   // the background's real-world size, it doesn't change how big a meter is
   // drawn on screen.
   const { viewport, containerRef, stageSize, zoomAt, pan } = useViewport(DEFAULT_SCREEN_PIXELS_PER_METER);
+
+  // Keep the active layer pointing at a layer that exists — after opening
+  // another project, or deleting the layer that was active. Adjusted during
+  // render rather than in an effect, the same pattern `NumberField` and
+  // `PlanCanvas` already use for "derive state from changed props".
+  const activeLayerIsValid = activeLayerId !== null && project.layers.some((layer) => layer.id === activeLayerId);
+  if (!activeLayerIsValid) {
+    const fallback = getDefaultTargetLayer(project.layers);
+    if (fallback && fallback.id !== activeLayerId) setActiveLayerId(fallback.id);
+  }
+  const effectiveLayerId = activeLayerIsValid ? activeLayerId : (getDefaultTargetLayer(project.layers)?.id ?? null);
+
+  const objectCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const object of project.objects) counts.set(object.layerId, (counts.get(object.layerId) ?? 0) + 1);
+    return counts;
+  }, [project.objects]);
+
+  /** Objects in draw order: by their layer's `order`, then by creation order within a layer. */
+  const orderedObjects = useMemo(() => {
+    const rank = new Map(sortLayersByOrder(project.layers).map((layer, index) => [layer.id, index]));
+    return [...project.objects].sort(
+      (a, b) => (rank.get(a.layerId) ?? 0) - (rank.get(b.layerId) ?? 0),
+    );
+  }, [project.objects, project.layers]);
 
   const lockedLayerIds = useMemo(
     () => new Set(project.layers.filter((layer) => layer.locked).map((layer) => layer.id)),
@@ -211,14 +242,15 @@ export default function Editor({
   // originals.
   const handleCreateObject = useCallback(
     (spec: NewObjectSpec) => {
-      const object = buildObjectFromSpec(project, spec);
+      if (!effectiveLayerId) return;
+      const object = buildObjectFromSpec(project, spec, effectiveLayerId);
       if (object) {
         commitChange((currentProject) => addObject(currentProject, object));
         setSelectedIds([object.id]);
       }
       setActiveTool("select");
     },
-    [project, commitChange],
+    [project, effectiveLayerId, commitChange],
   );
 
   const handleBeginObjectEdit = useCallback(() => beginEdit(), [beginEdit]);
@@ -429,30 +461,73 @@ export default function Editor({
     onDuplicate: handleDuplicate,
   });
 
+  // Visibility and lock stay outside the undo stack: they are a way of
+  // looking at the plan, not a change to it (unchanged since KL-002).
   const handleToggleLayerVisible = useCallback(
     (layerId: string) => {
-      setProjectDirect((currentProject) => ({
-        ...currentProject,
-        layers: currentProject.layers.map((layer) =>
-          layer.id === layerId ? { ...layer, visible: !layer.visible } : layer,
-        ),
-        updatedAt: new Date().toISOString(),
-      }));
+      setProjectDirect((currentProject) => {
+        const layer = currentProject.layers.find((candidate) => candidate.id === layerId);
+        return layer ? patchLayer(currentProject, layerId, { visible: !layer.visible }) : currentProject;
+      });
     },
     [setProjectDirect],
   );
 
   const handleToggleLayerLocked = useCallback(
     (layerId: string) => {
-      setProjectDirect((currentProject) => ({
-        ...currentProject,
-        layers: currentProject.layers.map((layer) =>
-          layer.id === layerId ? { ...layer, locked: !layer.locked } : layer,
-        ),
-        updatedAt: new Date().toISOString(),
-      }));
+      setProjectDirect((currentProject) => {
+        const layer = currentProject.layers.find((candidate) => candidate.id === layerId);
+        return layer ? patchLayer(currentProject, layerId, { locked: !layer.locked }) : currentProject;
+      });
     },
     [setProjectDirect],
+  );
+
+  // Creating, renaming, reordering and deleting a layer *are* changes to
+  // the document, so unlike the two toggles above they go through the
+  // undo stack.
+  const handleAddLayer = useCallback(() => {
+    const { project: nextProject, layer } = addLayer(project);
+    commitChange(() => nextProject);
+    setActiveLayerId(layer.id);
+  }, [project, commitChange]);
+
+  const handleRenameLayer = useCallback(
+    (layerId: string, name: string) => {
+      commitChange((currentProject) => renameLayer(currentProject, layerId, name));
+    },
+    [commitChange],
+  );
+
+  const handleMoveLayer = useCallback(
+    (layerId: string, direction: -1 | 1) => {
+      commitChange((currentProject) => moveLayer(currentProject, layerId, direction));
+    },
+    [commitChange],
+  );
+
+  const handleDeleteLayer = useCallback(
+    (layerId: string) => {
+      const layer = project.layers.find((candidate) => candidate.id === layerId);
+      if (!layer || project.layers.length <= 1) return;
+      const count = project.objects.filter((object) => object.layerId === layerId).length;
+      const confirmed = window.confirm(
+        count === 0
+          ? `Supprimer le calque « ${layer.name} » ?`
+          : `Supprimer le calque « ${layer.name} » ? Ses ${count} objet(s) ne seront pas effacés : ils passeront sur le calque voisin.`,
+      );
+      if (!confirmed) return;
+      commitChange((currentProject) => removeLayer(currentProject, layerId));
+    },
+    [project.layers, project.objects, commitChange],
+  );
+
+  const handleAssignSelectionToLayer = useCallback(
+    (layerId: string) => {
+      if (selectedIds.length === 0) return;
+      commitChange((currentProject) => assignObjectsToLayer(currentProject, selectedIds, layerId));
+    },
+    [selectedIds, commitChange],
   );
 
   const handleToggleBackgroundVisible = useCallback(() => {
@@ -535,6 +610,9 @@ export default function Editor({
     (nextProject: Project) => {
       resetHistory(nextProject);
       setSelectedIds([]);
+      // Cleared rather than remapped: the id belonged to the old document.
+      // The render-time guard above picks the new project's default.
+      setActiveLayerId(null);
       setIsBackgroundSelected(false);
       setCalibrationPoints(null);
       setActiveTool("select");
@@ -694,7 +772,7 @@ export default function Editor({
         viewport={viewport}
         onZoomAt={zoomAt}
         onPan={pan}
-        objects={project.objects}
+        objects={orderedObjects}
         layers={project.layers}
         background={project.background}
         activeTool={activeTool}
@@ -719,6 +797,14 @@ export default function Editor({
         selected={isBackgroundSelected ? null : selectedObject}
         selectionCount={isBackgroundSelected ? 0 : selectedObjects.length}
         selectionBounds={selectionBounds}
+        layers={project.layers}
+        selectionLayerId={
+          selectedObjects.length > 0 &&
+          selectedObjects.every((object) => object.layerId === selectedObjects[0]?.layerId)
+            ? (selectedObjects[0]?.layerId ?? null)
+            : null
+        }
+        onAssignLayer={handleAssignSelectionToLayer}
         selectedBackground={isBackgroundSelected ? project.background : null}
         calibration={project.calibration}
         isLocked={isBackgroundSelected ? isBackgroundLocked : isSelectedLocked}
@@ -744,8 +830,15 @@ export default function Editor({
         background={project.background}
         isBackgroundSelected={isBackgroundSelected}
         layers={project.layers}
+        objectCounts={objectCounts}
+        activeLayerId={effectiveLayerId}
+        onSetActiveLayer={setActiveLayerId}
         onToggleVisible={handleToggleLayerVisible}
         onToggleLocked={handleToggleLayerLocked}
+        onRenameLayer={handleRenameLayer}
+        onMoveLayer={handleMoveLayer}
+        onDeleteLayer={handleDeleteLayer}
+        onAddLayer={handleAddLayer}
         onSelectBackground={handleSelectBackground}
         onToggleBackgroundVisible={handleToggleBackgroundVisible}
         onToggleBackgroundLocked={handleToggleBackgroundLocked}
@@ -777,7 +870,7 @@ export default function Editor({
             pixelWidth={printRaster.pixelWidth}
             pixelHeight={printRaster.pixelHeight}
             viewport={printRaster.viewport}
-            objects={project.objects}
+            objects={orderedObjects}
             layers={project.layers}
             background={project.background}
             showGrid={printGrid}

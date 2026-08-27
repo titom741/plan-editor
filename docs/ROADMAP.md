@@ -31,7 +31,7 @@ half-finished features spanning missions.
   list of decisions, including a real Konva event-bubbling bug found and
   fixed along the way.
 
-- **KL-004 — Advanced Object Editing** *(this mission)*
+- **KL-004 — Advanced Object Editing** *(done)*
   What KL-002 deliberately deferred. `resizeRectangleFromHandle` covers
   all eight handles (four corners, four edges, `Shift` to keep the aspect
   ratio) with one rule — the opposite handle never moves — so the anchor
@@ -67,11 +67,18 @@ half-finished features spanning missions.
   Not covered, and still open: the `knownScale` (1:100) and `geo`
   `CalibrationSource` cases, and calibrating with the plan rotated.
 
-- **KL-006 — Layers**
-  Full layer management UI: create/rename/reorder/delete layers, assign
-  objects to a chosen layer (KL-002 always targets the first unlocked
-  one), drag objects between layers. Visibility/lock toggling and lock
-  enforcement on the canvas already work as of KL-002.
+- **KL-006 — Layers** *(this mission)*
+  Full layer management: create, rename (double-click), reorder, delete,
+  and an **active layer** that new objects land on — KL-002 always
+  targeted the first unlocked one. A layer picker in the properties panel
+  moves the selection (one object or many) between layers. Deleting a
+  layer keeps its objects, moving them to the layer below, and the last
+  layer can't be deleted at all. `order` is renormalised to 0, 1, 2… on
+  every reorder so it can never develop gaps or duplicates. Objects are
+  now drawn in layer order, on screen and in the export alike.
+
+  Not covered, and still open: dragging objects between layers directly
+  on the canvas, per-layer default styles, and layer groups/folders.
 
 - **KL-007 — Measurements**
   On-canvas measurement tool (distance, area) and snapping to grid/objects,
@@ -108,8 +115,7 @@ half-finished features spanning missions.
 
 ---
 
-The roadmap as first drafted is complete, and KL-004 has closed the
-larger of the two features deferred from it. Natural next steps, in rough
-order of usefulness: KL-006 (layer management), then KL-007 (measurement
-and snapping), then multi-sheet plans, a legend/schedule of objects, and
+The roadmap as first drafted is complete, and KL-004 and KL-006 have
+closed both of the features deferred from it. Natural next steps, in rough
+order of usefulness: KL-007 (measurement and snapping), then multi-sheet plans, a legend/schedule of objects, and
 vector PDF output.

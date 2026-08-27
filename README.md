@@ -8,9 +8,9 @@ dimensions in meters.
 Deliberately **not** a general-purpose CAD tool — it's scoped to fast,
 simple event-layout drafting.
 
-Current mission: **KL-004 (Édition avancée)** — the editing the first
-pass deferred: eight resize handles, editable line and polygon vertices,
-multi-selection, copy/paste and arrow-key nudging. On top of everything
+Current mission: **KL-006 (Calques)** — create, rename, reorder and
+delete layers, choose which one new objects land on, and move a selection
+between them. On top of everything
 the earlier missions deliver: draw and edit in real-world dimensions with
 undo/redo, import and calibrate a background, save the project
 automatically, and print it to a true-scale PDF. See
@@ -119,9 +119,22 @@ dimensionally true: at 1:200, one metre on the ground is 5 mm on the
 paper. Every sheet carries a title block with the project name, location,
 scale, paper size, date, and a scale bar you can check with a ruler.
 
-**Layers** — click the eye / lock icons in the bottom bar to toggle a
-layer's visibility or lock it (a locked layer's objects can be selected
-but not edited or deleted).
+**Layers** — the bottom bar reads left to right in drawing order: the
+leftmost layer is at the back, the rightmost in front (the background is
+always behind everything).
+
+- **👁 / 🔒** toggle a layer's visibility or lock it — a locked layer's
+  objects can be selected but not edited or deleted. Neither is undoable:
+  they change how you *look* at the plan, not the plan itself.
+- **Click a layer's name** to make it the **active** layer (marked ●).
+  New objects are created there. **Double-click** the name to rename it.
+- **◀ ▶** move a layer back or forward in the drawing order; **✕**
+  deletes it. Deleting a layer never deletes its objects — they move to
+  the layer below, and the confirmation says how many will. The last
+  remaining layer can't be deleted.
+- **＋ Calque** adds one on top.
+- The **Calque** dropdown in the properties panel moves the selection —
+  one object or a whole group — to another layer.
 
 **Background** — click "Importer un fond de plan…" in the layers bar (or
 "Remplacer" in the properties panel once one exists) to choose a PNG/JPEG.

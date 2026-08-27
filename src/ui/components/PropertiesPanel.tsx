@@ -3,7 +3,8 @@ import { resizeBackgroundFromHeight, resizeBackgroundFromWidth } from "../../dom
 import { boundsSizeM } from "../../domain/bounds";
 import type { BoundsM } from "../../domain/bounds";
 import { formatMeters, getObjectDimensionSummary } from "../../domain/labels";
-import type { BackgroundImage, Calibration, PlanObject, PlanObjectPatch } from "../../domain/types";
+import { sortLayersByOrder } from "../../domain/layers";
+import type { BackgroundImage, Calibration, Layer, PlanObject, PlanObjectPatch } from "../../domain/types";
 
 interface PropertiesPanelProps {
   /** The single selected object, or `null` when nothing — or more than one thing — is selected. */
@@ -12,6 +13,10 @@ interface PropertiesPanelProps {
   selectionCount: number;
   /** Extent of a multi-selection, for the summary. `null` for zero or one object. */
   selectionBounds: BoundsM | null;
+  layers: Layer[];
+  /** The layer the whole selection sits on, or `null` when it straddles several — the picker then shows no choice rather than a wrong one. */
+  selectionLayerId: string | null;
+  onAssignLayer: (layerId: string) => void;
   selectedBackground: BackgroundImage | null;
   /** Only read to describe the background's current size source (default guess vs. a known measured distance) — irrelevant to the object branch. */
   calibration: Calibration;
@@ -94,6 +99,9 @@ export function PropertiesPanel({
   selected,
   selectionCount,
   selectionBounds,
+  layers,
+  selectionLayerId,
+  onAssignLayer,
   selectedBackground,
   calibration,
   isLocked,
@@ -196,6 +204,25 @@ export function PropertiesPanel({
     );
   }
 
+  const layerPicker = (disabled: boolean) => (
+    <label className="properties-panel__field">
+      <span>Calque</span>
+      <select
+        value={selectionLayerId ?? ""}
+        disabled={disabled}
+        onChange={(e) => onAssignLayer(e.target.value)}
+      >
+        {selectionLayerId === null && <option value="">— plusieurs calques —</option>}
+        {sortLayersByOrder(layers).map((layer) => (
+          <option key={layer.id} value={layer.id}>
+            {layer.name}
+            {layer.locked ? " 🔒" : ""}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+
   if (selectionCount > 1) {
     const size = selectionBounds ? boundsSizeM(selectionBounds) : null;
     return (
@@ -214,6 +241,7 @@ export function PropertiesPanel({
               </span>
             </div>
           )}
+          {layerPicker(false)}
           <p className="properties-panel__hint">
             Déplacez le groupe en le faisant glisser ou avec les flèches (Maj = pas de 1 m). Les champs
             de position et de dimension reviennent dès qu&apos;un seul objet est sélectionné.
@@ -259,6 +287,8 @@ export function PropertiesPanel({
             <span>Type</span>
             <span>{TYPE_LABELS[selected.type]}</span>
           </div>
+
+          {layerPicker(isLocked)}
 
           <NumberField
             label="Position X"

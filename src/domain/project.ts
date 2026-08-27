@@ -1,9 +1,9 @@
 import { createDefaultCalibration } from "./calibration";
 import { resizeBackgroundToCalibration } from "./background";
 import { createId } from "./ids";
-import { createDefaultLayers } from "./layers";
+import { createDefaultLayers, createLayer, getLayerAfterRemoval, moveLayerInOrder, normalizeLayerOrder, sortLayersByOrder } from "./layers";
 import { createRectangleObject } from "./objects";
-import type { BackgroundImage, Calibration, PlanObject, PlanObjectPatch, Project } from "./types";
+import type { BackgroundImage, Calibration, Layer, PlanObject, PlanObjectPatch, Project } from "./types";
 
 export interface CreateProjectInput {
   name: string;
@@ -135,6 +135,81 @@ export function patchObjects(project: Project, patches: ReadonlyMap<string, Plan
   });
   if (!changed) return project;
   return { ...project, objects, updatedAt: new Date().toISOString() };
+}
+
+// ---------------------------------------------------------------------------
+// Layers (KL-006)
+// ---------------------------------------------------------------------------
+
+const touched = (project: Project, changes: Partial<Project>): Project => ({
+  ...project,
+  ...changes,
+  updatedAt: new Date().toISOString(),
+});
+
+/** Adds a new, empty layer on top of the stack and returns it alongside the new project. */
+export function addLayer(project: Project, name?: string): { project: Project; layer: Layer } {
+  const layer = createLayer(project.layers, name);
+  return { project: touched(project, { layers: [...project.layers, layer] }), layer };
+}
+
+/** Renames a layer. An empty or whitespace-only name is refused (a nameless layer is unusable in a picker) and the project comes back untouched. */
+export function renameLayer(project: Project, layerId: string, name: string): Project {
+  const trimmed = name.trim();
+  if (!trimmed) return project;
+  if (!project.layers.some((layer) => layer.id === layerId)) return project;
+  return touched(project, {
+    layers: project.layers.map((layer) => (layer.id === layerId ? { ...layer, name: trimmed } : layer)),
+  });
+}
+
+/** Sets a layer's `visible` / `locked` flags. */
+export function patchLayer(project: Project, layerId: string, patch: Partial<Pick<Layer, "visible" | "locked">>): Project {
+  if (!project.layers.some((layer) => layer.id === layerId)) return project;
+  return touched(project, {
+    layers: project.layers.map((layer) => (layer.id === layerId ? { ...layer, ...patch } : layer)),
+  });
+}
+
+/** Moves a layer one step through the draw order (-1 = further back, +1 = further forward). */
+export function moveLayer(project: Project, layerId: string, direction: -1 | 1): Project {
+  return touched(project, { layers: moveLayerInOrder(project.layers, layerId, direction) });
+}
+
+/**
+ * Deletes a layer and moves its objects to the layer below it (or to the
+ * new bottom layer, if it was the bottom one).
+ *
+ * The objects are kept on purpose. Deleting a container is not a request
+ * to destroy its contents, and an undo away is not good enough when the
+ * alternative — the objects reappearing one layer down, where they are
+ * plainly visible — costs nothing. The caller is expected to say so
+ * before asking.
+ *
+ * Refuses to delete the last remaining layer: every object needs a home,
+ * and an empty `layers` array would leave the next created object
+ * nowhere to go.
+ */
+export function removeLayer(project: Project, layerId: string): Project {
+  if (project.layers.length <= 1) return project;
+  const destination = getLayerAfterRemoval(project.layers, layerId);
+  if (!destination) return project;
+  return touched(project, {
+    layers: normalizeLayerOrder(sortLayersByOrder(project.layers).filter((layer) => layer.id !== layerId)),
+    objects: project.objects.map((object) =>
+      object.layerId === layerId ? { ...object, layerId: destination.id } : object,
+    ),
+  });
+}
+
+/** Moves objects onto `layerId`. A no-op if the layer doesn't exist or nothing would change. */
+export function assignObjectsToLayer(project: Project, ids: readonly string[], layerId: string): Project {
+  if (!project.layers.some((layer) => layer.id === layerId)) return project;
+  const moving = new Set(ids);
+  if (!project.objects.some((object) => moving.has(object.id) && object.layerId !== layerId)) return project;
+  return touched(project, {
+    objects: project.objects.map((object) => (moving.has(object.id) ? { ...object, layerId } : object)),
+  });
 }
 
 /** Returns a new project with `background` set, replacing any existing one. */
