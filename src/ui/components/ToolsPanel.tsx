@@ -26,9 +26,13 @@ export function ToolsPanel({ activeToolId, onSelectTool }: ToolsPanelProps) {
         ))}
       </ul>
       <p className="tools-panel__hint">
-        {activeToolId === "polygon"
-          ? "Cliquez pour ajouter des points, Entrée pour terminer, Échap pour annuler."
-          : "Échap désélectionne. Suppr efface l'objet sélectionné."}
+        {activeToolId === "polygon" &&
+          "Cliquez pour ajouter des points, Entrée pour terminer, Échap pour annuler."}
+        {activeToolId === "calibrate" &&
+          "Cliquez deux points d'une distance connue sur le fond de plan, Échap pour annuler."}
+        {activeToolId !== "polygon" &&
+          activeToolId !== "calibrate" &&
+          "Échap désélectionne. Suppr efface l'objet sélectionné."}
       </p>
     </aside>
   );

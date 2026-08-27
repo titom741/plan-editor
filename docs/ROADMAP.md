@@ -21,7 +21,7 @@ half-finished features spanning missions.
   editable live from the properties panel too, with per-layer lock
   enforcement.
 
-- **KL-003 — Canvas & Background** *(this mission)*
+- **KL-003 — Canvas & Background** *(done)*
   Import a PNG/JPEG background (`domain/background.ts`,
   `ui/hooks/useHtmlImage.ts`), render it beneath the grid and objects,
   select/move/resize it (aspect-ratio-locked) and adjust its opacity from
@@ -37,11 +37,20 @@ half-finished features spanning missions.
   modifier), editable line/polygon vertices, copy/paste, keyboard nudging
   and arrow-key movement.
 
-- **KL-005 — Calibration**
-  Interactive calibration UI: click two points on the background, enter
-  the real distance (or a known scale), compute and store the
-  background's true `widthM`/`heightM` precisely (KL-003 only offers a
-  manual, approximate resize).
+- **KL-005 — Calibration** *(this mission)*
+  Interactive calibration: pick two points a known distance apart on the
+  background, enter the real distance, and the background's true
+  `widthM`/`heightM` are computed from its native resolution
+  (`calibrationFromKnownDistance` + `applyCalibration`) — replacing
+  KL-003's manual, approximate resize. One undo step covers the
+  calibration and the resulting resize together. Also separates
+  `Calibration.pixelsPerMeter` (image pixels per meter) from the
+  viewport's display scale, which the pre-KL-005 code conflated, and
+  fixes shapes swallowing clicks meant for a non-select tool. See the
+  KL-005 mission report for the full list of decisions.
+
+  Not covered, and still open: the `knownScale` (1:100) and `geo`
+  `CalibrationSource` cases, and calibrating with the plan rotated.
 
 - **KL-006 — Layers**
   Full layer management UI: create/rename/reorder/delete layers, assign

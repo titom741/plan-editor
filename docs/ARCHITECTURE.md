@@ -55,17 +55,19 @@ payoff:
   field is named with an `M` suffix (`widthM`, `heightM`, `radiusM`,
   `pointsM`) as a naming convention that makes it visually obvious, at every
   call site, that the value is in meters — not pixels.
-- **`Calibration`** — `pixelsPerMeter` plus a `source` discriminated union
-  (`default | knownDistance | knownScale | geo`) so a later calibration UI
+- **`Calibration`** — how many pixels *of the background image* make up one
+  meter, plus a `source` discriminated union
+  (`default | knownDistance | knownScale | geo`) so the properties panel
   can explain where the scale came from and a `geo`-sourced calibration can
-  be added later without a breaking change.
+  be added later without a breaking change. Not a screen scale — see
+  [Calibration](#calibration) (KL-005).
 - **`Background`** — modeled as its own type (`BackgroundImage | null`),
   deliberately **not** a `Layer` and **not** a `PlanObject`. The UI
   (`LayersPanel`) presents it alongside the layers as a visual
   convenience, but the model keeps it separate. See
-  [Layer architecture](#layer-architecture) and
+  [Layer architecture](#layer-architecture),
   [Background image](#background-image) (KL-003) for its placement fields
-  and why its size is only an approximation until calibration (KL-005).
+  and [Calibration](#calibration) (KL-005) for how its true size is set.
 - **`Sheet`** — prepared (id, name) but not wired into any feature yet; see
   ROADMAP KL-009.
 
@@ -112,7 +114,7 @@ All conversion between them goes through **one module**,
 
 ```ts
 interface Viewport {
-  basePixelsPerMeter: number; // from the project's calibration
+  basePixelsPerMeter: number; // display scale — NOT the project's calibration
   zoom: number;               // runtime, starts at 1
   offsetXPx: number;          // screen position of world (0, 0)
   offsetYPx: number;
@@ -129,9 +131,13 @@ screenToWorld({ x, y }, viewport)     // point: screen → world
 ```
 
 `getEffectivePixelsPerMeter(viewport) = viewport.basePixelsPerMeter *
-viewport.zoom` is the single place the "calibration × zoom" multiplication
-happens. Nothing else recomputes a pixel scale by hand — not the grid, not
-the object shapes, not the tests.
+viewport.zoom` is the single place the "display scale × zoom"
+multiplication happens. Nothing else recomputes a pixel scale by hand — not
+the grid, not the object shapes, not the tests.
+
+`basePixelsPerMeter` is purely about how big a meter is *drawn*; it is
+independent of `Calibration.pixelsPerMeter`, which describes the background
+image rather than the screen. See [Calibration](#calibration).
 
 **No component in `ui/` is allowed to compute a screen position from meters
 by hand.** `PlanObjectShape.tsx` (the component that turns a `PlanObject`
@@ -349,16 +355,15 @@ pipeline as possible rather than inventing a parallel one:
   the resize came from dragging the corner handle or typing into the
   properties panel's Largeur/Hauteur fields — one aspect-ratio rule,
   reached from either interaction path.
-- **First-guess placement, not calibration.** `computeDefaultBackgroundPlacement`
+- **First-guess placement on import.** `computeDefaultBackgroundPlacement`
   centers the imported image on the viewport's current center and sizes
   it using the project's *current* `Calibration.pixelsPerMeter` as a naive
   scale — reasonable enough to look right immediately, but explicitly not
   a claim about the image's true real-world size. The properties panel
-  says as much ("Taille approximative…"). Getting that right is
-  KL-005's job; until then the size is just a manual, drag-to-adjust
-  approximation, independent of `Calibration` (resizing the background
-  never touches `Calibration.pixelsPerMeter`, and recalibrating later
-  won't retroactively resize an already-imported background).
+  says as much until the plan is calibrated. Manual corner-drag /
+  Largeur-Hauteur resizing stays available as a rough adjustment and never
+  touches `Calibration`; getting the size *right* is what
+  [Calibration](#calibration) does.
 - **Loading the image.** `ui/hooks/useHtmlImage.ts` turns a URL (a
   `data:` URL from `FileReader`, in `App.tsx`'s import handler — kept
   in-memory only, nothing is written to disk; see
@@ -395,18 +400,81 @@ surfaced under this project's synthetic, script-driven test events — but
 the underlying gap was real and is now closed for every draggable node,
 not just the background.
 
-## Calibration concept
+## Calibration
 
-`domain/calibration.ts` provides `createDefaultCalibration()` — a
-`pixelsPerMeter` of 20 with `source: { type: "default" }` — used until a
-background is imported and calibrated (KL-005). The `CalibrationSource`
-union already has cases for `knownDistance` (user measures two points on
-the background and enters the real distance), `knownScale` (user enters a
-map scale like 1:100), and `geo` (reserved, not implemented) — but no
-calibration *UI* exists yet, deliberately, per the mission's "don't
-over-design" instruction. Recalibrating a project only ever needs to change
-`Calibration.pixelsPerMeter`, which flows into `Viewport.basePixelsPerMeter`
-— no object's `xM`/`yM`/`widthM`/etc. changes as a result.
+KL-005 turns `Calibration` from a placeholder into a real, user-driven
+value: the user clicks two points a known distance apart on the
+background, types what that distance actually is, and the background's
+`widthM`/`heightM` are recomputed from its native pixel resolution.
+
+**What `pixelsPerMeter` means — and what it does not.** As of KL-005 it is
+strictly *pixels of the background image per real-world meter*: a property
+of the imported photo/scan. It is **not** a screen scale. How big a meter
+is drawn on the monitor is `Viewport.basePixelsPerMeter`, seeded from
+`DEFAULT_SCREEN_PIXELS_PER_METER` in `rendering/viewport.ts`.
+
+These two were conflated before calibration existed — `App.tsx` seeded the
+viewport from `project.calibration.pixelsPerMeter`, harmless only because
+nothing ever changed that value. Giving it a real meaning made the
+conflation a bug in waiting: calibrating a plan (or, once KL-008 lands,
+merely *loading* an already-calibrated one) would have silently jumped the
+user's zoom level to an arbitrary number. KL-005 separates them. The
+observable result is the correct one: **calibrating corrects the
+background, never the camera and never the plan** — the zoom indicator
+stays put, every `PlanObject` keeps its exact `xM`/`yM`/`widthM`, and only
+the background resizes underneath them.
+
+The pieces:
+
+- **`calibrationFromKnownDistance(pixelDistance, realDistanceM)`**
+  (`domain/calibration.ts`) is the whole computation: `pixelsPerMeter =
+  pixelDistance / realDistanceM`, recorded with a
+  `source: { type: "knownDistance", … }` carrying both inputs, so the
+  properties panel can explain where the number came from and a later
+  recalibration is traceable.
+- **`worldDistanceToImagePixels`** (`domain/background.ts`) bridges the
+  measurement to that function. The user measures on the *rendered*
+  background, whose current size may still be the wrong first guess — so
+  the segment is converted into the image's own pixels (via the
+  background's current `widthPx / widthM` ratio) before being handed over.
+  Measuring in image pixels is what makes the result independent of the
+  scale it was measured at, and what makes recalibration idempotent: fed
+  the same physical segment and the same real distance twice, the second
+  pass lands on the same `pixelsPerMeter` rather than drifting (there's a
+  test pinning exactly this).
+- **`applyCalibration(project, calibration)`** (`domain/project.ts`) is
+  the only way calibration is committed, because the calibration and the
+  background's size are two views of one fact and must never disagree: it
+  sets the calibration *and* recomputes `widthM`/`heightM` via
+  `resizeBackgroundToCalibration`, leaving the anchor (`xM`/`yM`) and
+  every object untouched. One domain call ⇒ one `commitChange` ⇒ **one
+  undo step** that restores both.
+- **The gesture** spans `PlanCanvas` (a `calibrate` draft in the same
+  `Draft` union as the drawing tools — two clicked points, a live
+  preview with a running distance readout) and `App.tsx` (which owns the
+  `CalibrationDialog` asking for the real distance). `calibrate` is a
+  real `ToolId` but deliberately absent from `TOOLS`: it's reachable only
+  from the background's properties panel, being meaningless without a
+  background. `Escape` cancels at any stage.
+
+`CalibrationSource` still carries unused `knownScale` (a map scale like
+1:100) and `geo` cases — `knownDistance` is the only one KL-005
+implements, and the union is the seam where the others would slot in.
+
+### A design bug this surfaced
+
+Wiring the gesture exposed a second real defect, older than KL-005:
+`PlanObjectShape` and `BackgroundImageShape` both set
+`e.cancelBubble = true` in their click handlers *unconditionally*. That is
+correct for the select tool, but it meant a click that landed on any
+existing shape never reached the Stage — so with a non-select tool active,
+the click was swallowed. For calibration this was fatal by construction
+(you calibrate by clicking *on* the background), and the polygon tool had
+the same latent hole: a point could not be added on top of an existing
+object. Both components now take a `selectable` prop (true only under the
+select tool) and let the event bubble when it's false, so the active tool
+sees the click. `draggable` is deliberately a *separate* prop: a locked
+background is still selectable, just not movable.
 
 ## Layer architecture
 

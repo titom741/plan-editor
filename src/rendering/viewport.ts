@@ -17,19 +17,30 @@ export interface WorldPoint {
 }
 
 /**
- * A viewport is the runtime pan/zoom state layered on top of a project's
- * calibration. It never touches the business model: zooming or panning
- * changes `zoom` / `offsetXPx` / `offsetYPx` here, never `widthM`, `xM`,
- * etc. on any `PlanObject`.
+ * A viewport is the runtime pan/zoom state — purely a display concern. It
+ * never touches the business model: zooming or panning changes `zoom` /
+ * `offsetXPx` / `offsetYPx` here, never `widthM`, `xM`, etc. on any
+ * `PlanObject`.
  */
 export interface Viewport {
-  /** Pixels per meter at zoom = 1, coming from the project's calibration. */
+  /** Screen pixels per meter at zoom = 1 — how big a meter is drawn, nothing more. */
   basePixelsPerMeter: number;
   zoom: number;
   /** Screen-space pixel position of the world origin (0m, 0m) at the current pan. */
   offsetXPx: number;
   offsetYPx: number;
 }
+
+/**
+ * How many screen pixels one meter occupies at zoom = 1. Deliberately a
+ * *display* constant, unrelated to `Calibration.pixelsPerMeter`: since
+ * KL-005 that one means "pixels of the background image per meter", which
+ * is a property of the imported photo/scan, not of how big the user wants
+ * a meter drawn on their monitor. Conflating the two (as the code did
+ * before calibration existed) would make calibrating a plan silently
+ * change the on-screen zoom level.
+ */
+export const DEFAULT_SCREEN_PIXELS_PER_METER = 20;
 
 export const DEFAULT_MIN_ZOOM = 0.05;
 export const DEFAULT_MAX_ZOOM = 40;

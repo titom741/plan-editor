@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createBackgroundImage } from "./background";
+import { createBackgroundImage, worldDistanceToImagePixels } from "./background";
+import { calibrationFromKnownDistance } from "./calibration";
 import { getObjectDimensionSummary, getObjectDisplayLabel, nextObjectName } from "./labels";
 import { createCircleObject, createRectangleObject } from "./objects";
 import { createDefaultLayers, DEFAULT_LAYER_NAMES, getDefaultTargetLayer } from "./layers";
 import {
   addObject,
+  applyCalibration,
   createDemoProject,
   createEmptyProject,
   patchBackground,
@@ -218,5 +220,89 @@ describe("setBackground / removeBackground / patchBackground", () => {
 
     const empty = createEmptyProject({ name: "Test" });
     expect(patchBackground(empty, { xM: 1 })).toBe(empty);
+  });
+});
+
+describe("applyCalibration", () => {
+  const sampleBackground = createBackgroundImage({
+    url: "data:image/png;base64,xyz",
+    widthPx: 2000,
+    heightPx: 1000,
+    xM: 3,
+    yM: 4,
+    widthM: 40, // wrong, pre-calibration guess
+    heightM: 20,
+  });
+
+  it("sets the calibration and recomputes the background's size from it", () => {
+    const project = setBackground(createEmptyProject({ name: "Test" }), sampleBackground);
+    const calibration = calibrationFromKnownDistance(500, 5); // 100 image px / m
+    const next = applyCalibration(project, calibration);
+
+    expect(next.calibration).toEqual(calibration);
+    expect(next.background?.widthM).toBeCloseTo(20, 9); // 2000px / 100 px-per-m
+    expect(next.background?.heightM).toBeCloseTo(10, 9); // 1000px / 100 px-per-m
+    expect(next.background?.xM).toBe(3); // anchor untouched
+    expect(next.background?.yM).toBe(4);
+  });
+
+  it("still records the calibration when there is no background", () => {
+    const project = createEmptyProject({ name: "Test" });
+    const calibration = calibrationFromKnownDistance(500, 5);
+    const next = applyCalibration(project, calibration);
+    expect(next.calibration).toEqual(calibration);
+    expect(next.background).toBeNull();
+  });
+
+  it("does not mutate the original project", () => {
+    const project = setBackground(createEmptyProject({ name: "Test" }), sampleBackground);
+    applyCalibration(project, calibrationFromKnownDistance(500, 5));
+    expect(project.background?.widthM).toBe(40);
+  });
+
+  it("leaves plan objects untouched — calibration corrects the background, not the plan", () => {
+    const project = setBackground(createEmptyProject({ name: "Test" }), sampleBackground);
+    const layer = getDefaultTargetLayer(project.layers);
+    if (!layer) throw new Error("no default layer");
+    const chapiteau = createRectangleObject({
+      layerId: layer.id,
+      name: "Chapiteau",
+      xM: 2,
+      yM: 3,
+      widthM: 10,
+      heightM: 5,
+    });
+    const withObject = addObject(project, chapiteau);
+    const next = applyCalibration(withObject, calibrationFromKnownDistance(500, 5));
+    expect(next.objects[0]).toEqual(chapiteau);
+  });
+
+  it("keeps the background's aspect ratio, whatever the measured distance", () => {
+    const project = setBackground(createEmptyProject({ name: "Test" }), sampleBackground);
+    const next = applyCalibration(project, calibrationFromKnownDistance(137, 3.7));
+    const bg = next.background;
+    if (!bg) throw new Error("background missing");
+    expect(bg.widthM / bg.heightM).toBeCloseTo(bg.widthPx / bg.heightPx, 9);
+  });
+
+  it("is self-consistent when recalibrated: a second pass on the same real segment is a no-op", () => {
+    // Measure the same physical thing twice. The first calibration fixes
+    // the background's size; measuring that same span again on the
+    // corrected background and giving the same real distance must land
+    // back on the same pixelsPerMeter — otherwise recalibrating would
+    // drift the plan a little further every time.
+    const project = setBackground(createEmptyProject({ name: "Test" }), sampleBackground);
+    const first = applyCalibration(project, calibrationFromKnownDistance(500, 5));
+    const bg = first.background;
+    if (!bg) throw new Error("background missing");
+
+    // The same 500 image px, re-measured in world meters on the corrected
+    // background, then fed back through the same conversion the UI uses.
+    const worldSpanM = 500 / (bg.widthPx / bg.widthM);
+    const pixelDistance = worldDistanceToImagePixels(bg, worldSpanM);
+    const second = applyCalibration(first, calibrationFromKnownDistance(pixelDistance, 5));
+
+    expect(second.calibration.pixelsPerMeter).toBeCloseTo(first.calibration.pixelsPerMeter, 9);
+    expect(second.background?.widthM).toBeCloseTo(bg.widthM, 9);
   });
 });

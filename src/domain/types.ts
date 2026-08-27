@@ -53,9 +53,16 @@ export type CalibrationSource =
     };
 
 /**
- * The single source of truth for converting between meters and pixels for
- * a project's background. This is deliberately small — see
- * `docs/ARCHITECTURE.md` for why it is not over-designed yet.
+ * How the project's background image relates to the real world: how many
+ * of the *image's own* pixels make up one meter. It is emphatically not a
+ * screen scale — how big a meter is drawn is `Viewport`'s business (see
+ * `DEFAULT_SCREEN_PIXELS_PER_METER` in `rendering/viewport.ts`), and
+ * calibrating a plan must never silently change the user's zoom level.
+ *
+ * Set by the calibration flow (KL-005), which measures a segment the user
+ * draws on the background and asks what it really spans; the background's
+ * `widthM`/`heightM` are then derived from its native `widthPx`/`heightPx`
+ * through this value. Deliberately small — see `docs/ARCHITECTURE.md`.
  */
 export interface Calibration {
   pixelsPerMeter: number;

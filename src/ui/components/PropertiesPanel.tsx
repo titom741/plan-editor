@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { resizeBackgroundFromHeight, resizeBackgroundFromWidth } from "../../domain/background";
 import { getObjectDimensionSummary } from "../../domain/labels";
-import type { BackgroundImage, PlanObject, PlanObjectPatch } from "../../domain/types";
+import type { BackgroundImage, Calibration, PlanObject, PlanObjectPatch } from "../../domain/types";
 
 interface PropertiesPanelProps {
   selected: PlanObject | null;
   selectedBackground: BackgroundImage | null;
+  /** Only read to describe the background's current size source (default guess vs. a known measured distance) — irrelevant to the object branch. */
+  calibration: Calibration;
   /** True when the selection's layer (or the background) is locked — properties become read-only. */
   isLocked: boolean;
   onBeginEdit: () => void;
@@ -13,6 +15,7 @@ interface PropertiesPanelProps {
   onBackgroundLiveUpdate: (patch: Partial<BackgroundImage>) => void;
   onDelete: () => void;
   onRequestReplaceBackground: () => void;
+  onRequestCalibration: () => void;
 }
 
 const TYPE_LABELS: Record<PlanObject["type"], string> = {
@@ -82,12 +85,14 @@ function NumberField({ label, valueM, step = 0.1, disabled, onCommit }: NumberFi
 export function PropertiesPanel({
   selected,
   selectedBackground,
+  calibration,
   isLocked,
   onBeginEdit,
   onLiveUpdate,
   onBackgroundLiveUpdate,
   onDelete,
   onRequestReplaceBackground,
+  onRequestCalibration,
 }: PropertiesPanelProps) {
   // Snapshots undo history at most once per focus session across all
   // fields: the first change after a field gains focus pushes the
@@ -157,13 +162,20 @@ export function PropertiesPanel({
           </label>
 
           <p className="properties-panel__hint">
-            Taille approximative — la calibration précise arrivera dans une prochaine mission.
+            {calibration.source.type === "knownDistance"
+              ? `Calibré : ${calibration.pixelsPerMeter.toFixed(1)} px image / m (mesuré : ${calibration.source.realDistanceM} m).`
+              : "Taille approximative — cliquez « Calibrer » et indiquez une distance réelle connue sur le plan pour l'ajuster précisément."}
           </p>
 
           <div className="properties-panel__actions">
+            <button type="button" className="properties-panel__button" onClick={onRequestCalibration} disabled={isLocked}>
+              📏 Calibrer
+            </button>
             <button type="button" className="properties-panel__button" onClick={onRequestReplaceBackground} disabled={isLocked}>
               🖼 Remplacer
             </button>
+          </div>
+          <div className="properties-panel__actions">
             <button type="button" className="properties-panel__delete" onClick={onDelete} disabled={isLocked}>
               🗑 Supprimer
             </button>

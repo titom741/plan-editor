@@ -1,6 +1,6 @@
 import { resizeRectangleFromCorner } from "./geometry";
 import { createId } from "./ids";
-import type { BackgroundImage, PointM } from "./types";
+import type { BackgroundImage, Calibration, PointM } from "./types";
 
 export interface CreateBackgroundImageInput {
   url: string;
@@ -89,4 +89,44 @@ export function resizeBackgroundFromHeight(
 ): { widthM: number; heightM: number } {
   const aspectRatio = background.heightPx / background.widthPx;
   return { widthM: heightM / aspectRatio, heightM };
+}
+
+/**
+ * Recomputes a background's true `widthM`/`heightM` from its native pixel
+ * resolution and a calibration's `pixelsPerMeter` — the interactive-
+ * calibration counterpart to `computeDefaultBackgroundPlacement`'s initial
+ * guess (KL-005), now driven by an actual measured distance instead of
+ * the project's default scale. The anchor (`xM`/`yM`, top-left) never
+ * moves — only the size changes, exactly like every other background
+ * resize in this app — and the aspect ratio is preserved by construction,
+ * since both dimensions are derived from the same `pixelsPerMeter`.
+ */
+export function resizeBackgroundToCalibration(
+  background: Pick<BackgroundImage, "widthPx" | "heightPx">,
+  calibration: Pick<Calibration, "pixelsPerMeter">,
+): { widthM: number; heightM: number } {
+  return {
+    widthM: background.widthPx / calibration.pixelsPerMeter,
+    heightM: background.heightPx / calibration.pixelsPerMeter,
+  };
+}
+
+/**
+ * Converts a distance measured in world meters — using the background's
+ * *current*, possibly still-approximate placement — into a distance in
+ * the source image's own native pixels, the unit `Calibration.pixelsPerMeter`
+ * is expressed in (see `domain/calibration.ts`). Used by the calibration
+ * flow: the user picks two points on the rendered background and we
+ * measure how far apart they are at the current (possibly wrong) scale,
+ * then translate that into "how many image pixels is this" so the
+ * measurement stays meaningful even though the on-screen size it was
+ * taken from is about to be corrected. Assumes uniform scaling, which
+ * always holds here since a background's aspect ratio is never
+ * independently stretched (see `resizeBackgroundFromCorner`).
+ */
+export function worldDistanceToImagePixels(
+  background: Pick<BackgroundImage, "widthPx" | "widthM">,
+  worldDistanceM: number,
+): number {
+  return worldDistanceM * (background.widthPx / background.widthM);
 }

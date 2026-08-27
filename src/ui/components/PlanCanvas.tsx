@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type Ref } from "react";
-import { Layer as KonvaLayer, Line, Rect as KonvaRect, Circle as KonvaCircle, Stage } from "react-konva";
+import { Layer as KonvaLayer, Line, Rect as KonvaRect, Circle as KonvaCircle, Stage, Text } from "react-konva";
 import type Konva from "konva";
 import { computeGridLines } from "../../rendering/grid";
 import { metersToPixels, screenToWorld, worldToScreen } from "../../rendering/viewport";
@@ -39,6 +39,10 @@ interface PlanCanvasProps {
   onObjectLiveUpdate: (id: string, patch: PlanObjectPatch) => void;
   onBackgroundMoveLive: (xM: number, yM: number) => void;
   onBackgroundResizeLive: (widthM: number, heightM: number) => void;
+  /** Fired once the second calibration point is clicked — App.tsx takes it from there (asks for the real distance, computes and commits the calibration). */
+  onCalibrationMeasured: (pointA: PointM, pointB: PointM) => void;
+  /** Fired on Escape while the calibrate tool is active, at any stage of the gesture. */
+  onCancelCalibration: () => void;
 }
 
 /** Multiplicative zoom step applied per wheel notch. */
@@ -50,7 +54,8 @@ type Draft =
   | { tool: "rectangle"; startWorld: PointM; currentWorld: PointM }
   | { tool: "circle"; centerWorld: PointM; currentWorld: PointM }
   | { tool: "line"; startWorld: PointM; currentWorld: PointM }
-  | { tool: "polygon"; anchorWorld: PointM; pointsM: PointM[]; previewWorld: PointM | null };
+  | { tool: "polygon"; anchorWorld: PointM; pointsM: PointM[]; previewWorld: PointM | null }
+  | { tool: "calibrate"; pointsWorld: PointM[]; previewWorld: PointM | null };
 
 export function PlanCanvas({
   containerRef,
@@ -72,8 +77,23 @@ export function PlanCanvas({
   onObjectLiveUpdate,
   onBackgroundMoveLive,
   onBackgroundResizeLive,
+  onCalibrationMeasured,
+  onCancelCalibration,
 }: PlanCanvasProps) {
   const [draft, setDraft] = useState<Draft | null>(null);
+
+  // Whenever the tool switches away from "calibrate" — confirmed,
+  // cancelled, or another tool picked directly — drop any leftover local
+  // draft so a stale marker/line can't linger on screen. Adjusted
+  // synchronously during render (comparing `activeTool` to the last value
+  // seen) rather than in a `useEffect`, matching this app's usual pattern
+  // for "derive state from a changed prop" (see `NumberField` in
+  // `PropertiesPanel.tsx`) instead of causing an extra render.
+  const [lastActiveTool, setLastActiveTool] = useState(activeTool);
+  if (activeTool !== lastActiveTool) {
+    setLastActiveTool(activeTool);
+    if (activeTool !== "calibrate" && draft?.tool === "calibrate") setDraft(null);
+  }
 
   const grid = computeGridLines(viewport, stageSize.widthPx || 1, stageSize.heightPx || 1);
   const layersById = new Map(layers.map((layer) => [layer.id, layer]));
@@ -106,6 +126,20 @@ export function PlanCanvas({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [draft, onCreateObject]);
+
+  // Escape cancels calibration at any stage — before either point is
+  // picked, between the two clicks, or while App.tsx's "real distance"
+  // dialog is open (the tool stays "calibrate" throughout that dialog, so
+  // this listener covers it too). Keyed on `activeTool` rather than
+  // `draft` so it's live even before the first point creates a draft.
+  useEffect(() => {
+    if (activeTool !== "calibrate") return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCancelCalibration();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeTool, onCancelCalibration]);
 
   const handleWheel = useCallback(
     (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -164,6 +198,10 @@ export function PlanCanvas({
       if (!world) return;
       if (draft.tool === "polygon") {
         setDraft({ ...draft, previewWorld: world });
+      } else if (draft.tool === "calibrate") {
+        // Once both points are picked, the segment is frozen — stop
+        // following the pointer while App.tsx's distance dialog is open.
+        if (draft.pointsWorld.length < 2) setDraft({ ...draft, previewWorld: world });
       } else {
         setDraft({ ...draft, currentWorld: world } as Draft);
       }
@@ -234,8 +272,23 @@ export function PlanCanvas({
           });
         }
       }
+      if (activeTool === "calibrate") {
+        const world = getPointerWorld(e.target.getStage());
+        if (!world) return;
+        if (!draft || draft.tool !== "calibrate") {
+          setDraft({ tool: "calibrate", pointsWorld: [world], previewWorld: world });
+          return;
+        }
+        if (draft.pointsWorld.length >= 2) return; // segment already picked — waiting on the dialog
+        const pointA = draft.pointsWorld[0];
+        if (!pointA) return;
+        const distanceM = Math.hypot(world.xM - pointA.xM, world.yM - pointA.yM);
+        if (distanceM < MIN_CREATE_SIZE_M) return; // treat as an accidental near-duplicate click
+        setDraft({ tool: "calibrate", pointsWorld: [pointA, world], previewWorld: null });
+        onCalibrationMeasured(pointA, world);
+      }
     },
-    [activeTool, draft, getPointerWorld, onCreateObject],
+    [activeTool, draft, getPointerWorld, onCreateObject, onCalibrationMeasured],
   );
 
   return (
@@ -261,6 +314,7 @@ export function PlanCanvas({
                 viewport={viewport}
                 selected={isBackgroundSelected}
                 draggable={activeTool === "select" && !background.locked}
+                selectable={activeTool === "select"}
                 onSelect={onSelectBackground}
                 onBeginEdit={onBeginObjectEdit}
                 onMoveLive={onBackgroundMoveLive}
@@ -298,6 +352,7 @@ export function PlanCanvas({
                     viewport={viewport}
                     selected={object.id === selectedObjectId}
                     draggable={activeTool === "select" && layer?.locked !== true}
+                    selectable={activeTool === "select"}
                     onSelect={() => onSelectObject(object.id)}
                     onBeginEdit={onBeginObjectEdit}
                     onMoveLive={(xM, yM) => onObjectLiveUpdate(object.id, { xM, yM })}
@@ -369,6 +424,33 @@ function DraftPreview({ draft, viewport }: { draft: Draft | null; viewport: View
     const start = worldToScreen(draft.startWorld, viewport);
     const end = worldToScreen(draft.currentWorld, viewport);
     return <Line points={[start.x, start.y, end.x, end.y]} stroke="#0f172a" strokeWidth={2} dash={[6, 4]} />;
+  }
+
+  if (draft.tool === "calibrate") {
+    const pointsScreen = draft.pointsWorld.map((p) => worldToScreen(p, viewport));
+    const previewScreen = draft.previewWorld ? worldToScreen(draft.previewWorld, viewport) : null;
+    const endWorld = draft.pointsWorld[1] ?? draft.previewWorld;
+    const endScreen = pointsScreen[1] ?? previewScreen;
+    const distanceM = draft.pointsWorld[0] && endWorld ? Math.hypot(endWorld.xM - draft.pointsWorld[0].xM, endWorld.yM - draft.pointsWorld[0].yM) : null;
+    return (
+      <>
+        {pointsScreen[0] && endScreen && (
+          <Line points={[pointsScreen[0].x, pointsScreen[0].y, endScreen.x, endScreen.y]} stroke="#9333ea" strokeWidth={2} dash={[6, 4]} />
+        )}
+        {pointsScreen.map((p, i) => (
+          <KonvaCircle key={`${i}-${p.x}-${p.y}`} x={p.x} y={p.y} radius={5} fill="#9333ea" />
+        ))}
+        {pointsScreen[0] && endScreen && distanceM !== null && (
+          <Text
+            x={(pointsScreen[0].x + endScreen.x) / 2 + 8}
+            y={(pointsScreen[0].y + endScreen.y) / 2 - 18}
+            text={`${distanceM.toFixed(2)} m`}
+            fontSize={13}
+            fill="#9333ea"
+          />
+        )}
+      </>
+    );
   }
 
   // polygon

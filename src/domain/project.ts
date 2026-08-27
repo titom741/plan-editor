@@ -1,8 +1,9 @@
 import { createDefaultCalibration } from "./calibration";
+import { resizeBackgroundToCalibration } from "./background";
 import { createId } from "./ids";
 import { createDefaultLayers } from "./layers";
 import { createRectangleObject } from "./objects";
-import type { BackgroundImage, PlanObject, PlanObjectPatch, Project } from "./types";
+import type { BackgroundImage, Calibration, PlanObject, PlanObjectPatch, Project } from "./types";
 
 export interface CreateProjectInput {
   name: string;
@@ -116,4 +117,20 @@ export function patchBackground(project: Project, patch: Partial<BackgroundImage
     background: { ...project.background, ...patch },
     updatedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Returns a new project with `calibration` set and the background's
+ * `widthM`/`heightM` recomputed to match it — the two always change
+ * together, since (from calibration onward) the background's true size
+ * is derived from its native pixel resolution via the calibration's
+ * `pixelsPerMeter` (see `domain/calibration.ts` and
+ * `resizeBackgroundToCalibration`). A no-op on the background if there
+ * isn't one — the calibration itself is still recorded either way, ready
+ * for the next background that's imported.
+ */
+export function applyCalibration(project: Project, calibration: Calibration): Project {
+  const withCalibration: Project = { ...project, calibration, updatedAt: new Date().toISOString() };
+  if (!project.background) return withCalibration;
+  return patchBackground(withCalibration, resizeBackgroundToCalibration(project.background, calibration));
 }

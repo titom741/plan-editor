@@ -11,6 +11,8 @@ interface PlanObjectShapeProps {
   selected: boolean;
   /** True only when the select tool is active and the object's layer isn't locked. */
   draggable: boolean;
+  /** True only when the select tool is active — regardless of lock state, unlike `draggable`. Gates whether a click here claims the event or lets it bubble to the Stage for another tool (e.g. polygon point-picking, calibration) to handle — an object can sit under a click made with any tool, not just Selection. */
+  selectable: boolean;
   onSelect: () => void;
   /** Snapshots undo history once, at the start of a drag gesture. */
   onBeginEdit: () => void;
@@ -33,6 +35,7 @@ export function PlanObjectShape({
   viewport,
   selected,
   draggable,
+  selectable,
   onSelect,
   onBeginEdit,
   onMoveLive,
@@ -40,6 +43,10 @@ export function PlanObjectShape({
   const anchor = worldToScreen({ xM: object.xM, yM: object.yM }, viewport);
 
   const handleSelect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    // Outside the select tool, let the click bubble up to the Stage so
+    // the active tool can handle it instead (e.g. adding a polygon point,
+    // or picking a calibration point, on top of an existing object).
+    if (!selectable) return;
     e.cancelBubble = true;
     onSelect();
   };

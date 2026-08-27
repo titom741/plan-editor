@@ -13,6 +13,8 @@ interface BackgroundImageShapeProps {
   selected: boolean;
   /** True only when the select tool is active and the background isn't locked. */
   draggable: boolean;
+  /** True only when the select tool is active — regardless of lock state, unlike `draggable` (a locked background is still selectable, just read-only). Gates whether a click here claims the event or lets it bubble to the Stage for another tool (e.g. calibration) to handle. */
+  selectable: boolean;
   onSelect: () => void;
   onBeginEdit: () => void;
   onMoveLive: (xM: number, yM: number) => void;
@@ -34,6 +36,7 @@ export function BackgroundImageShape({
   viewport,
   selected,
   draggable,
+  selectable,
   onSelect,
   onBeginEdit,
   onMoveLive,
@@ -45,6 +48,10 @@ export function BackgroundImageShape({
   const heightPx = metersToPixels(background.heightM, viewport);
 
   const handleSelect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    // Outside the select tool (e.g. calibrating), let the click bubble up
+    // to the Stage so the active tool can handle it — the background
+    // isn't the only thing that can sit under a click.
+    if (!selectable) return;
     e.cancelBubble = true;
     onSelect();
   };

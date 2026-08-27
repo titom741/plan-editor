@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { computeDefaultBackgroundPlacement, createBackgroundImage } from "../domain/background";
+import { computeDefaultBackgroundPlacement, createBackgroundImage, worldDistanceToImagePixels } from "../domain/background";
+import { calibrationFromKnownDistance } from "../domain/calibration";
 import { getDefaultTargetLayer } from "../domain/layers";
 import { nextObjectName } from "../domain/labels";
 import {
@@ -11,6 +12,7 @@ import {
 } from "../domain/objects";
 import {
   addObject,
+  applyCalibration,
   createDemoProject,
   patchBackground,
   patchObject,
@@ -18,8 +20,9 @@ import {
   removeObject,
   setBackground,
 } from "../domain/project";
-import type { BackgroundImage, PlanObjectPatch, Project } from "../domain/types";
-import { screenToWorld } from "../rendering/viewport";
+import type { BackgroundImage, PlanObjectPatch, PointM, Project } from "../domain/types";
+import { DEFAULT_SCREEN_PIXELS_PER_METER, screenToWorld } from "../rendering/viewport";
+import { CalibrationDialog } from "./components/CalibrationDialog";
 import { LayersPanel } from "./components/LayersPanel";
 import { PlanCanvas } from "./components/PlanCanvas";
 import type { NewObjectSpec } from "./components/PlanCanvas";
@@ -69,11 +72,14 @@ export default function App() {
   const [activeTool, setActiveTool] = useState<ToolId>("select");
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [isBackgroundSelected, setIsBackgroundSelected] = useState(false);
+  const [calibrationPoints, setCalibrationPoints] = useState<{ pointA: PointM; pointB: PointM } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { viewport, containerRef, stageSize, zoomAt, pan } = useViewport(
-    project.calibration.pixelsPerMeter,
-  );
+  // A display constant, not the project's calibration — see
+  // `DEFAULT_SCREEN_PIXELS_PER_METER`. Calibrating a background corrects
+  // the background's real-world size, it doesn't change how big a meter is
+  // drawn on screen.
+  const { viewport, containerRef, stageSize, zoomAt, pan } = useViewport(DEFAULT_SCREEN_PIXELS_PER_METER);
 
   const selectedObject = useMemo(
     () => project.objects.find((object) => object.id === selectedObjectId) ?? null,
@@ -148,6 +154,43 @@ export default function App() {
   const handleBackgroundResizeLive = useCallback(
     (widthM: number, heightM: number) => handleBackgroundLiveUpdate({ widthM, heightM }),
     [handleBackgroundLiveUpdate],
+  );
+
+  const handleRequestCalibration = useCallback(() => {
+    if (!project.background || isBackgroundLocked) return;
+    setSelectedObjectId(null);
+    setIsBackgroundSelected(false);
+    setCalibrationPoints(null);
+    setActiveTool("calibrate");
+  }, [project.background, isBackgroundLocked]);
+
+  const handleCalibrationMeasured = useCallback((pointA: PointM, pointB: PointM) => {
+    setCalibrationPoints({ pointA, pointB });
+  }, []);
+
+  const handleCancelCalibration = useCallback(() => {
+    setCalibrationPoints(null);
+    setActiveTool("select");
+  }, []);
+
+  // Turns the two clicked points (in the project's current, possibly
+  // still-approximate scale) plus the real distance the user just typed
+  // into an actual `Calibration`, and commits it — one undo step covering
+  // both the new `calibration` and the background's corrected size, since
+  // they're derived together (see `domain/project.ts`'s `applyCalibration`).
+  const handleConfirmCalibration = useCallback(
+    (realDistanceM: number) => {
+      if (!calibrationPoints || !project.background) return;
+      const { pointA, pointB } = calibrationPoints;
+      const measuredDistanceM = Math.hypot(pointB.xM - pointA.xM, pointB.yM - pointA.yM);
+      const pixelDistance = worldDistanceToImagePixels(project.background, measuredDistanceM);
+      const calibration = calibrationFromKnownDistance(pixelDistance, realDistanceM);
+      commitChange((currentProject) => applyCalibration(currentProject, calibration));
+      setCalibrationPoints(null);
+      setActiveTool("select");
+      setIsBackgroundSelected(true);
+    },
+    [calibrationPoints, project.background, commitChange],
   );
 
   const handleDeleteSelected = useCallback(() => {
@@ -306,17 +349,31 @@ export default function App() {
         onObjectLiveUpdate={handleObjectLiveUpdate}
         onBackgroundMoveLive={handleBackgroundMoveLive}
         onBackgroundResizeLive={handleBackgroundResizeLive}
+        onCalibrationMeasured={handleCalibrationMeasured}
+        onCancelCalibration={handleCancelCalibration}
       />
       <PropertiesPanel
         selected={isBackgroundSelected ? null : selectedObject}
         selectedBackground={isBackgroundSelected ? project.background : null}
+        calibration={project.calibration}
         isLocked={isBackgroundSelected ? isBackgroundLocked : isSelectedLocked}
         onBeginEdit={handleBeginObjectEdit}
         onLiveUpdate={(patch) => selectedObjectId && handleObjectLiveUpdate(selectedObjectId, patch)}
         onBackgroundLiveUpdate={handleBackgroundLiveUpdate}
         onDelete={handleDeleteSelected}
         onRequestReplaceBackground={handleRequestBackgroundImport}
+        onRequestCalibration={handleRequestCalibration}
       />
+      {calibrationPoints && (
+        <CalibrationDialog
+          measuredDistanceM={Math.hypot(
+            calibrationPoints.pointB.xM - calibrationPoints.pointA.xM,
+            calibrationPoints.pointB.yM - calibrationPoints.pointA.yM,
+          )}
+          onConfirm={handleConfirmCalibration}
+          onCancel={handleCancelCalibration}
+        />
+      )}
       <LayersPanel
         background={project.background}
         isBackgroundSelected={isBackgroundSelected}

@@ -167,6 +167,10 @@
   cursor: text;
 }
 
+.plan-canvas[data-tool="calibrate"] {
+  cursor: crosshair;
+}
+
 /* Properties panel */
 .properties-panel {
   grid-area: properties;
@@ -371,4 +375,92 @@
 
 .layers-panel__name-button:hover {
   text-decoration: underline;
+}
+
+/* Calibration dialog */
+.calibration-dialog__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.calibration-dialog {
+  width: min(340px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+}
+
+.calibration-dialog__title {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-h);
+}
+
+.calibration-dialog__text {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.calibration-dialog__text strong {
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.calibration-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.calibration-dialog__field input {
+  font: inherit;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.calibration-dialog__field input:focus {
+  outline: 2px solid var(--accent-border);
+  outline-offset: -1px;
+}
+
+.calibration-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.calibration-dialog__confirm {
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.calibration-dialog__confirm:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }

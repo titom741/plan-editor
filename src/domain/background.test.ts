@@ -4,6 +4,8 @@ import {
   createBackgroundImage,
   resizeBackgroundFromCorner,
   resizeBackgroundFromHeight,
+  resizeBackgroundToCalibration,
+  worldDistanceToImagePixels,
 } from "./background";
 
 describe("createBackgroundImage", () => {
@@ -80,5 +82,34 @@ describe("resizeBackgroundFromHeight", () => {
     const fromCorner = resizeBackgroundFromCorner(background, { xM: 45, yM: 0 });
     const fromHeight = resizeBackgroundFromHeight(background, fromCorner.heightM);
     expect(fromHeight.widthM).toBeCloseTo(fromCorner.widthM, 9);
+  });
+});
+
+describe("resizeBackgroundToCalibration", () => {
+  it("derives widthM/heightM from native pixel resolution and pixelsPerMeter", () => {
+    const background = { widthPx: 2000, heightPx: 1000 };
+    const result = resizeBackgroundToCalibration(background, { pixelsPerMeter: 100 });
+    expect(result.widthM).toBeCloseTo(20, 9);
+    expect(result.heightM).toBeCloseTo(10, 9);
+  });
+
+  it("preserves aspect ratio for any pixelsPerMeter", () => {
+    const background = { widthPx: 1500, heightPx: 900 }; // 5:3
+    const result = resizeBackgroundToCalibration(background, { pixelsPerMeter: 37 });
+    expect(result.widthM / result.heightM).toBeCloseTo(1500 / 900, 9);
+  });
+});
+
+describe("worldDistanceToImagePixels", () => {
+  it("converts using the background's current px-per-world-unit ratio", () => {
+    // 2000px-wide image currently placed at 40m wide → 50 image px per world meter.
+    const background = { widthPx: 2000, widthM: 40 };
+    expect(worldDistanceToImagePixels(background, 10)).toBeCloseTo(500, 9);
+  });
+
+  it("scales linearly with the measured world distance", () => {
+    const background = { widthPx: 1000, widthM: 20 }; // 50 px/m
+    expect(worldDistanceToImagePixels(background, 1)).toBeCloseTo(50, 9);
+    expect(worldDistanceToImagePixels(background, 4)).toBeCloseTo(200, 9);
   });
 });

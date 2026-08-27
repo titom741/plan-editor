@@ -4,7 +4,13 @@
  * changes its pointer behavior and cursor based on it) so the two never
  * drift out of sync.
  */
-export type ToolId = "select" | "rectangle" | "circle" | "line" | "polygon" | "text";
+/**
+ * `"calibrate"` is a real tool mode (it changes the canvas's click
+ * behavior and cursor, like any other) but isn't in `TOOLS` below — it's
+ * only reachable from the "Calibrer" button in the properties panel,
+ * since it's meaningless without a background image already in place.
+ */
+export type ToolId = "select" | "rectangle" | "circle" | "line" | "polygon" | "text" | "calibrate";
 
 export interface ToolDefinition {
   id: ToolId;
