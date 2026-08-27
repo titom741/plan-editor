@@ -45,6 +45,16 @@ export function useProjectHistory(initialProject: Project) {
   // bypassing history (not mid-gesture, just genuinely not undoable).
   const setProjectDirect = applyLiveEdit;
 
+  // Replaces the project wholesale and *discards* the undo stack: used
+  // when the project stops being the same document (opening a file,
+  // starting a new project). Keeping the old past would let Ctrl+Z walk
+  // backwards out of the file the user just opened and into the previous
+  // one — an edit history that spans two documents isn't a history, it's
+  // a trap.
+  const resetHistory = useCallback((nextProject: Project) => {
+    setState(createHistory(nextProject));
+  }, []);
+
   const undo = useCallback(() => setState((current) => undoHistory(current)), []);
   const redo = useCallback(() => setState((current) => redoHistory(current)), []);
 
@@ -54,6 +64,7 @@ export function useProjectHistory(initialProject: Project) {
     applyLiveEdit,
     commitChange,
     setProjectDirect,
+    resetHistory,
     undo,
     redo,
     canUndo: state.past.length > 0,

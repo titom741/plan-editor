@@ -3,13 +3,53 @@
   width: 100vw;
   height: 100vh;
   grid-template-columns: 220px 1fr 260px;
-  grid-template-rows: auto 1fr auto;
+  /* The notice row is `auto`, so it takes no space at all when nothing is shown. */
+  grid-template-rows: auto auto 1fr auto;
   grid-template-areas:
     "toolbar toolbar toolbar"
+    "notice notice notice"
     "tools canvas properties"
     "layers layers layers";
   background: var(--bg);
   color: var(--text-h);
+}
+
+.app-loading {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+/* Notices (failed restore, unreadable file) */
+.app-notice {
+  grid-area: notice;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--accent-bg);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.app-notice span {
+  flex: 1;
+}
+
+.app-notice__dismiss {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  line-height: 1.45;
 }
 
 /* Utility */
@@ -43,6 +83,36 @@
 .toolbar__project {
   color: var(--text);
   flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.toolbar__save {
+  font-size: 0.75rem;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.toolbar__save--saved {
+  color: #15803d;
+}
+
+.toolbar__save--dirty,
+.toolbar__save--saving {
+  color: var(--text);
+  font-style: italic;
+}
+
+.toolbar__save--warning {
+  color: #b45309;
+  font-weight: 500;
+}
+
+.toolbar__file {
+  display: flex;
+  gap: 0.4rem;
 }
 
 .toolbar__zoom {

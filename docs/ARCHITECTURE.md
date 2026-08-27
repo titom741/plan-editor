@@ -11,6 +11,7 @@ src/
 ├── domain/       business model + geometry — no React, no Konva, no DOM
 ├── rendering/    meters ↔ pixels conversion, viewport, grid — no React, no Konva
 ├── history/      generic undo/redo stack — no React, no domain knowledge
+├── persistence/  saving and (above all) safely re-reading a project — no React
 └── ui/           React components + react-konva — the only layer allowed to import React/Konva
 ```
 
@@ -19,14 +20,18 @@ The dependency direction is strictly:
 ```
 ui/  ──depends on──▶  rendering/  ──depends on──▶  domain/
 ui/  ──depends on──▶  history/
+ui/  ──depends on──▶  persistence/  ──depends on──▶  domain/
 ```
 
-`domain/` never imports from `rendering/`, `history/`, or `ui/`. `rendering/`
-never imports from `ui/`. Nothing in `domain/` or `rendering/` imports
-`react`, `react-konva`, or `konva`.
+`domain/` never imports from `rendering/`, `history/`, `persistence/`, or
+`ui/`. `rendering/` never imports from `ui/`. Nothing in `domain/` or
+`rendering/` imports `react`, `react-konva`, or `konva`.
 
 `history/` is new in KL-002 — see [Undo/redo](#undoredo) for why it's a
 peer of `domain/`/`rendering/` rather than tucked inside either.
+`persistence/` is new in KL-008 — see [Persistence](#persistence). It is
+the one non-`ui/` layer allowed to touch a browser API, and even there the
+concession is confined to a single file.
 
 This is enforced by convention and code review in KL-001 (no lint rule wires
 it up yet — see [Points to watch](../README.md) in the final report). The
@@ -509,6 +514,88 @@ first layer if everything happens to be locked. There is no UI yet to
 *choose* a target layer explicitly — that's KL-006. KL-003 gives the
 background the same lock semantics (selectable and read-only when locked,
 otherwise fully editable) for consistency.
+
+## Persistence
+
+KL-008 makes a project survive the tab closing. Two mechanisms, with
+deliberately different jobs:
+
+- **Autosave**, to browser storage, is the safety net. It costs the user
+  nothing and asks nothing of them.
+- **A project file** (`.kl.json`) is the real, portable copy. It's the only
+  one the user *owns*: browser storage doesn't move to another machine and
+  doesn't survive clearing site data.
+
+The UI never conflates the two — the save indicator says "Enregistré" but
+its tooltip says *where*, and every storage failure points at exporting a
+file, because that is the action that actually protects the work.
+
+### Reading is the hard half
+
+`persistence/projectFile.ts` is pure (no DOM, no storage) and holds all the
+validation. Its premise: **anything coming back from storage or a file is
+untrusted.** It may come from an older build, a half-written record from a
+killed tab, a hand-edited file, or an unrelated `.json` picked by mistake.
+So `parseProjectFile` checks every field and *never throws* — it returns a
+`ParseResult`, and the UI turns the error code into a sentence.
+
+Three decisions worth stating:
+
+- **Codes, not sentences.** `ParseError` is a discriminated union of codes
+  carrying structured details (`{ code: "invalidField", path }`). The app's
+  wording is French and belongs in `ui/` (`projectFileActions.ts`), not in
+  a layer that has no business owning copy. A code also carries the
+  offending path, which a baked-in string would have had to interpolate.
+- **Refuse whole, never repair.** A file with one bad object is rejected
+  entirely rather than loaded minus that object. Silently dropping part of
+  a plan is worse than refusing to open it: the user keeps both their
+  current project *and* the file, and is told exactly which field is at
+  fault.
+- **Referential integrity, not just field shapes.** An object whose
+  `layerId` isn't in the file would load, count, and then never draw — the
+  canvas renders objects by visible *layer*. That's checked
+  (`danglingLayerRef`), because a project that silently lost content is the
+  failure mode most likely to go unnoticed until it matters.
+
+Only a *newer* `schemaVersion` is refused outright; older versions are
+where migrations would go, and there are none yet.
+
+### Why IndexedDB, not localStorage
+
+A project's own data is a few kilobytes. Its background is not: an imported
+plan is a `data:` URL, and base64 inflates it by a third. `localStorage`'s
+~5 MB budget is blown by a single ordinary scan — and it fails by
+*throwing on write*, so an autosave would silently stop saving exactly when
+the project became worth saving. IndexedDB's quota is far larger and it
+stores structured values directly, so a large image isn't re-serialized to
+a JSON string on every edit. Verified in the browser: a 16.8 MB background
+(3× the `localStorage` limit) autosaves and restores intact.
+
+`projectStorage.ts` is the only file in the layer touching a browser API,
+and it treats every failure as ordinary: storage can be absent (private
+windows), blocked, full, or corrupt, and in each case the editor must still
+open and still let the user export. So it resolves to result objects
+instead of rejecting, and a corrupt record yields the starting project plus
+a notice explaining what happened — never a blank screen.
+
+### Ordering hazards
+
+Two races were designed out rather than papered over:
+
+- **The autosave must not run before the restore finishes.** The editor's
+  state is seeded from its initial project, so mounting on a placeholder
+  and swapping later would let an autosave write that placeholder over the
+  project still being read. `App` resolves the load *first* and mounts
+  `Editor` once — which also avoids a flash of the wrong plan and an undo
+  stack straddling two documents.
+- **There is no `clear` operation.** Every way of leaving a project behind
+  replaces it with another that the autosave writes over the same record a
+  moment later; a delete would only ever race that write, and losing the
+  race would destroy the document the user had just chosen.
+
+Opening a file or starting a new project calls `resetHistory`, which
+*discards* the undo stack: an edit history spanning two documents isn't a
+history, it's a trap.
 
 ## Points à surveiller (repris du rapport de mission)
 

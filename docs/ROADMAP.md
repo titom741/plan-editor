@@ -37,7 +37,7 @@ half-finished features spanning missions.
   modifier), editable line/polygon vertices, copy/paste, keyboard nudging
   and arrow-key movement.
 
-- **KL-005 — Calibration** *(this mission)*
+- **KL-005 — Calibration** *(done)*
   Interactive calibration: pick two points a known distance apart on the
   background, enter the real distance, and the background's true
   `widthM`/`heightM` are computed from its native resolution
@@ -62,10 +62,19 @@ half-finished features spanning missions.
   On-canvas measurement tool (distance, area) and snapping to grid/objects,
   built on the KL-002 geometry primitives.
 
-- **KL-008 — Persistence**
-  Local save/load (e.g. to a project file or browser storage). Undo/redo
-  itself already works as of KL-002 (`history/`) — this mission is about
-  persisting a project across sessions, not the edit history.
+- **KL-008 — Persistence** *(this mission)*
+  A new `persistence/` layer: `projectFile.ts` (pure — a versioned
+  envelope, plus validation that treats every stored or opened file as
+  untrusted and never throws) and `projectStorage.ts` (IndexedDB, chosen
+  over `localStorage` because a background image blows its ~5 MB budget).
+  Autosave with a save-state indicator, restore on launch, and
+  `Nouveau` / `Ouvrir…` / `Enregistrer un fichier` for portable `.kl.json`
+  copies. Undo/redo itself already worked as of KL-002 — this mission
+  persists the project, not the edit history, and deliberately drops the
+  history when the document is replaced. See the KL-008 mission report.
+
+  Not covered, and still open: multiple named projects (there is one
+  autosave slot), and a "recently opened" list.
 
 - **KL-009 — Export**
   PDF export, PNG/JPEG export, print scale, and making `Sheet` functional.

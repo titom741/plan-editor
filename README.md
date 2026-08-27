@@ -8,12 +8,13 @@ dimensions in meters.
 Deliberately **not** a general-purpose CAD tool — it's scoped to fast,
 simple event-layout drafting.
 
-Current mission: **KL-005 (Calibration)** — click two points a known
-distance apart on the background, enter the real distance, and the plan is
-scaled to its true real-world size. On top of everything KL-002 and KL-003
-already deliver: import a PNG/JPEG background and position it, and create,
-select, move, resize, rotate, and delete rectangles, circles, lines,
-polygons, and text, all working in real-world dimensions with undo/redo. See
+Current mission: **KL-008 (Persistence)** — your project is saved
+automatically and reopens where you left off, and can be exported to a
+portable `.kl.json` file. On top of everything the earlier missions
+deliver: import a PNG/JPEG background, calibrate it against a known
+distance, and create, select, move, resize, rotate, and delete rectangles,
+circles, lines, polygons, and text, all in real-world dimensions with
+undo/redo. See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how it's built and
 [`docs/ROADMAP.md`](docs/ROADMAP.md) for what's next.
 
@@ -69,6 +70,17 @@ dimensions on the canvas label update live as you drag.
 `Ctrl`/`Cmd`+`Y`) to redo, or the toolbar buttons. Covers creation, moving,
 resizing, rotating, deleting, and property edits.
 
+**Saving** — your project is saved automatically in this browser a moment
+after you stop editing; the toolbar shows the save state, and reopening the
+page restores the project (background image included). That copy is local
+to this browser, so use **Enregistrer un fichier** for a real, portable
+`.kl.json` copy you can back up or move to another machine, and **Ouvrir…**
+to load one back. **Nouveau** starts an empty project (it asks first). A
+file that isn't a valid project is refused with an explanation and your
+current work is left untouched; opening or creating a project clears the
+undo history, since undo can't meaningfully cross from one document into
+another.
+
 **Layers** — click the eye / lock icons in the bottom bar to toggle a
 layer's visibility or lock it (a locked layer's objects can be selected
 but not edited or deleted).
@@ -106,6 +118,11 @@ placement/resize/aspect-ratio logic in `domain/background.ts`; and
 calibration — deriving `pixelsPerMeter` from a measured distance,
 applying it to the background without touching the plan's objects, and
 staying stable (not drifting) when the same segment is recalibrated.
+`persistence/` is covered most heavily of all: a project with every
+object type round-trips unchanged, and the reader is tested against the
+files it will really meet — truncated, hand-edited, written by a newer
+version, someone else's JSON, `NaN` that JSON turned into `null`, and a
+project whose objects reference a layer that isn't there.
 
 ## Lint & build
 
@@ -118,10 +135,11 @@ npm run build   # tsc -b && vite build
 
 ```
 src/
-├── domain/     business model + geometry (Project, Layer, PlanObject, resize/rotate math…) — no React/Konva
-├── rendering/  meters ↔ pixels conversion, viewport, grid — no React/Konva
-├── history/    generic undo/redo stack — no React, no domain knowledge
-└── ui/         React components + react-konva
+├── domain/       business model + geometry (Project, Layer, PlanObject, resize/rotate math…) — no React/Konva
+├── rendering/    meters ↔ pixels conversion, viewport, grid — no React/Konva
+├── history/      generic undo/redo stack — no React, no domain knowledge
+├── persistence/  project file format + validation, and local storage — no React
+└── ui/           React components + react-konva
 ```
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the reasoning behind
