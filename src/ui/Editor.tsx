@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { computeDefaultBackgroundPlacement, createBackgroundImage, cropRectFromMargins, getBackgroundCropMargins, worldDistanceToImagePixels } from "../domain/background";
 import { boundsCenterM, getBackgroundBoundsM } from "../domain/bounds";
+import { DEFAULT_LABEL_DISPLAY, type LabelDisplay } from "../domain/display";
 import { clearGroup, createNamedGroup, distributeObjects, transformObjectAroundPivot } from "../domain/grouping";
 import type { CatalogItem } from "../domain/catalog";
 import { duplicateObjects } from "../domain/clipboard";
@@ -203,6 +204,21 @@ export default function Editor({
     lastAutoFittedBackgroundIdRef.current = background.id;
     fitBounds(getBackgroundBoundsM(background));
   }, [project.background, stageSize, fitBounds]);
+
+  /** What labels show across this plan; an object may still override it for itself. */
+  const labelDisplay = project.labelDisplay ?? DEFAULT_LABEL_DISPLAY;
+
+  /**
+   * A plan-wide label change is a change to the *document* — it decides
+   * what the exported sheet says — so it goes through the undo stack like
+   * any other edit, not through `setProjectDirect`.
+   */
+  const handleLabelDisplayChange = useCallback(
+    (nextDisplay: LabelDisplay) => {
+      commitChange((current) => ({ ...current, labelDisplay: nextDisplay, updatedAt: new Date().toISOString() }));
+    },
+    [commitChange],
+  );
 
   const objectCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -781,7 +797,9 @@ export default function Editor({
     const common = {
       layerId: effectiveLayerId,
       name: item.name,
-      label: item.name,
+      // No `label`: that legacy field overrides the display settings
+      // wholesale, so a catalogue item carrying one would silently ignore
+      // the plan's label choices. The name is already `item.name`.
       catalogId: item.id,
       category: item.category,
       reference: item.reference,
@@ -859,6 +877,8 @@ export default function Editor({
         gridLimited={project.background?.visible ? true : gridLimited}
         onGridLimitedChange={setGridLimited}
         gridLimitForced={project.background?.visible === true}
+        labelDisplay={labelDisplay}
+        onLabelDisplayChange={handleLabelDisplayChange}
         collapsed={toolsCollapsed}
         onToggleCollapsed={() => setToolsCollapsed((value) => !value)}
       />
@@ -892,6 +912,7 @@ export default function Editor({
         background={project.background}
         activeTool={activeTool}
         snapEnabled={snapEnabled}
+        labelDisplay={labelDisplay}
         gridVisible={gridVisible}
         gridLimited={project.background?.visible ? true : gridLimited}
         selectedIds={selectedIds}
@@ -929,6 +950,7 @@ export default function Editor({
         selectedBackground={isBackgroundSelected ? project.background : null}
         calibration={project.calibration}
         isLocked={isBackgroundSelected ? isBackgroundLocked : isSelectedLocked}
+        labelDisplay={labelDisplay}
         onBeginEdit={handleBeginObjectEdit}
         onLiveUpdate={(patch) => selectedObject && handleObjectLiveUpdate(selectedObject.id, patch)}
         onBackgroundLiveUpdate={handleBackgroundLiveUpdate}
@@ -1064,6 +1086,7 @@ export default function Editor({
             layers={project.layers}
             background={project.background}
             showGrid={printGrid}
+            labelDisplay={labelDisplay}
             renderScale={printRaster.effectiveDpi / CSS_PIXELS_PER_INCH}
             transparentBackground={pendingExport === "png" && transparentPng}
             onReady={handlePrintCanvasReady}

@@ -1,3 +1,4 @@
+import { DEFAULT_LABEL_DISPLAY, type LabelDisplay } from "./display";
 import type { PlanObject, Project } from "./types";
 import { angleAtPointDeg, formatAngleDeg, polygonAreaM2, polygonPerimeterM, polylineLengthM, formatAreaM2, formatLengthM } from "./measure";
 
@@ -33,22 +34,48 @@ export function getObjectDimensionSummary(object: PlanObject): string | null {
 }
 
 /**
- * The label to render on the canvas for an object: the user's explicit
- * `label` override if set, otherwise the object's name plus its dimension
- * summary. Computed on demand so it always reflects the current geometry —
- * nothing stale is ever stored on the object itself.
+ * The text an object writes on the plan, composed on demand from the
+ * display settings that apply to it (see `domain/display.ts`) so it
+ * always reflects the current geometry — nothing stale is ever stored on
+ * the object.
+ *
+ * Each switched-on part contributes one line. A measurement object states
+ * what it measures in place of a plain dimension summary: that *is* its
+ * dimension, and it is the reason the object exists.
+ *
+ * `label`, the free-text override from before KL-027, still wins when a
+ * file carries one — dropping it would silently rewrite existing plans.
  */
-export function getObjectDisplayLabel(object: PlanObject): string {
+export function getObjectDisplayLabel(
+  object: PlanObject,
+  display: LabelDisplay = DEFAULT_LABEL_DISPLAY,
+): string {
   if (object.label) return object.label;
+
+  const lines: string[] = [];
+  if (display.name) lines.push(object.name);
+  if (display.dimensions) {
+    const measured = getMeasurementSummary(object);
+    const dimensions = measured ?? getObjectDimensionSummary(object);
+    if (dimensions) lines.push(dimensions);
+  }
+  if (display.reference && object.reference) lines.push(object.reference);
+  if (display.quantity && object.quantity !== undefined && object.quantity !== 1) {
+    lines.push(`× ${formatMeters(object.quantity)}`);
+  }
+  return lines.join("\n");
+}
+
+/** What a persisted measurement states, or `null` for an ordinary object. */
+function getMeasurementSummary(object: PlanObject): string | null {
   if (object.measurement?.kind === "angle" && object.type === "line" && object.pointsM.length >= 3) {
     const [a, b, c] = object.pointsM;
-    if (a && b && c) return `${object.name}\n${formatAngleDeg(angleAtPointDeg(a, b, c))}`;
+    if (a && b && c) return formatAngleDeg(angleAtPointDeg(a, b, c));
   }
   if (object.measurement?.kind === "area" && object.type === "polygon") {
-    return `${object.name}\n${formatAreaM2(polygonAreaM2(object.pointsM))}\nPérimètre ${formatLengthM(polygonPerimeterM(object.pointsM))}`;
+    return `${formatAreaM2(polygonAreaM2(object.pointsM))}\nPérimètre ${formatLengthM(polygonPerimeterM(object.pointsM))}`;
   }
-  const dimensions = getObjectDimensionSummary(object);
-  return dimensions ? `${object.name}\n${dimensions}` : object.name;
+  return null;
 }
 
 const TYPE_NAME_PREFIXES: Record<PlanObject["type"], string> = {

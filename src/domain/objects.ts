@@ -10,6 +10,14 @@ import type {
   ImageObject,
 } from "./types";
 
+/**
+ * Default height of a text object, in metres. Two metres reads at the
+ * scale an event plan is actually printed at (1:200 and coarser); the
+ * 0.30 m this used to be came out as an unreadable smudge on anything
+ * bigger than a room.
+ */
+export const DEFAULT_TEXT_SIZE_M = 2;
+
 /** Fields every `create*Object` factory accepts in addition to its own geometry. */
 interface CommonObjectInput {
   layerId: string;
@@ -130,7 +138,7 @@ export function createTextObject(
     rotationDeg: input.rotationDeg ?? 0,
     style: input.style,
     text: input.text,
-    fontSizeM: input.fontSizeM ?? 0.3,
+    fontSizeM: input.fontSizeM ?? DEFAULT_TEXT_SIZE_M,
   };
 }
 

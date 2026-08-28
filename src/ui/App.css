@@ -1036,3 +1036,25 @@
   border-radius: 8px;
   background: var(--panel-alt, rgba(0, 0, 0, 0.02));
 }
+
+/* Grouped checkbox blocks — the plan-wide label settings and an object's override of them. */
+.tools-panel__display,
+.properties-panel__display {
+  margin: 0.75rem 0 0;
+  padding: 0.35rem 0.6rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.tools-panel__display legend,
+.properties-panel__display legend {
+  padding: 0 0.3rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+
+.properties-panel__display .tools-panel__toggle input:disabled + span {
+  opacity: 0.5;
+}

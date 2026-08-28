@@ -1,4 +1,4 @@
-import type { CircleObject, PointM, RectangleObject } from "./types";
+import type { CircleObject, PlanObject, PointM, RectangleObject } from "./types";
 
 /**
  * Pure geometric operations on the metric model — the math behind moving,
@@ -370,6 +370,89 @@ export function getCircleResizeHandleWorld(object: Pick<CircleObject, "xM" | "yM
  * drawn when `rotationDeg = 0` — directly "above" the pivot, i.e. at
  * local offset `(0, -gap)`. See `getRotateHandleWorld`.
  */
+/**
+ * Where an object's anchor has to move so that rotating it to
+ * `rotationDeg` turns it **around its own centre** instead of around its
+ * anchor.
+ *
+ * The model stores rotation about the anchor — for a rectangle, its
+ * top-left corner — because that is what keeps rendering, bounds and PDF
+ * export in step with one shared convention. But rotating a chapiteau
+ * about its corner swings it across the plan, which is never what anyone
+ * means by "rotate this". So the *gesture* rotates about the centre and
+ * solves for the anchor that produces it, leaving the stored convention
+ * (and every file already written) untouched.
+ *
+ * `centerLocal` is the object's centre in its own unrotated frame
+ * relative to the anchor — `(w/2, h/2)` for a rectangle, the centroid of
+ * the points for a polyline, `(0,0)` for a circle, whose centre already
+ * *is* its anchor.
+ */
+/**
+ * An object's centre in its own unrotated frame, relative to its anchor —
+ * the pivot a rotate gesture should turn it around.
+ *
+ * A circle's anchor already *is* its centre, so the offset is zero. A
+ * polyline's is the midpoint of its extent rather than the average of its
+ * points: an L-shaped run of barrier with ten points along one arm and
+ * two along the other would otherwise pivot around the crowded arm.
+ */
+export function getLocalCenter(object: PlanObject): VectorM {
+  switch (object.type) {
+    case "rectangle":
+    case "image":
+      return { xM: object.widthM / 2, yM: object.heightM / 2 };
+    case "circle":
+      return { xM: 0, yM: 0 };
+    case "line":
+    case "polygon": {
+      const first = object.pointsM[0];
+      if (!first) return { xM: 0, yM: 0 };
+      let minX = first.xM, maxX = first.xM, minY = first.yM, maxY = first.yM;
+      for (const point of object.pointsM) {
+        if (point.xM < minX) minX = point.xM;
+        if (point.xM > maxX) maxX = point.xM;
+        if (point.yM < minY) minY = point.yM;
+        if (point.yM > maxY) maxY = point.yM;
+      }
+      return { xM: (minX + maxX) / 2, yM: (minY + maxY) / 2 };
+    }
+    case "text":
+      // A text anchor is its top-left; its width depends on font metrics
+      // the domain doesn't have, so the height alone centres it vertically
+      // and the estimate in `bounds.ts` is not repeated here.
+      return { xM: 0, yM: object.fontSizeM * 0.6 };
+  }
+}
+
+/**
+ * The patch that rotates an object to `rotationDeg` about its own centre:
+ * the new angle plus the anchor that keeps that centre where it was.
+ * Everything the UI needs from a rotate gesture, in one call.
+ */
+export function rotateObjectToDeg(
+  object: PlanObject,
+  rotationDeg: number,
+): { xM: number; yM: number; rotationDeg: number } {
+  return rotateAroundLocalCenter(object, getLocalCenter(object), rotationDeg);
+}
+
+export function rotateAroundLocalCenter(
+  object: { xM: number; yM: number; rotationDeg: number },
+  centerLocal: VectorM,
+  rotationDeg: number,
+): { xM: number; yM: number; rotationDeg: number } {
+  // The centre's world position must not move, so solve the anchor from
+  // it: anchor = centre - R(newAngle) · centerLocal.
+  const centerWorld = objectLocalToWorld(object, centerLocal);
+  const rotated = rotateVector(centerLocal, rotationDeg);
+  return {
+    xM: centerWorld.xM - rotated.xM,
+    yM: centerWorld.yM - rotated.yM,
+    rotationDeg: normalizeAngleDeg(rotationDeg),
+  };
+}
+
 export function computeRotationFromPointer(pivotWorld: PointM, pointerWorld: PointM): number {
   const delta = subtractPoints(pointerWorld, pivotWorld);
   const deg = radToDeg(Math.atan2(delta.yM, delta.xM)) + 90;

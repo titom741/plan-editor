@@ -6,6 +6,7 @@ import { metersToPixels, worldToScreen } from "../../rendering/viewport";
 import type { Viewport } from "../../rendering/viewport";
 import type { Background, Layer, PlanObject } from "../../domain/types";
 import { PlanObjectShape } from "./PlanObjectShape";
+import type { LabelDisplay } from "../../domain/display";
 import { useHtmlImage } from "../hooks/useHtmlImage";
 import { createWhiteRemovalFilter } from "../imageFilters";
 
@@ -18,6 +19,7 @@ interface PrintCanvasProps {
   layers: Layer[];
   background: Background;
   showGrid: boolean;
+  labelDisplay: LabelDisplay;
   /** Screen-pixel sizes (strokes, labels) are multiplied by this so they come out the right physical size at print resolution. */
   renderScale: number;
   transparentBackground?: boolean;
@@ -54,6 +56,7 @@ export function PrintCanvas({
   layers,
   background,
   showGrid,
+  labelDisplay,
   renderScale,
   transparentBackground = false,
   onReady,
@@ -145,6 +148,7 @@ export function PrintCanvas({
           .map((object) => (
             <PlanObjectShape
               key={object.id}
+              labelDisplay={labelDisplay}
               object={object}
               viewport={viewport}
               selected={false}

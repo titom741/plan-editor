@@ -3,6 +3,9 @@ import type Konva from "konva";
 import {
   CIRCLE_HANDLE_IDS,
   computeRotationFromPointer,
+  getLocalCenter,
+  objectLocalToWorld,
+  rotateObjectToDeg,
   getCircleHandleWorld,
   getRectangleHandleWorld,
   getRotateHandleWorld,
@@ -106,14 +109,26 @@ export function SelectionOverlay({ object, viewport, onBeginEdit, onLiveUpdate, 
   const anchorWorld: PointM = { xM: object.xM, yM: object.yM };
   const handles: OverlayHandle[] = [];
 
+  /**
+   * The pivot is the object's own centre, not its anchor. The model still
+   * stores rotation about the anchor — that is what keeps rendering,
+   * bounds and PDF export on one convention — so the gesture measures the
+   * angle from the centre and `rotateObjectToDeg` solves for the anchor
+   * that keeps that centre still. Rotating a chapiteau about its top-left
+   * corner would swing it across the plan, which is never what anyone
+   * means by "rotate this".
+   */
+  const centerWorld = objectLocalToWorld(object, getLocalCenter(object));
+
   const rotateHandle = (localOffset?: { xM: number; yM: number }): OverlayHandle => ({
     key: "rotate",
     worldPoint: getRotateHandleWorld(anchorWorld, object.rotationDeg, gapM, localOffset),
     shape: "circle",
     cursor: "grab",
     onDragMove: (pointerWorld, modifiers) => {
-      const rawRotation = computeRotationFromPointer(anchorWorld, pointerWorld);
-      onLiveUpdate({ rotationDeg: modifiers.shiftKey ? Math.round(rawRotation / 15) * 15 % 360 : rawRotation });
+      const rawRotation = computeRotationFromPointer(centerWorld, pointerWorld);
+      const rotationDeg = modifiers.shiftKey ? (Math.round(rawRotation / 15) * 15) % 360 : rawRotation;
+      onLiveUpdate(rotateObjectToDeg(object, rotationDeg));
     },
   });
 

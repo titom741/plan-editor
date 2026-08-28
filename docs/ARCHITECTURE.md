@@ -988,3 +988,65 @@ inconsistency worth preventing is a project whose name no longer matches
 its file. "Enregistrer sous…" asks for a name, renames the project to it
 (one undo step), and downloads — so the next suggested file name is the
 one the user last chose.
+
+## What an object writes on the plan (KL-027)
+
+The same plan goes to a client (names only), to a fitter (names and
+dimensions) and to a buyer (references and quantities). Redrawing it three
+times is absurd, so the label is *composed on demand* and nothing about it
+is stored on the object.
+
+`domain/display.ts` holds the four switches — name, dimensions, reference,
+quantity — at two levels: `Project.labelDisplay` is the plan-wide default
+(the tools panel), and an object may carry a full `display` override (the
+properties panel). `getObjectDisplayLabel(object, display)` composes one
+line per switched-on part. A measurement object states what it measures in
+place of a plain size: that *is* its dimension, and it is why the object
+exists.
+
+The pre-KL-027 free-text `label` still wins when a file carries one.
+Dropping it would silently rewrite plans already drawn. New code never
+writes it — inserting a catalogue item used to, which would have made
+every cataloged object ignore the switches.
+
+Changing the plan-wide setting goes through the **undo stack**, unlike
+layer visibility: it decides what the exported sheet says, so it is a
+change to the document, not a way of looking at it.
+
+### The PDF was printing nothing labelled
+
+Adding the switches surfaced an older defect. The hybrid export
+rasterises bitmaps and writes every vector shape as real PDF paths — but
+it only emitted text for `text` objects, so a sheet came out with every
+shape correctly placed and *nothing named*, which is most of what a plan
+is for. `exportSheet.ts` now emits each object's composed label through
+the same `getObjectDisplayLabel` and the same settings, centred on the
+object's **extent** rather than hung off its anchor: a rotated
+rectangle's anchor is a corner somewhere out in the field.
+
+## Rotation turns about the centre (KL-027)
+
+The model stores rotation about the **anchor** — for a rectangle, its
+top-left corner — and that convention is what keeps rendering, bounds and
+PDF export in step. But rotating a chapiteau about its corner swings it
+across the plan, which is never what anyone means by "rotate this".
+
+So the *gesture* changed, not the model. `rotateObjectToDeg` measures the
+angle from the object's own centre and solves for the anchor that keeps
+that centre still:
+
+    anchor = centreWorld − R(newAngle) · centreLocal
+
+Both the rotate handle and the properties panel's rotation field go
+through it, so typing an angle and dragging to it land in the same place.
+Every file already written keeps its meaning.
+
+`getLocalCenter` gives the pivot per type. A circle's anchor already *is*
+its centre. A polyline's is the midpoint of its **extent**, not the mean
+of its points: an L-shaped run of barrier with ten points along one arm
+and two along the other would otherwise pivot around the crowded arm.
+
+## Text starts at 2 m (KL-027)
+
+`DEFAULT_TEXT_SIZE_M` went from 0.30 m to 2 m. Event plans print at 1:200
+and coarser, where a 30 cm glyph is an unreadable smudge.

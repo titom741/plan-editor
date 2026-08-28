@@ -3,6 +3,8 @@ import { cropBackgroundByMargins, getBackgroundCropMargins, resizeBackgroundFrom
 import { boundsSizeM } from "../../domain/bounds";
 import type { BoundsM } from "../../domain/bounds";
 import { formatMeters, getObjectDimensionSummary } from "../../domain/labels";
+import { LABEL_DISPLAY_KEYS, LABEL_DISPLAY_LABELS, type LabelDisplay } from "../../domain/display";
+import { rotateObjectToDeg } from "../../domain/geometry";
 import { sortLayersByOrder } from "../../domain/layers";
 import type { BackgroundImage, Calibration, Layer, PlanObject, PlanObjectPatch } from "../../domain/types";
 
@@ -22,6 +24,8 @@ interface PropertiesPanelProps {
   calibration: Calibration;
   /** True when the selection's layer (or the background) is locked — properties become read-only. */
   isLocked: boolean;
+  /** The plan-wide label setting, shown as the baseline an object may override. */
+  labelDisplay: LabelDisplay;
   onBeginEdit: () => void;
   onLiveUpdate: (patch: PlanObjectPatch) => void;
   onBackgroundLiveUpdate: (patch: Partial<BackgroundImage>) => void;
@@ -114,6 +118,7 @@ export function PropertiesPanel({
   selectedBackground,
   calibration,
   isLocked,
+  labelDisplay,
   onBeginEdit,
   onLiveUpdate,
   onBackgroundLiveUpdate,
@@ -367,20 +372,6 @@ export function PropertiesPanel({
             />
           </label>
 
-          {selected.type !== "text" && (
-            <label className="properties-panel__field">
-              <span>Libellé personnalisé (facultatif)</span>
-              <input
-                type="text"
-                value={selected.label ?? ""}
-                placeholder={getObjectDimensionSummary(selected) ? `${selected.name} — dimensions automatiques` : selected.name}
-                disabled={isLocked}
-                onFocus={resetSnapshotOnFocus}
-                onChange={(e) => applyPatch({ label: e.target.value || undefined })}
-              />
-            </label>
-          )}
-
           <div className="properties-panel__static">
             <span>Type</span>
             <span>{TYPE_LABELS[selected.type]}</span>
@@ -407,18 +398,40 @@ export function PropertiesPanel({
 
           {layerPicker(isLocked)}
 
-          <NumberField
-            label="Position X"
-            valueM={selected.xM}
-            disabled={isLocked}
-            onCommit={(value) => applyPatch({ xM: value })}
-          />
-          <NumberField
-            label="Position Y"
-            valueM={selected.yM}
-            disabled={isLocked}
-            onCommit={(value) => applyPatch({ yM: value })}
-          />
+          <fieldset className="properties-panel__display">
+            <legend>Étiquette sur le plan</legend>
+            <label className="tools-panel__toggle">
+              <input
+                type="checkbox"
+                checked={selected.display !== undefined}
+                disabled={isLocked}
+                onChange={(event) =>
+                  applyPatch({ display: event.target.checked ? { ...labelDisplay } : undefined })
+                }
+              />
+              <span>Réglage propre à cet objet</span>
+            </label>
+            {LABEL_DISPLAY_KEYS.map((key) => (
+              <label key={key} className="tools-panel__toggle">
+                <input
+                  type="checkbox"
+                  checked={(selected.display ?? labelDisplay)[key]}
+                  disabled={isLocked || selected.display === undefined}
+                  onChange={(event) =>
+                    applyPatch({
+                      display: { ...(selected.display ?? labelDisplay), [key]: event.target.checked },
+                    })
+                  }
+                />
+                <span>{LABEL_DISPLAY_LABELS[key]}</span>
+              </label>
+            ))}
+            {selected.display === undefined && (
+              <p className="properties-panel__hint">
+                Suit le réglage général du plan (panneau Outils).
+              </p>
+            )}
+          </fieldset>
 
           {(selected.type === "rectangle" || selected.type === "image") && (
             <>
@@ -552,7 +565,8 @@ export function PropertiesPanel({
               valueM={selected.rotationDeg}
               step={1}
               disabled={isLocked}
-              onCommit={(value) => applyPatch({ rotationDeg: value })}
+              /* Rotates about the object's centre, like the handle does — typing an angle and dragging to it must not land in different places. */
+              onCommit={(value) => applyPatch(rotateObjectToDeg(selected, value))}
             />
           )}
 

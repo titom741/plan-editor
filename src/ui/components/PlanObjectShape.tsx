@@ -1,6 +1,7 @@
 import { Arrow, Circle, Group, Image as KonvaImage, Line, Rect, Text } from "react-konva";
 import type Konva from "konva";
 import { getObjectDisplayLabel } from "../../domain/labels";
+import { DEFAULT_LABEL_DISPLAY, resolveLabelDisplay, type LabelDisplay } from "../../domain/display";
 import type { PlanObject } from "../../domain/types";
 import { metersToPixels, screenToWorld, worldToScreen } from "../../rendering/viewport";
 import type { Viewport } from "../../rendering/viewport";
@@ -22,6 +23,8 @@ interface PlanObjectShapeProps {
    * paper instead of a hairline (see `PrintCanvas`).
    */
   renderScale?: number;
+  /** The project's default label settings; the object's own `display` override wins over it. */
+  labelDisplay?: LabelDisplay;
   /** `additive` is true when Shift (or Ctrl/Cmd) was held — the caller then toggles this object in the selection instead of replacing it. */
   onSelect: (additive: boolean) => void;
   /** Snapshots undo history once, at the start of a drag gesture. */
@@ -53,12 +56,18 @@ export function PlanObjectShape({
   draggable,
   selectable,
   renderScale = 1,
+  labelDisplay = DEFAULT_LABEL_DISPLAY,
   onSelect,
   onBeginEdit,
   onMoveLive,
   simplified = false,
 }: PlanObjectShapeProps) {
   const objectImage = useHtmlImage(object.type === "image" ? object.url : null);
+  // Composed once per render: what this object writes on the plan, and
+  // whether it writes anything at all (see `domain/display.ts`).
+  const display = resolveLabelDisplay(object, labelDisplay);
+  const labelText = getObjectDisplayLabel(object, display);
+  const showLabel = !simplified && labelText.length > 0;
   const anchor = worldToScreen({ xM: object.xM, yM: object.yM }, viewport);
   /** A width given in screen pixels, converted to this render target's pixels. */
   const px = (screenPx: number) => screenPx * renderScale;
@@ -128,8 +137,8 @@ export function PlanObjectShape({
             opacity={object.style?.opacity ?? 1}
             dash={dash}
           />
-          {!simplified && <Text
-            text={getObjectDisplayLabel(object)}
+          {showLabel && <Text
+            text={labelText}
             width={widthPx}
             height={heightPx}
             align="center"
@@ -153,8 +162,8 @@ export function PlanObjectShape({
             opacity={object.style?.opacity ?? 1}
             dash={dash}
           />
-          {!simplified && <Text
-            text={getObjectDisplayLabel(object)}
+          {showLabel && <Text
+            text={labelText}
             x={-radiusPx}
             y={px(-8)}
             width={radiusPx * 2}
@@ -193,8 +202,8 @@ export function PlanObjectShape({
             opacity={object.style?.opacity ?? 1}
             dash={dash}
           />}
-          {!simplified && <Text
-            text={getObjectDisplayLabel(object)}
+          {showLabel && <Text
+            text={labelText}
             x={points.length >= 2 ? points[0] : 0}
             y={-px(18)}
             fontSize={px(12)}
@@ -226,8 +235,8 @@ export function PlanObjectShape({
             opacity={object.style?.opacity ?? 1}
             dash={dash}
           />
-          {!simplified && <Text
-            text={getObjectDisplayLabel(object)}
+          {showLabel && <Text
+            text={labelText}
             x={minX}
             y={minY + px(6)}
             width={Math.max(maxX - minX, px(80))}

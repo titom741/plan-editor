@@ -14,6 +14,7 @@ import { BACKGROUND_NODE_NAME, BackgroundImageShape } from "./BackgroundImageSha
 import { SpatialPointIndex } from "../../domain/spatialIndex";
 import { getObjectBoundsM } from "../../domain/bounds";
 import { PlanObjectShape } from "./PlanObjectShape";
+import type { LabelDisplay } from "../../domain/display";
 import { MultiSelectionOutline, SelectionOverlay } from "./SelectionOverlay";
 import type { StageSize } from "../hooks/useViewport";
 import type { ToolId } from "../tools";
@@ -38,6 +39,8 @@ interface PlanCanvasProps {
   activeTool: ToolId;
   /** Whether the pointer is pulled onto grid intersections and object corners (KL-007). Hold Alt to bypass it for one gesture. */
   snapEnabled: boolean;
+  /** Project-wide default for what object labels show. */
+  labelDisplay: LabelDisplay;
   gridVisible: boolean;
   gridLimited: boolean;
   selectedIds: readonly string[];
@@ -95,6 +98,7 @@ export function PlanCanvas({
   background,
   activeTool,
   snapEnabled,
+  labelDisplay,
   gridVisible,
   gridLimited,
   selectedIds,
@@ -645,6 +649,7 @@ export function PlanCanvas({
                 const layer = layersById.get(object.layerId);
                 return (
                   <PlanObjectShape
+                    labelDisplay={labelDisplay}
                     key={object.id}
                     object={object}
                     viewport={viewport}

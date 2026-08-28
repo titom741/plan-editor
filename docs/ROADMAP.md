@@ -334,3 +334,14 @@ la barre du haut, et le dialogue de personnalisation (⚙). Ajout de
 « Enregistrer sous… ». Nouveau panneau « Éléments » dans le rail droit :
 inventaire filtrable par calque, avec dimensions, sélection partagée avec
 le plan. Voir `docs/ARCHITECTURE.md`.
+
+## KL-027 — Étiquettes configurables, rotation au centre *(done)*
+
+Quatre commutateurs (nom, dimensions, référence, quantité) réglables pour
+tout le plan (panneau Outils) ou objet par objet (panneau Propriétés) —
+ce qui s'imprime dépend du destinataire du plan. Correction au passage
+d'un défaut ancien : l'export PDF vectoriel ne dessinait **aucune**
+étiquette de forme. La rotation tourne désormais autour du centre de
+l'objet, poignée et champ compris, sans changer la convention stockée.
+Texte à 2 m par défaut. Suppression du « libellé personnalisé » et de
+Position X/Y du panneau. Voir `docs/ARCHITECTURE.md`.

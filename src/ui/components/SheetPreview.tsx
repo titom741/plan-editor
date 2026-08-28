@@ -4,6 +4,7 @@ import type { Background, Layer, PlanObject, Project, Sheet } from "../../domain
 import type { SheetLayout } from "../../printing/sheetLayout";
 import { computePrintRaster } from "../../printing/sheetLayout";
 import { formatScale } from "../../domain/sheets";
+import { DEFAULT_LABEL_DISPLAY } from "../../domain/display";
 import { PrintCanvas } from "./PrintCanvas";
 
 const PREVIEW_DPI = 34;
@@ -34,7 +35,7 @@ export function SheetPreview({ project, sheet, layout, objects, layers, backgrou
       <div className="sheet-preview__page" style={{ width: pageWidth, height: pageHeight }}>
         <div className="sheet-preview__frame" style={{ left: frameLeft, top: frameTop, width: layout.frame.widthPt * pxPerPt, height: layout.frame.heightPt * pxPerPt }} />
         <div className="sheet-preview__drawing" style={{ left: drawingLeft, top: drawingTop, width: raster.pixelWidth, height: raster.pixelHeight }}>
-          <PrintCanvas stageRef={stageRef} pixelWidth={raster.pixelWidth} pixelHeight={raster.pixelHeight} viewport={raster.viewport} objects={objects} layers={layers} background={background} showGrid={showGrid} renderScale={PREVIEW_DPI / 96} onReady={noop} />
+          <PrintCanvas stageRef={stageRef} pixelWidth={raster.pixelWidth} pixelHeight={raster.pixelHeight} viewport={raster.viewport} objects={objects} layers={layers} background={background} showGrid={showGrid} labelDisplay={project.labelDisplay ?? DEFAULT_LABEL_DISPLAY} renderScale={PREVIEW_DPI / 96} onReady={noop} />
         </div>
         <div className="sheet-preview__title" style={{ left: frameLeft, bottom: layout.frame.yPt * pxPerPt, width: layout.frame.widthPt * pxPerPt, height: layout.titleBlock.heightPt * pxPerPt }}>
           <strong>{project.name}</strong><span>{sheet.name} · {formatScale(sheet.scaleDenominator)}</span>

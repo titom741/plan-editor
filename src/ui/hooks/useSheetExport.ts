@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type Konva from "konva";
 import { getProjectBoundsM, type BoundsM } from "../../domain/bounds";
 import { createSheet } from "../../domain/sheets";
+import { DEFAULT_LABEL_DISPLAY } from "../../domain/display";
 import type { PlanObject, Project, Sheet } from "../../domain/types";
 import {
   computePrintRaster,
@@ -83,6 +84,7 @@ export function useSheetExport({
   /** During a tiled export the stage is sized to the tile being captured, not to the single-sheet layout. */
   const activePrintLayout = multiPageExport?.layouts[multiPageExport.index] ?? sheetLayout;
   const printRaster: PrintRaster = useMemo(() => computePrintRaster(activePrintLayout), [activePrintLayout]);
+  const labelDisplay = project.labelDisplay ?? DEFAULT_LABEL_DISPLAY;
 
   /** The shapes the PDF writer draws as vectors: everything visible that isn't a bitmap. */
   const vectorObjects = useMemo(
@@ -205,6 +207,7 @@ export function useSheetExport({
                 now,
                 vectorObjects,
                 vectorViewport: raster.viewport,
+                labelDisplay,
               };
             }),
           );
@@ -228,12 +231,13 @@ export function useSheetExport({
             now: new Date(),
             vectorObjects,
             vectorViewport: printRaster.viewport,
+            labelDisplay,
           });
       })
       .catch((error: unknown) =>
         onError(`L'export a échoué : ${describe(error)}. Essayez un format de papier plus petit.`),
       );
-  }, [pendingExport, multiPageExport, project, sheet, activePrintLayout, printRaster, vectorObjects, onError]);
+  }, [pendingExport, multiPageExport, project, sheet, activePrintLayout, printRaster, vectorObjects, labelDisplay, onError]);
 
   return {
     sheet,

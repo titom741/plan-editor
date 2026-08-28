@@ -3,6 +3,9 @@ import type { PlanObject, Project, Sheet } from "../domain/types";
 import { buildMultiPagePdf, buildPdf, mmToPt, toPdfDate } from "../printing/pdf";
 import type { PdfLineItem, PdfPage, PdfPathItem, PdfTextItem } from "../printing/pdf";
 import { objectLocalToWorld } from "../domain/geometry";
+import { boundsCenterM, getObjectBoundsM } from "../domain/bounds";
+import { getObjectDisplayLabel } from "../domain/labels";
+import { DEFAULT_LABEL_DISPLAY, resolveLabelDisplay, type LabelDisplay } from "../domain/display";
 import { worldToScreen, type Viewport } from "../rendering/viewport";
 import type { SheetLayout } from "../printing/sheetLayout";
 import { suggestedFileName } from "./projectFileActions";
@@ -57,6 +60,8 @@ export interface SheetContent {
   now: Date;
   vectorObjects?: readonly PlanObject[];
   vectorViewport?: Viewport;
+  /** The plan's default label settings; each object may still override them. */
+  labelDisplay?: LabelDisplay;
 }
 
 function rgb(hex: string | undefined, fallback: string): [number, number, number] {
@@ -97,7 +102,54 @@ function vectorGraphics(content: SheetContent): { paths: PdfPathItem[]; text: Pd
     const closed = object.type === "rectangle" || object.type === "polygon";
     paths.push({ commands: `${first.x} ${first.y} m ${points.slice(1).map((p) => `${p.x} ${p.y} l`).join(" ")}${closed ? " h" : ""}`, strokeRgb, fillRgb: closed ? fillRgb : undefined, widthPt, dashPt });
   }
+  // Labels, after every shape, so no fill can cover the text that names it.
+  for (const object of content.vectorObjects ?? []) {
+    if (object.type === "text" || object.type === "image") continue;
+    text.push(...labelText(object, content, point));
+  }
   return { paths, text };
+}
+
+/** Point size for an object's label on paper. Small enough to fit inside a stand, large enough to read at arm's length. */
+const LABEL_SIZE_PT = 6;
+/** Rough width of one character at `LABEL_SIZE_PT`, used only to centre a line — Helvetica averages about 0.5 em. */
+const LABEL_CHAR_WIDTH_PT = LABEL_SIZE_PT * 0.5;
+
+/**
+ * The lines an object writes on the printed sheet.
+ *
+ * The raster half of the export draws bitmaps only, so without this a
+ * PDF came out with every shape correctly placed and *nothing named* —
+ * which is most of what a plan is for. The text comes from the same
+ * `getObjectDisplayLabel` the screen uses, through the same display
+ * settings, so what prints is what was on screen.
+ *
+ * Lines are centred on the object's extent rather than hung off its
+ * anchor: a rotated rectangle's anchor is a corner somewhere out in the
+ * field, and the label belongs in the middle of the thing it names.
+ */
+function labelText(
+  object: PlanObject,
+  content: SheetContent,
+  point: (world: { xM: number; yM: number }) => { x: number; y: number },
+): PdfTextItem[] {
+  const display = resolveLabelDisplay(object, content.labelDisplay ?? DEFAULT_LABEL_DISPLAY);
+  const lines = getObjectDisplayLabel(object, display).split("\n").filter((line) => line.length > 0);
+  if (lines.length === 0) return [];
+
+  const bounds = getObjectBoundsM(object);
+  if (!bounds) return [];
+  const center = point(boundsCenterM(bounds));
+  // PDF y grows upward, so the first line sits above the centre and each
+  // following one steps down.
+  const firstBaseline = center.y + ((lines.length - 1) * LABEL_SIZE_PT) / 2;
+
+  return lines.map((line, index) => ({
+    text: line,
+    xPt: center.x - (line.length * LABEL_CHAR_WIDTH_PT) / 2,
+    yPt: firstBaseline - index * LABEL_SIZE_PT,
+    sizePt: LABEL_SIZE_PT,
+  }));
 }
 
 /** Lays out the frame, title block and scale bar around the drawing, and returns the finished PDF bytes. */

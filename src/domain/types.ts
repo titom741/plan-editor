@@ -18,6 +18,9 @@ export type IsoDateTime = string;
 /** Measurement units the project is authored in. Only meters for now. */
 export type Units = "m";
 
+import type { LabelDisplay } from "./display";
+export type { LabelDisplay };
+
 /** A point expressed in world (meter) coordinates. */
 export interface PointM {
   xM: Meters;
@@ -165,8 +168,10 @@ export interface PlanObjectBase {
   id: string;
   layerId: string;
   name: string;
-  /** Optional user-provided override. When absent, the UI derives a label from the object's geometry (see `domain/labels.ts`). */
+  /** Legacy free-text override kept for files written before KL-027; new plans use `display` instead. */
   label?: string;
+  /** Per-object override of what the label shows. Absent means "follow the project's setting". */
+  display?: LabelDisplay;
   /** Optional material-library reference used by schedules and quantity exports. */
   catalogId?: string;
   category?: string;
@@ -301,6 +306,8 @@ export interface Project {
   updatedAt: IsoDateTime;
   units: Units;
   calibration: Calibration;
+  /** What object labels show by default across the plan. Individual objects may override it. */
+  labelDisplay?: LabelDisplay;
   /** Optional WGS84 anchor for converting the local metric plan to/from GeoJSON. */
   georeference?: {
     crs: "EPSG:4326";

@@ -25,6 +25,7 @@ import type {
   BackgroundImage,
   Calibration,
   CalibrationSource,
+  LabelDisplay,
   Layer,
   PaperSize,
   PlanObject,
@@ -291,6 +292,17 @@ function readMeasurement(value: unknown, path: string): PlanObject["measurement"
   };
 }
 
+/** Label display settings, all four flags required once the object is present at all. */
+function readLabelDisplay(value: unknown, path: string): LabelDisplay {
+  const record = readRecord(value, path);
+  return {
+    name: readBoolean(record.name, `${path}.name`),
+    dimensions: readBoolean(record.dimensions, `${path}.dimensions`),
+    reference: readBoolean(record.reference, `${path}.reference`),
+    quantity: readBoolean(record.quantity, `${path}.quantity`),
+  };
+}
+
 function readObject(value: unknown, path: string): PlanObject {
   const record = readRecord(value, path);
   const base = {
@@ -301,6 +313,7 @@ function readObject(value: unknown, path: string): PlanObject {
     yM: readFiniteNumber(record.yM, `${path}.yM`),
     rotationDeg: readFiniteNumber(record.rotationDeg, `${path}.rotationDeg`),
     ...(record.label !== undefined ? { label: readString(record.label, `${path}.label`) } : {}),
+    ...(record.display !== undefined ? { display: readLabelDisplay(record.display, `${path}.display`) } : {}),
     ...(record.catalogId !== undefined ? { catalogId: readString(record.catalogId, `${path}.catalogId`) } : {}),
     ...(record.category !== undefined ? { category: readString(record.category, `${path}.category`) } : {}),
     ...(record.reference !== undefined ? { reference: readString(record.reference, `${path}.reference`) } : {}),
@@ -439,6 +452,9 @@ function readProject(value: unknown, path: string): Project {
     updatedAt: readString(record.updatedAt, `${path}.updatedAt`),
     units: "m",
     calibration: readCalibration(record.calibration, `${path}.calibration`),
+    ...(record.labelDisplay !== undefined
+      ? { labelDisplay: readLabelDisplay(record.labelDisplay, `${path}.labelDisplay`) }
+      : {}),
     ...(georeference ? { georeference } : {}),
     ...(collaboration ? { collaboration } : {}),
     background: readBackground(record.background, `${path}.background`),

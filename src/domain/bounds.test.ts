@@ -82,7 +82,9 @@ describe("getObjectBoundsM — other shapes", () => {
   });
 
   it("estime l'étendue réelle d'un texte au lieu de le réduire à son ancre", () => {
-    const text = createTextObject({ layerId: "l", name: "T", xM: 4, yM: 6, text: "Entrée pompiers" });
+    // The size is pinned rather than left to the factory default: this
+    // test is about the extent maths, not about what a new text starts at.
+    const text = createTextObject({ layerId: "l", name: "T", xM: 4, yM: 6, text: "Entrée pompiers", fontSizeM: 0.3 });
     const bounds = getObjectBoundsM(text);
     expect(bounds?.minXM).toBe(4);
     expect(bounds?.minYM).toBe(6);
