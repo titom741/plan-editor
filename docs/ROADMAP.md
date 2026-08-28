@@ -369,3 +369,14 @@ La calibration reste une propriété du plan mais redimensionne le fond sur
 lequel elle a été mesurée. Bibliothèque : matériels personnels
 (création, édition, suppression) et masquage des matériels intégrés,
 stockés par installation. Voir `docs/ARCHITECTURE.md`.
+
+## KL-030 — Subdivision des surfaces *(done)*
+
+« Subdiviser en stands… » sur un rectangle crée un vrai objet par case :
+nommé par référence de grille (Stand A1, A2…), sélectionnable, colorable,
+supprimable et compté dans la nomenclature. Colonnes, rangées, allée entre
+cases et retrait au pourtour ; la taille des cases est calculée en direct
+et le bouton se désactive dès que le découpage ne tient plus. La grille
+suit la rotation du parent. Une seule étape d'annulation pour l'ensemble.
+Voir `docs/ARCHITECTURE.md` pour les deux limites assumées (pas de
+groupement avec le parent, rectangles seulement).

@@ -840,7 +840,12 @@ export function PlanCanvas({
       )}
       <div className="canvas-status" role="status" aria-live="off">
         <span>{pointerWorld ? `X ${pointerWorld.xM.toFixed(2)} m · Y ${pointerWorld.yM.toFixed(2)} m` : "Pointeur hors du plan"}</span>
-        <span>{selectedIds.length > 0 ? `${selectedIds.length} sélectionné(s)` : "Aucune sélection"}</span>
+        {/*
+          Counts the objects that actually resolve, not the raw ids: after
+          an undo that removed them, the ids linger for a moment and the
+          bar would claim a selection the panels correctly show as empty.
+        */}
+        <span>{selectedObjects.length > 0 ? `${selectedObjects.length} sélectionné(s)` : "Aucune sélection"}</span>
         <span>{snapMarker ? `Accroché : ${{ grid: "grille", vertex: "sommet", center: "centre", midpoint: "milieu", intersection: "intersection", tangent: "tangente", "alignment-x": "guide vertical", "alignment-y": "guide horizontal", "alignment-xy": "guides croisés" }[snapMarker.kind]}` : snapEnabled ? "Magnétisme actif" : "Magnétisme inactif"}</span>
         <span>Calque : {activeLayerLabel}{activeLayerLocked ? " 🔒" : ""}</span>
       </div>

@@ -3,6 +3,7 @@ import { computeDefaultBackgroundPlacement, createBackgroundImage, cropRectFromM
 import { boundsCenterM, getBackgroundBoundsM, unionBounds, type BoundsM } from "../domain/bounds";
 import { DEFAULT_LABEL_DISPLAY, type LabelDisplay } from "../domain/display";
 import { clearGroup, createNamedGroup, distributeObjects, transformObjectAroundPivot } from "../domain/grouping";
+import { subdivideRectangle, type SubdivisionOptions } from "../domain/subdivision";
 import type { CatalogItem } from "../domain/catalog";
 import { duplicateObjects } from "../domain/clipboard";
 import { calibrationFromKnownDistance, calibrationFromKnownScale } from "../domain/calibration";
@@ -30,10 +31,11 @@ import {
   replaceBackground,
   moveBackground,
 } from "../domain/project";
-import type { BackgroundImage, ObjectStyle, PlanObjectPatch, PointM, Project } from "../domain/types";
+import type { BackgroundImage, ObjectStyle, PlanObjectPatch, PointM, Project, RectangleObject } from "../domain/types";
 import { DEFAULT_SCREEN_PIXELS_PER_METER, screenToWorld } from "../rendering/viewport";
 import { CalibrationDialog } from "./components/CalibrationDialog";
 import { DeleteLayerDialog, LayerStyleDialog } from "./components/LayerDialogs";
+import { SubdivideDialog } from "./components/SubdivideDialog";
 import { ExportDialog } from "./components/ExportDialog";
 import { LayersPanel } from "./components/LayersPanel";
 import { PlanCanvas } from "./components/PlanCanvas";
@@ -866,6 +868,32 @@ export default function Editor({
     commitChange((current) => ({ ...current, name, updatedAt: new Date().toISOString() }));
   }, [project.name, commitChange]);
 
+  /**
+   * Cutting a surface into stands. The object being subdivided is held in
+   * state rather than read from the selection when the dialog confirms:
+   * the plan can change under an open dialog, and the cells must be laid
+   * out against the rectangle the user was looking at.
+   */
+  const [subdividing, setSubdividing] = useState<RectangleObject | null>(null);
+
+  const handleRequestSubdivide = useCallback(() => {
+    if (selectedObject?.type === "rectangle") setSubdividing(selectedObject);
+  }, [selectedObject]);
+
+  const handleConfirmSubdivide = useCallback(
+    (options: SubdivisionOptions) => {
+      if (!subdividing) return;
+      const cells = subdivideRectangle(subdividing, options);
+      setSubdividing(null);
+      if (cells.length === 0) return;
+      // One undo step for the whole grid: undoing a subdivision has to
+      // take back the eighty stands it made, not one of them.
+      commitChange((current) => addObjects(current, cells));
+      selectOnly(cells.map((cell) => cell.id));
+    },
+    [subdividing, commitChange, selectOnly],
+  );
+
   // --- Commands ------------------------------------------------------------
 
   const [pinnedCommands, setPinnedCommands] = useState<CommandId[]>(() => loadPinnedCommands());
@@ -1070,6 +1098,7 @@ export default function Editor({
         onTransformSelection={handleTransformSelection}
         onDistributeSelection={handleDistributeSelection}
         onSaveComponent={handleSaveComponent}
+        onSubdivide={handleRequestSubdivide}
         collapsed={isCollapsed("properties")}
         onToggleCollapsed={() => toggleCollapsed("properties")}
       />
@@ -1096,6 +1125,13 @@ export default function Editor({
         <ScaleCalibrationDialog
           onConfirm={handleConfirmScaleCalibration}
           onCancel={() => closeDialog()}
+        />
+      )}
+      {subdividing && (
+        <SubdivideDialog
+          object={subdividing}
+          onConfirm={handleConfirmSubdivide}
+          onCancel={() => setSubdividing(null)}
         />
       )}
       {layerPrompt?.kind === "delete" && (

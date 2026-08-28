@@ -39,6 +39,8 @@ interface PropertiesPanelProps {
   onTransformSelection: (scale: number, rotationDeg: number) => void;
   onDistributeSelection: (axis: "x" | "y") => void;
   onSaveComponent: () => void;
+  /** Offered for rectangles only: a grid inside a polygon needs clipping, which is a different problem. */
+  onSubdivide: () => void;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
 }
@@ -132,6 +134,7 @@ export function PropertiesPanel({
   onTransformSelection,
   onDistributeSelection,
   onSaveComponent,
+  onSubdivide,
   collapsed = false,
   onToggleCollapsed,
 }: PropertiesPanelProps) {
@@ -568,6 +571,12 @@ export function PropertiesPanel({
               /* Rotates about the object's centre, like the handle does — typing an angle and dragging to it must not land in different places. */
               onCommit={(value) => applyPatch(rotateObjectToDeg(selected, value))}
             />
+          )}
+
+          {selected.type === "rectangle" && (
+            <button type="button" className="properties-panel__button" onClick={onSubdivide} disabled={isLocked}>
+              ▦ Subdiviser en stands…
+            </button>
           )}
 
           {getObjectDimensionSummary(selected) && (
