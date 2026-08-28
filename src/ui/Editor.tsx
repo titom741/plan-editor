@@ -44,6 +44,7 @@ import { ScaleCalibrationDialog } from "./components/ScaleCalibrationDialog";
 import { Toolbar } from "./components/Toolbar";
 import { ToolbarCustomizeDialog } from "./components/ToolbarCustomizeDialog";
 import { CommandMenu } from "./components/CommandMenu";
+import { DialogErrorFallback, ErrorBoundary } from "./components/ErrorBoundary";
 import { ToolsPanel } from "./components/ToolsPanel";
 import { ShortcutsDialog } from "./components/ShortcutsDialog";
 import { CommentsDialog } from "./components/CommentsDialog";
@@ -53,6 +54,12 @@ import { useProjectHistory } from "./hooks/useProjectHistory";
 import { useLayerActions } from "./hooks/useLayerActions";
 import { useClipboard } from "./hooks/useClipboard";
 import { useSelection } from "./hooks/useSelection";
+import {
+  loadCollapsedSections,
+  saveCollapsedSections,
+  toggleSection,
+  type PanelSectionId,
+} from "./panelSections";
 import { CSS_PIXELS_PER_INCH, useSheetExport } from "./hooks/useSheetExport";
 import { useViewport } from "./hooks/useViewport";
 import { describeParseError, downloadProjectFile, readProjectFile } from "./projectFileActions";
@@ -64,7 +71,6 @@ import {
   loadPinnedCommands,
   savePinnedCommands,
   togglePinnedCommand,
-  type CommandGroup,
   type CommandId,
 } from "./commands";
 import { deleteComponentTemplate, loadComponentTemplates, saveComponentTemplate, type ComponentTemplate } from "../persistence/componentStorage";
@@ -172,18 +178,24 @@ export default function Editor({
   const [openDialog, setOpenDialog] = useState<DialogId | null>(null);
   const closeDialog = useCallback(() => setOpenDialog(null), []);
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(() => loadShortcuts());
-  const [toolsCollapsed, setToolsCollapsed] = useState(false);
-  const [collapsedMenus, setCollapsedMenus] = useState<ReadonlySet<CommandGroup>>(new Set());
-  const toggleMenu = useCallback((group: CommandGroup) => {
-    setCollapsedMenus((current) => {
-      const next = new Set(current);
-      if (next.has(group)) next.delete(group);
-      else next.add(group);
-      return next;
-    });
+  // One set for every foldable side panel. Folding "Outils" used to hide
+  // the command menus with it, because they were nested inside its
+  // conditional; each section is now independent and the choice persists.
+  const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<PanelSectionId>>(
+    () => loadCollapsedSections(),
+  );
+  const isCollapsed = useCallback(
+    (id: PanelSectionId) => collapsedSections.has(id),
+    [collapsedSections],
+  );
+  const toggleCollapsed = useCallback((id: PanelSectionId) => {
+    setCollapsedSections((current) => saveCollapsedSections(toggleSection(current, id)));
   }, []);
-  const [propertiesCollapsed, setPropertiesCollapsed] = useState(false);
-  const [elementsCollapsed, setElementsCollapsed] = useState(false);
+  // A rail only narrows to its icon width once *everything* in it is
+  // folded; folding one section of three has to leave room for the two
+  // still open.
+  const railCollapsed = isCollapsed("tools") && isCollapsed("file") && isCollapsed("project");
+  const inspectorCollapsed = isCollapsed("properties") && isCollapsed("elements");
   const [componentTemplates, setComponentTemplates] = useState<ComponentTemplate[]>(() => loadComponentTemplates());
   /** Snapping is on by default: a plan is drawn to fit together, and the people who don't want it find the switch faster than the people who need it find its absence. */
   const [snapEnabled, setSnapEnabled] = useState(true);
@@ -841,7 +853,7 @@ export default function Editor({
   }, [effectiveLayerId, stageSize, viewport, commitChange, closeDialog, selectOnly]);
 
   return (
-    <div className={`app-layout${toolsCollapsed ? " tools-collapsed" : ""}${propertiesCollapsed ? " properties-collapsed" : ""}`}>
+    <div className={`app-layout${railCollapsed ? " tools-collapsed" : ""}${inspectorCollapsed ? " properties-collapsed" : ""}`}>
       <input
         ref={fileInputRef}
         type="file"
@@ -897,27 +909,23 @@ export default function Editor({
         gridLimitForced={project.background?.visible === true}
         labelDisplay={labelDisplay}
         onLabelDisplayChange={handleLabelDisplayChange}
-        collapsed={toolsCollapsed}
-        onToggleCollapsed={() => setToolsCollapsed((value) => !value)}
+        collapsed={isCollapsed("tools")}
+        onToggleCollapsed={() => toggleCollapsed("tools")}
       />
-      {!toolsCollapsed && (
-        <>
-          <CommandMenu
-            group="file"
-            onRun={runCommand}
-            pinnedIds={pinnedCommands}
-            collapsed={collapsedMenus.has("file")}
-            onToggleCollapsed={() => toggleMenu("file")}
-          />
-          <CommandMenu
-            group="project"
-            onRun={runCommand}
-            pinnedIds={pinnedCommands}
-            collapsed={collapsedMenus.has("project")}
-            onToggleCollapsed={() => toggleMenu("project")}
-          />
-        </>
-      )}
+      <CommandMenu
+        group="file"
+        onRun={runCommand}
+        pinnedIds={pinnedCommands}
+        collapsed={isCollapsed("file")}
+        onToggleCollapsed={() => toggleCollapsed("file")}
+      />
+      <CommandMenu
+        group="project"
+        onRun={runCommand}
+        pinnedIds={pinnedCommands}
+        collapsed={isCollapsed("project")}
+        onToggleCollapsed={() => toggleCollapsed("project")}
+      />
       </div>
       <PlanCanvas
         containerRef={containerRef}
@@ -982,16 +990,16 @@ export default function Editor({
         onTransformSelection={handleTransformSelection}
         onDistributeSelection={handleDistributeSelection}
         onSaveComponent={handleSaveComponent}
-        collapsed={propertiesCollapsed}
-        onToggleCollapsed={() => setPropertiesCollapsed((value) => !value)}
+        collapsed={isCollapsed("properties")}
+        onToggleCollapsed={() => toggleCollapsed("properties")}
       />
       <ElementsPanel
         layers={project.layers}
         objects={orderedObjects}
         selectedIds={selectedIds}
         onSelectObject={selectObject}
-        collapsed={elementsCollapsed}
-        onToggleCollapsed={() => setElementsCollapsed((value) => !value)}
+        collapsed={isCollapsed("elements")}
+        onToggleCollapsed={() => toggleCollapsed("elements")}
       />
       </div>
       {calibrationPoints && (
@@ -1071,12 +1079,33 @@ export default function Editor({
           onClose={() => closeDialog()}
         />
       )}
+      {/*
+        Each lazily-loaded dialog is behind a boundary of its own: a chunk
+        that fails to fetch — a stale build, a dropped connection — must
+        not take the editor, and the unsaved plan in it, down with it.
+      */}
+      <ErrorBoundary
+        fallback={(error, retry) => (
+          <DialogErrorFallback
+            error={error}
+            onRetry={retry}
+            // Closing has to clear the boundary as well as the dialog:
+            // leaving the captured error in place would make the *next*
+            // dialog open onto this same message.
+            onClose={() => {
+              retry();
+              closeDialog();
+            }}
+          />
+        )}
+      >
       <Suspense fallback={<div className="dialog-backdrop"><div className="dialog" role="status">Chargement…</div></div>}>
         {openDialog === "library" && <LibraryDialog onInsert={handleInsertCatalogItem} templates={componentTemplates} onInsertTemplate={handleInsertComponent} onDeleteTemplate={(id) => setComponentTemplates(deleteComponentTemplate(id))} onClose={() => closeDialog()} />}
         {openDialog === "schedule" && <ScheduleDialog project={project} objects={project.objects} onClose={() => closeDialog()} />}
         {openDialog === "projects" && <ProjectsDialog currentProject={project} onOpen={(nextProject) => { replaceDocument(nextProject); closeDialog(); }} onClose={() => closeDialog()} />}
         {openDialog === "exchange" && <ExchangeDialog project={project} objects={orderedObjects.filter((object) => visibleLayerIds.has(object.layerId))} selection={selectedObjects} targetLayerId={effectiveLayerId} onImportObjects={(objects) => { commitChange((current) => addObjects(current, objects)); selectOnly(objects.map((object) => object.id)); }} onSetGeoreference={(georeference) => commitChange((current) => ({ ...current, georeference, updatedAt: new Date().toISOString() }))} onClose={() => closeDialog()} />}
       </Suspense>
+      </ErrorBoundary>
       {openDialog === "customizeToolbar" && (
         <ToolbarCustomizeDialog
           pinnedIds={pinnedCommands}

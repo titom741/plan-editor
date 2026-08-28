@@ -17,8 +17,10 @@
 .app-layout.properties-collapsed { grid-template-columns: 220px 1fr 48px; }
 .app-layout.tools-collapsed.properties-collapsed { grid-template-columns: 48px 1fr 48px; }
 .panel__collapse { width: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
-.tools-panel.is-collapsed, .properties-panel.is-collapsed { padding-inline: .55rem; overflow: hidden; }
-.side-rail:has(.tools-panel.is-collapsed) .command-menu { padding-inline: .55rem; }
+.app-layout.tools-collapsed .tools-panel,
+.app-layout.tools-collapsed .command-menu,
+.app-layout.properties-collapsed .properties-panel,
+.app-layout.properties-collapsed .elements-panel { padding-inline: .55rem; overflow: hidden; }
 .canvas-accessible-list { position: absolute; z-index: 7; top: .5rem; left: .5rem; max-width: min(24rem, 70%); padding: .3rem .5rem; border: 1px solid rgba(148,163,184,.7); border-radius: 6px; background: rgba(255,255,255,.94); color: #334155; font-size: .75rem; }
 .canvas-accessible-list:not([open]) { opacity: .65; }
 .canvas-accessible-list ul { max-height: 12rem; overflow: auto; margin: .35rem 0 0; padding: 0; list-style: none; }
@@ -1058,4 +1060,59 @@
 
 .properties-panel__display .tools-panel__toggle input:disabled + span {
   opacity: 0.5;
+}
+
+/* Whole-editor failure: the plan is off the screen, so this has to be readable on its own. */
+.app-error {
+  max-width: 34rem;
+  margin: 4rem auto;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel, #fff);
+  color: var(--text-h);
+}
+
+.app-error h1 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.app-error p {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.app-error__detail {
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.15);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.app-error__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/*
+  A panel title carries both an icon and a name. The name is what you read
+  at full width — including when the section itself is folded. Only once
+  the whole rail is down to 48 px does the icon stand alone.
+*/
+.panel__title-icon {
+  display: none;
+}
+
+.app-layout.tools-collapsed .side-rail .panel__title-icon {
+  display: inline;
+  font-size: 1rem;
+}
+
+.app-layout.tools-collapsed .side-rail .panel__title-text {
+  display: none;
 }

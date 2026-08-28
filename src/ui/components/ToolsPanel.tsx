@@ -22,7 +22,7 @@ interface ToolsPanelProps {
 export function ToolsPanel({ activeToolId, onSelectTool, snapEnabled, onSnapEnabledChange, gridVisible, onGridVisibleChange, gridLimited, onGridLimitedChange, gridLimitForced = false, labelDisplay, onLabelDisplayChange, collapsed = false, onToggleCollapsed }: ToolsPanelProps) {
   return (
     <aside className={`tools-panel${collapsed ? " is-collapsed" : ""}`}>
-      <h2 className="panel__title"><button type="button" className="panel__collapse" onClick={onToggleCollapsed} aria-expanded={!collapsed} title={collapsed ? "Déplier les outils" : "Replier les outils"}>{collapsed ? "🛠" : "Outils ‹"}</button></h2>
+      <h2 className="panel__title"><button type="button" className="panel__collapse" onClick={onToggleCollapsed} aria-expanded={!collapsed} title={collapsed ? "Déplier les outils" : "Replier les outils"}><span className="panel__title-icon" aria-hidden="true">🛠</span><span className="panel__title-text">Outils {collapsed ? "›" : "‹"}</span></button></h2>
       {!collapsed && <>
       <ul className="tools-panel__list">
         {TOOLS.map((tool) => (

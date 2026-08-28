@@ -3,6 +3,7 @@ import { createDemoProject } from "../domain/project";
 import type { Project } from "../domain/types";
 import { loadAutosavedProject } from "../persistence/projectStorage";
 import { describeParseError } from "./projectFileActions";
+import { AppErrorFallback, ErrorBoundary } from "./components/ErrorBoundary";
 import "./App.css";
 
 const Editor = lazy(() => import("./Editor"));
@@ -79,11 +80,18 @@ export default function App() {
   }
 
   return (
-    <Suspense fallback={<div className="app-loading" role="status">Chargement de l’éditeur…</div>}><Editor
-      initialProject={restored.project}
-      autosaveEnabled
-      restoreNotice={notice}
-      onDismissRestoreNotice={() => setNotice(null)}
-    /></Suspense>
+    // The boundary wraps the Suspense, not the reverse: a code-split chunk
+    // that fails to load throws *from* Suspense, and a boundary inside it
+    // would never see it.
+    <ErrorBoundary fallback={(error, retry) => <AppErrorFallback error={error} onRetry={retry} />}>
+      <Suspense fallback={<div className="app-loading" role="status">Chargement de l’éditeur…</div>}>
+        <Editor
+          initialProject={restored.project}
+          autosaveEnabled
+          restoreNotice={notice}
+          onDismissRestoreNotice={() => setNotice(null)}
+        />
+      </Suspense>
+    </ErrorBoundary>
   );
 }

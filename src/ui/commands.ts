@@ -37,6 +37,12 @@ export const COMMAND_GROUP_LABELS: Record<CommandGroup, string> = {
   project: "Projet",
 };
 
+/** Shown in place of the name once a menu is folded to the rail's icon width. */
+export const COMMAND_GROUP_ICONS: Record<CommandGroup, string> = {
+  file: "📁",
+  project: "🧩",
+};
+
 export interface CommandDefinition {
   id: CommandId;
   /** Wording in the menu, where there is room for it. */

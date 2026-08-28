@@ -1,4 +1,4 @@
-import { COMMANDS, COMMAND_GROUP_LABELS, type CommandGroup, type CommandId } from "../commands";
+import { COMMANDS, COMMAND_GROUP_ICONS, COMMAND_GROUP_LABELS, type CommandGroup, type CommandId } from "../commands";
 
 interface CommandMenuProps {
   group: CommandGroup;
@@ -35,7 +35,15 @@ export function CommandMenu({ group, onRun, collapsed, onToggleCollapsed, pinned
           aria-expanded={!collapsed}
           title={collapsed ? `Déplier ${title}` : `Replier ${title}`}
         >
-          {title} {collapsed ? "›" : "‹"}
+          {/*
+            Both are always rendered; CSS drops the words only when the
+            *rail* is down to its 48 px icon width. A folded menu in a
+            full-width rail still has to say what it is.
+          */}
+          <span className="panel__title-icon" aria-hidden="true">{COMMAND_GROUP_ICONS[group]}</span>
+          <span className="panel__title-text">
+            {title} {collapsed ? "›" : "‹"}
+          </span>
         </button>
       </h2>
       {!collapsed && (

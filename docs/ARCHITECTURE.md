@@ -1096,3 +1096,40 @@ A line's length reaches the plan through the same `dimensions` switch as
 every other shape's size (KL-027): `getObjectDimensionSummary` already
 returns a polyline's length, so "show dimensions" and "show length" are
 one setting, not two.
+
+## Nothing may take the whole editor down (KL-026 fix)
+
+The app had **no error boundary at all**. React unmounts the entire tree
+on any render error, and this project lives in memory — so a single
+throw anywhere blanked the screen and took the plan with it.
+
+The case that surfaced it: the dialogs are code-split, so a chunk request
+that fails — a stale build after a deploy, a dropped connection, a proxy —
+throws from inside `Suspense` and blanks the app. Losing an afternoon's
+work because a menu entry couldn't be fetched is not an acceptable
+failure.
+
+Two boundaries now:
+
+- **Around the editor** (`App`), wrapping the `Suspense` rather than
+  sitting inside it — a boundary *inside* Suspense never sees a failed
+  chunk. Its fallback says the project is autosaved and offers a reload.
+- **Around the lazy dialogs** (`Editor`). The editor behind is intact, so
+  this one only explains and gets out of the way. Its "close" clears the
+  captured error as well as the dialog: leaving the error in place would
+  make the *next* dialog open onto the same message.
+
+## Folding is per-section, and it persists (KL-026 fix)
+
+Folding "Outils" used to hide the command menus with it, because they
+were nested inside its conditional. Each side section — tools, the two
+command menus, properties, elements — is now independent, and the set of
+folded ones is persisted (`kl-implantation/panels/v1`): a fold is a
+statement about how someone wants to work, and losing it on every reload
+would make folding pointless.
+
+A rail narrows to its 48 px icon width only once *everything* in it is
+folded; folding one section of three has to leave room for the two still
+open. Panel titles carry both an icon and a name, and CSS drops the name
+only at that icon width — a folded menu in a full-width rail still has to
+say what it is.
