@@ -78,15 +78,31 @@ function parseItem(value: unknown): CatalogItem | null {
         })
         .filter((point): point is { xM: number; yM: number } => point !== null)
     : undefined;
+  // A shape without its geometry is not an item to be repaired with
+  // defaults: inserting it would drop a silent 1 × 1 m placeholder on the
+  // plan carrying the user's own name and reference, which is worse than
+  // the item simply not being there.
+  const widthM = size("widthM");
+  const heightM = size("heightM");
+  const radiusM = size("radiusM");
+  const minimumPoints = shape === "polygon" ? 3 : 2;
+  const hasGeometry =
+    shape === "circle"
+      ? radiusM !== undefined
+      : shape === "rectangle"
+        ? widthM !== undefined && heightM !== undefined
+        : points !== undefined && points.length >= minimumPoints;
+  if (!hasGeometry) return null;
+
   return {
     id: record.id,
     name: record.name,
     category: typeof record.category === "string" ? record.category : "Personnel",
     reference: typeof record.reference === "string" ? record.reference : "",
     shape: shape as CatalogShape,
-    ...(size("widthM") !== undefined ? { widthM: size("widthM") } : {}),
-    ...(size("heightM") !== undefined ? { heightM: size("heightM") } : {}),
-    ...(size("radiusM") !== undefined ? { radiusM: size("radiusM") } : {}),
+    ...(widthM !== undefined ? { widthM } : {}),
+    ...(heightM !== undefined ? { heightM } : {}),
+    ...(radiusM !== undefined ? { radiusM } : {}),
     ...(points && points.length > 0 ? { pointsM: points } : {}),
     unit: typeof record.unit === "string" ? record.unit : "u",
     style: readStyle(record.style),

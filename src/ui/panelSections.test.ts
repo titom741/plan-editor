@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { installMemoryStorage } from "../testing/memoryStorage";
 import {
   DEFAULT_RAIL_SIZES,
   clampRailSize,
@@ -9,21 +10,6 @@ import {
   toggleSection,
   type PanelSectionId,
 } from "./panelSections";
-
-/** The test runner is plain Node — no DOM, so no `localStorage`. */
-function installMemoryStorage(): void {
-  const entries = new Map<string, string>();
-  globalThis.localStorage = {
-    get length() {
-      return entries.size;
-    },
-    clear: () => entries.clear(),
-    getItem: (key: string) => entries.get(key) ?? null,
-    key: (index: number) => [...entries.keys()][index] ?? null,
-    removeItem: (key: string) => entries.delete(key),
-    setItem: (key: string, value: string) => entries.set(key, value),
-  } as Storage;
-}
 
 const set = (...ids: PanelSectionId[]) => new Set<PanelSectionId>(ids);
 

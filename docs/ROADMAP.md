@@ -425,3 +425,35 @@ pour des informations déjà lisibles dans les panneaux, et le panneau
 Éléments de KL-026 remplace la liste avantageusement : mêmes boutons avec
 `aria-pressed`, mais groupés par calque sous un titre, avec un filtre et
 les dimensions de chaque objet.
+
+## KL-032 — Combler les trous de tests *(done)*
+
+Quatre modules sans fichier de test, choisis par le risque plutôt que par
+la taille : `domain/labels.ts`, `domain/snapping.ts`,
+`persistence/catalogStorage.ts` et `persistence/componentStorage.ts`.
+450 tests au total.
+
+`snapping.ts` était le vrai trou : le magnétisme décide où atterrit chaque
+point d'un plan, et rien ne le couvrait. Les tests fixent notamment la
+règle documentée — un point d'objet l'emporte sur une intersection de
+grille plus proche — et le fait qu'un guide d'alignement ne contraint
+qu'un axe en laissant l'autre exactement sous le curseur.
+
+Un défaut trouvé en écrivant les tests : `parseItem` acceptait une forme
+sans sa géométrie. Un rectangle sans dimensions se relisait, s'affichait
+en « 0 × 0 m » et s'insérait en placeholder 1 × 1 m portant le nom et la
+référence de l'utilisateur. Le stockage le refuse maintenant, comme le
+dit déjà son propre commentaire : une entrée cassée est écartée, pas
+réparée.
+
+`src/testing/memoryStorage.ts` remplace les `localStorage` en mémoire
+recopiés dans chaque fichier de test, et ajoute un stockage qui refuse
+toute écriture — le cas « navigation privée / quota plein » que ces
+modules affirment tolérer et que personne ne vérifiait.
+
+Reste ouvert : `persistence/projectStorage.ts` (371 lignes,
+l'autosauvegarde) est toujours sans test. Il parle à IndexedDB, absent de
+Node ; le couvrir demande soit une dépendance (`fake-indexeddb`), soit un
+faux maison réduit à la surface réellement utilisée. Et les hooks React
+restent non testés, faute d'un moteur de rendu de test que le projet
+évite volontairement.

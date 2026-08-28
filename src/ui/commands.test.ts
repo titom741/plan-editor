@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
+import { installMemoryStorage } from "../testing/memoryStorage";
 import {
   COMMANDS,
   DEFAULT_PINNED_COMMANDS,
@@ -41,25 +42,6 @@ describe("togglePinnedCommand", () => {
     expect(pinned).toEqual(["export", "library"]);
   });
 });
-
-/**
- * The test runner is plain Node — no DOM, and so no `localStorage`. A
- * minimal in-memory stand-in is enough here and keeps the suite free of a
- * jsdom dependency, which this project has deliberately avoided.
- */
-function installMemoryStorage(): void {
-  const entries = new Map<string, string>();
-  globalThis.localStorage = {
-    get length() {
-      return entries.size;
-    },
-    clear: () => entries.clear(),
-    getItem: (key: string) => entries.get(key) ?? null,
-    key: (index: number) => [...entries.keys()][index] ?? null,
-    removeItem: (key: string) => entries.delete(key),
-    setItem: (key: string, value: string) => entries.set(key, value),
-  } as Storage;
-}
 
 describe("loadPinnedCommands", () => {
   beforeEach(() => {
