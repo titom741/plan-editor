@@ -76,29 +76,46 @@ export function useSheetExport({
     [project.sheets],
   );
   const sheet = useMemo(
-    () => availableSheets.find((candidate) => candidate.id === activeSheetId) ?? availableSheets[0]!,
+    () =>
+      availableSheets.find((candidate) => candidate.id === activeSheetId) ?? availableSheets[0]!,
     [availableSheets, activeSheetId],
   );
   const contentBounds: BoundsM | null = useMemo(() => getProjectBoundsM(project), [project]);
-  const sheetLayout = useMemo(() => computeSheetLayout(sheet, contentBounds), [sheet, contentBounds]);
+  const sheetLayout = useMemo(
+    () => computeSheetLayout(sheet, contentBounds),
+    [sheet, contentBounds],
+  );
   /** During a tiled export the stage is sized to the tile being captured, not to the single-sheet layout. */
   const activePrintLayout = multiPageExport?.layouts[multiPageExport.index] ?? sheetLayout;
-  const printRaster: PrintRaster = useMemo(() => computePrintRaster(activePrintLayout), [activePrintLayout]);
+  const printRaster: PrintRaster = useMemo(
+    () => computePrintRaster(activePrintLayout),
+    [activePrintLayout],
+  );
   const labelDisplay = project.labelDisplay ?? DEFAULT_LABEL_DISPLAY;
 
   /** The shapes the PDF writer draws as vectors: everything visible that isn't a bitmap. */
   const vectorObjects = useMemo(
-    () => orderedObjects.filter((object) => visibleLayerIds.has(object.layerId) && object.type !== "image"),
+    () =>
+      orderedObjects.filter(
+        (object) => visibleLayerIds.has(object.layerId) && object.type !== "image",
+      ),
     [orderedObjects, visibleLayerIds],
   );
   /** The shapes the off-screen stage must rasterise. For a PNG that is everything; for a PDF, only what vectors can't express. */
   const rasterObjects = useMemo(
-    () => (pendingExport === "png" ? [...orderedObjects] : orderedObjects.filter((object) => object.type === "image")),
+    () =>
+      pendingExport === "png"
+        ? [...orderedObjects]
+        : orderedObjects.filter((object) => object.type === "image"),
     [pendingExport, orderedObjects],
   );
 
   const withSheets = useCallback(
-    (current: Project, sheets: Sheet[]): Project => ({ ...current, sheets, updatedAt: new Date().toISOString() }),
+    (current: Project, sheets: Sheet[]): Project => ({
+      ...current,
+      sheets,
+      updatedAt: new Date().toISOString(),
+    }),
     [],
   );
   /** The sheets to build on: the document's own, or the transient default the first edit makes real. */
@@ -237,7 +254,17 @@ export function useSheetExport({
       .catch((error: unknown) =>
         onError(`L'export a échoué : ${describe(error)}. Essayez un format de papier plus petit.`),
       );
-  }, [pendingExport, multiPageExport, project, sheet, activePrintLayout, printRaster, vectorObjects, labelDisplay, onError]);
+  }, [
+    pendingExport,
+    multiPageExport,
+    project,
+    sheet,
+    activePrintLayout,
+    printRaster,
+    vectorObjects,
+    labelDisplay,
+    onError,
+  ]);
 
   return {
     sheet,

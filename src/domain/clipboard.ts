@@ -41,7 +41,9 @@ export function duplicateObjects(
   return objects.map((object) => ({
     ...object,
     id: createId("obj"),
-    layerId: context.existingLayerIds.has(object.layerId) ? object.layerId : context.fallbackLayerId,
+    layerId: context.existingLayerIds.has(object.layerId)
+      ? object.layerId
+      : context.fallbackLayerId,
     xM: object.xM + context.offsetM.xM,
     yM: object.yM + context.offsetM.yM,
   }));

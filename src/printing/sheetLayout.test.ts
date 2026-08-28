@@ -1,10 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { ORIENTATIONS, PAPER_SIZE_ORDER, STANDARD_SCALE_DENOMINATORS, createSheet } from "../domain/sheets";
+import {
+  ORIENTATIONS,
+  PAPER_SIZE_ORDER,
+  STANDARD_SCALE_DENOMINATORS,
+  createSheet,
+} from "../domain/sheets";
 import { metersToPixels, worldToScreen } from "../rendering/viewport";
-import { MAX_EXPORT_PIXELS, chooseScaleBarLengthM, computePrintRaster, computeSheetLayout, computeTiledSheetLayouts } from "./sheetLayout";
+import {
+  MAX_EXPORT_PIXELS,
+  chooseScaleBarLengthM,
+  computePrintRaster,
+  computeSheetLayout,
+  computeTiledSheetLayouts,
+} from "./sheetLayout";
 import { mmToPt, ptToMm } from "./pdf";
 
-const a3Landscape = createSheet({ paperSize: "A3", orientation: "landscape", scaleDenominator: 200, marginMm: 10 });
+const a3Landscape = createSheet({
+  paperSize: "A3",
+  orientation: "landscape",
+  scaleDenominator: 200,
+  marginMm: 10,
+});
 
 describe("computeSheetLayout", () => {
   it("sizes the page to the paper, in points", () => {
@@ -24,7 +40,10 @@ describe("computeSheetLayout", () => {
   it("stacks the drawing above the title block, together filling the frame", () => {
     const layout = computeSheetLayout(a3Landscape, null);
     expect(layout.drawing.yPt).toBeCloseTo(layout.titleBlock.yPt + layout.titleBlock.heightPt, 6);
-    expect(layout.drawing.heightPt + layout.titleBlock.heightPt).toBeCloseTo(layout.frame.heightPt, 6);
+    expect(layout.drawing.heightPt + layout.titleBlock.heightPt).toBeCloseTo(
+      layout.frame.heightPt,
+      6,
+    );
   });
 
   it("reports the ground area the drawing covers at the sheet's scale", () => {
@@ -36,7 +55,12 @@ describe("computeSheetLayout", () => {
   });
 
   it("centres on the content, not the world origin — a plan drawn far from (0,0) still prints", () => {
-    const layout = computeSheetLayout(a3Landscape, { minXM: 1000, minYM: -500, maxXM: 1040, maxYM: -480 });
+    const layout = computeSheetLayout(a3Landscape, {
+      minXM: 1000,
+      minYM: -500,
+      maxXM: 1040,
+      maxYM: -480,
+    });
     expect(layout.drawingCenterM).toEqual({ xM: 1020, yM: -490 });
   });
 
@@ -95,11 +119,19 @@ describe("computePrintRaster", () => {
     const layout = computeSheetLayout(a3Landscape, null);
     const raster = computePrintRaster(layout, 150);
     // The whole 80 m the sheet covers must span exactly the raster width.
-    expect(metersToPixels(layout.drawingAreaM.widthM, raster.viewport)).toBeCloseTo(raster.pixelWidth, 6);
+    expect(metersToPixels(layout.drawingAreaM.widthM, raster.viewport)).toBeCloseTo(
+      raster.pixelWidth,
+      6,
+    );
   });
 
   it("puts the plan's centre at the centre of the raster", () => {
-    const layout = computeSheetLayout(a3Landscape, { minXM: 100, minYM: 200, maxXM: 140, maxYM: 220 });
+    const layout = computeSheetLayout(a3Landscape, {
+      minXM: 100,
+      minYM: 200,
+      maxXM: 140,
+      maxYM: 220,
+    });
     const raster = computePrintRaster(layout, 150);
     const centre = worldToScreen(layout.drawingCenterM, raster.viewport);
     expect(centre.x).toBeCloseTo(raster.pixelWidth / 2, 6);
@@ -118,17 +150,28 @@ describe("computePrintRaster", () => {
   });
 
   it("reduces the resolution rather than asking for a canvas the browser would refuse", () => {
-    const a0 = createSheet({ paperSize: "A0", orientation: "landscape", scaleDenominator: 500, marginMm: 10 });
+    const a0 = createSheet({
+      paperSize: "A0",
+      orientation: "landscape",
+      scaleDenominator: 500,
+      marginMm: 10,
+    });
     const layout = computeSheetLayout(a0, null);
     const raster = computePrintRaster(layout, 600);
     expect(raster.pixelWidth * raster.pixelHeight).toBeLessThanOrEqual(MAX_EXPORT_PIXELS);
     expect(raster.effectiveDpi).toBeLessThan(600);
     // Scale fidelity must survive the downgrade.
-    expect(metersToPixels(layout.drawingAreaM.widthM, raster.viewport)).toBeCloseTo(raster.pixelWidth, 6);
+    expect(metersToPixels(layout.drawingAreaM.widthM, raster.viewport)).toBeCloseTo(
+      raster.pixelWidth,
+      6,
+    );
   });
 
   it("leaves the resolution alone when it's already within the cap", () => {
-    const layout = computeSheetLayout(createSheet({ paperSize: "A4", orientation: "portrait" }), null);
+    const layout = computeSheetLayout(
+      createSheet({ paperSize: "A4", orientation: "portrait" }),
+      null,
+    );
     expect(computePrintRaster(layout, 150).effectiveDpi).toBe(150);
   });
 });
@@ -190,7 +233,10 @@ describe("title block layout", () => {
     for (const paperSize of PAPER_SIZE_ORDER) {
       for (const orientation of ORIENTATIONS) {
         for (const scaleDenominator of STANDARD_SCALE_DENOMINATORS) {
-          const layout = computeSheetLayout(createSheet({ paperSize, orientation, scaleDenominator }), null);
+          const layout = computeSheetLayout(
+            createSheet({ paperSize, orientation, scaleDenominator }),
+            null,
+          );
           expect(layout.scaleBar.xPt + layout.scaleBar.lengthPt).toBeLessThanOrEqual(
             layout.titleBlock.rightColumnXPt,
           );
@@ -200,7 +246,11 @@ describe("title block layout", () => {
   });
 
   it("still draws the bar at the length it claims after being fitted to the column", () => {
-    const a4Portrait = createSheet({ paperSize: "A4", orientation: "portrait", scaleDenominator: 500 });
+    const a4Portrait = createSheet({
+      paperSize: "A4",
+      orientation: "portrait",
+      scaleDenominator: 500,
+    });
     const layout = computeSheetLayout(a4Portrait, null);
     expect(ptToMm(layout.scaleBar.lengthPt)).toBeCloseTo((layout.scaleBar.lengthM * 1000) / 500, 6);
   });
@@ -225,8 +275,14 @@ describe("mmToPt sanity for the sheet", () => {
 
 describe("computeTiledSheetLayouts", () => {
   it("keeps a fitting plan on one page and splits a large plan", () => {
-    expect(computeTiledSheetLayouts(a3Landscape, { minXM: 0, minYM: 0, maxXM: 20, maxYM: 10 })).toHaveLength(1);
-    const pages = computeTiledSheetLayouts(a3Landscape, { minXM: 0, minYM: 0, maxXM: 200, maxYM: 100 }, 10);
+    expect(
+      computeTiledSheetLayouts(a3Landscape, { minXM: 0, minYM: 0, maxXM: 20, maxYM: 10 }),
+    ).toHaveLength(1);
+    const pages = computeTiledSheetLayouts(
+      a3Landscape,
+      { minXM: 0, minYM: 0, maxXM: 200, maxYM: 100 },
+      10,
+    );
     expect(pages.length).toBeGreaterThan(1);
     expect(pages[0]?.drawingCenterM).not.toEqual(pages.at(-1)?.drawingCenterM);
   });

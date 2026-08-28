@@ -46,8 +46,11 @@ export function DeleteLayerDialog({
       <form className="calibration-dialog" onSubmit={handleSubmit}>
         <h2 className="calibration-dialog__title">Supprimer le calque « {layer.name} »</h2>
         <p className="calibration-dialog__text">
-          Ce calque contient <strong>{objectCount} objet{objectCount > 1 ? "s" : ""}</strong>. Que
-          faut-il en faire ?
+          Ce calque contient{" "}
+          <strong>
+            {objectCount} objet{objectCount > 1 ? "s" : ""}
+          </strong>
+          . Que faut-il en faire ?
         </p>
         <label className="calibration-dialog__field calibration-dialog__field--inline">
           <input
@@ -87,10 +90,14 @@ export function DeleteLayerDialog({
           </button>
           <button
             type="submit"
-            className={mode === "delete" ? "properties-panel__delete" : "calibration-dialog__confirm"}
+            className={
+              mode === "delete" ? "properties-panel__delete" : "calibration-dialog__confirm"
+            }
             disabled={mode === "move" && !destinationLayerId}
           >
-            {mode === "delete" ? `Supprimer le calque et ses ${objectCount} objets` : "Supprimer le calque"}
+            {mode === "delete"
+              ? `Supprimer le calque et ses ${objectCount} objets`
+              : "Supprimer le calque"}
           </button>
         </div>
       </form>
@@ -119,7 +126,8 @@ export function LayerStyleDialog({ layer, onConfirm, onCancel }: LayerStyleDialo
       <form className="calibration-dialog" onSubmit={handleSubmit}>
         <h2 className="calibration-dialog__title">Style par défaut — « {layer.name} »</h2>
         <p className="calibration-dialog__text">
-          S&apos;applique aux objets créés ensuite sur ce calque ; les objets existants ne changent pas.
+          S&apos;applique aux objets créés ensuite sur ce calque ; les objets existants ne changent
+          pas.
         </p>
         <label className="calibration-dialog__field">
           <span>Remplissage</span>

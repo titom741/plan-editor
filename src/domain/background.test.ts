@@ -51,13 +51,26 @@ describe("createBackgroundImage", () => {
 
 describe("recadrage", () => {
   it("conserve l'échelle des pixels restants et déplace l'ancre", () => {
-    const background = createBackgroundImage({ url: "data:,", widthPx: 1000, heightPx: 500, xM: 10, yM: 20, widthM: 100, heightM: 50 });
+    const background = createBackgroundImage({
+      url: "data:,",
+      widthPx: 1000,
+      heightPx: 500,
+      xM: 10,
+      yM: 20,
+      widthM: 100,
+      heightM: 50,
+    });
     const patch = cropBackgroundByMargins(background, { left: 10, top: 20, right: 10, bottom: 20 });
     expect(patch.xM).toBeCloseTo(20, 9);
     expect(patch.yM).toBeCloseTo(30, 9);
     expect(patch.widthM).toBeCloseTo(80, 9);
     expect(patch.heightM).toBeCloseTo(30, 9);
-    expect(getBackgroundCropMargins({ ...background, ...patch })).toEqual({ left: 10, top: 20, right: 10, bottom: 20 });
+    expect(getBackgroundCropMargins({ ...background, ...patch })).toEqual({
+      left: 10,
+      top: 20,
+      right: 10,
+      bottom: 20,
+    });
   });
 });
 
@@ -75,7 +88,10 @@ describe("resizeBackgroundFromCorner", () => {
   const background = { xM: 10, yM: 10, widthPx: 2000, heightPx: 1000 }; // 2:1 aspect ratio
 
   it("preserves the source image's aspect ratio", () => {
-    const result = resizeBackgroundFromCorner(background, { xM: 60, yM: 999 /* ignored: only horizontal distance drives scale */ });
+    const result = resizeBackgroundFromCorner(background, {
+      xM: 60,
+      yM: 999 /* ignored: only horizontal distance drives scale */,
+    });
     expect(result.widthM).toBeCloseTo(50, 9);
     expect(result.heightM).toBeCloseTo(25, 9); // half of width, matching the 2:1 source aspect ratio
   });

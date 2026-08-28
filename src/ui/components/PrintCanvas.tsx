@@ -95,7 +95,16 @@ export function PrintCanvas({
           prints as a solid dark rectangle. Drawn here rather than left to
           the PDF so the PNG export gets the same treatment.
         */}
-        {!transparentBackground && <Rect x={0} y={0} width={pixelWidth} height={pixelHeight} fill="#ffffff" listening={false} />}
+        {!transparentBackground && (
+          <Rect
+            x={0}
+            y={0}
+            width={pixelWidth}
+            height={pixelHeight}
+            fill="#ffffff"
+            listening={false}
+          />
+        )}
         {visibleBackgrounds.map((background) => (
           <PrintBackground
             key={background.id}
@@ -219,7 +228,12 @@ function PrintBackground({
       contrast={background.contrast}
       crop={
         background.crop
-          ? { x: background.crop.xPx, y: background.crop.yPx, width: background.crop.widthPx, height: background.crop.heightPx }
+          ? {
+              x: background.crop.xPx,
+              y: background.crop.yPx,
+              width: background.crop.widthPx,
+              height: background.crop.heightPx,
+            }
           : undefined
       }
       listening={false}

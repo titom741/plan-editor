@@ -23,22 +23,41 @@ export function ScaleCalibrationDialog({ onConfirm, onCancel }: ScaleCalibration
       <form className="calibration-dialog" onSubmit={handleSubmit}>
         <h2 className="calibration-dialog__title">Calibrer par échelle connue</h2>
         <p className="calibration-dialog__text">
-          Indiquez le dénominateur de l’échelle imprimée et la résolution utilisée pour numériser ou exporter le plan.
+          Indiquez le dénominateur de l’échelle imprimée et la résolution utilisée pour numériser ou
+          exporter le plan.
         </p>
         <label className="calibration-dialog__field">
           <span>Échelle (1 : …)</span>
-          <input type="number" min={1} step={1} autoFocus value={scaleText} onChange={(event) => setScaleText(event.target.value)} />
+          <input
+            type="number"
+            min={1}
+            step={1}
+            autoFocus
+            value={scaleText}
+            onChange={(event) => setScaleText(event.target.value)}
+          />
         </label>
         <label className="calibration-dialog__field">
           <span>Résolution du document (DPI)</span>
-          <input type="number" min={1} step={1} value={dpiText} onChange={(event) => setDpiText(event.target.value)} />
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={dpiText}
+            onChange={(event) => setDpiText(event.target.value)}
+          />
         </label>
         <p className="properties-panel__hint">
-          Pour une photo ou une capture d’écran sans DPI fiable, utilisez plutôt la calibration par deux points.
+          Pour une photo ou une capture d’écran sans DPI fiable, utilisez plutôt la calibration par
+          deux points.
         </p>
         <div className="calibration-dialog__actions">
-          <button type="button" className="properties-panel__button" onClick={onCancel}>Annuler</button>
-          <button type="submit" className="calibration-dialog__confirm" disabled={!isValid}>Valider</button>
+          <button type="button" className="properties-panel__button" onClick={onCancel}>
+            Annuler
+          </button>
+          <button type="submit" className="calibration-dialog__confirm" disabled={!isValid}>
+            Valider
+          </button>
         </div>
       </form>
     </div>

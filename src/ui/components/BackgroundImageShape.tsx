@@ -70,7 +70,19 @@ export function BackgroundImageShape({
     if (!node) return;
     if (hasFilters) node.cache({ pixelRatio: 1 });
     else node.clearCache();
-  }, [image, background.brightness, background.contrast, background.grayscale, background.whiteRemoval, background.whiteThreshold, background.crop?.xPx, background.crop?.yPx, background.crop?.widthPx, background.crop?.heightPx, hasFilters]);
+  }, [
+    image,
+    background.brightness,
+    background.contrast,
+    background.grayscale,
+    background.whiteRemoval,
+    background.whiteThreshold,
+    background.crop?.xPx,
+    background.crop?.yPx,
+    background.crop?.widthPx,
+    background.crop?.heightPx,
+    hasFilters,
+  ]);
 
   const handleSelect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     // Outside the select tool (e.g. calibrating), let the click bubble up
@@ -142,7 +154,16 @@ export function BackgroundImageShape({
         filters={filters}
         brightness={background.brightness}
         contrast={background.contrast}
-        crop={background.crop ? { x: background.crop.xPx, y: background.crop.yPx, width: background.crop.widthPx, height: background.crop.heightPx } : undefined}
+        crop={
+          background.crop
+            ? {
+                x: background.crop.xPx,
+                y: background.crop.yPx,
+                width: background.crop.widthPx,
+                height: background.crop.heightPx,
+              }
+            : undefined
+        }
         stroke={selected ? HANDLE_STROKE : undefined}
         strokeWidth={selected ? 2 : 0}
         draggable={draggable}

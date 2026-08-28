@@ -1,5 +1,10 @@
 import { useRef, useState, type FormEvent } from "react";
-import { geoJsonToObjects, objectsToDxf, objectsToGeoJson, objectsToSvg } from "../../exchange/exportFormats";
+import {
+  geoJsonToObjects,
+  objectsToDxf,
+  objectsToGeoJson,
+  objectsToSvg,
+} from "../../exchange/exportFormats";
 import type { PlanObject, Project } from "../../domain/types";
 
 interface ExchangeDialogProps {
@@ -49,7 +54,9 @@ export function ExchangeDialog({
         onImportObjects(geoJsonToObjects(text, targetLayerId, project.georeference));
         setError(null);
       })
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
+      .catch((reason: unknown) =>
+        setError(reason instanceof Error ? reason.message : String(reason)),
+      );
   };
 
   return (
@@ -79,10 +86,16 @@ export function ExchangeDialog({
         </p>
 
         <div className="dialog__actions">
-          <button type="button" onClick={() => download(objectsToSvg(source), "image/svg+xml", `${baseFileName}.svg`)}>
+          <button
+            type="button"
+            onClick={() => download(objectsToSvg(source), "image/svg+xml", `${baseFileName}.svg`)}
+          >
             SVG
           </button>
-          <button type="button" onClick={() => download(objectsToDxf(source), "application/dxf", `${baseFileName}.dxf`)}>
+          <button
+            type="button"
+            onClick={() => download(objectsToDxf(source), "application/dxf", `${baseFileName}.dxf`)}
+          >
             DXF
           </button>
           <button
@@ -133,8 +146,9 @@ export function ExchangeDialog({
         />
         {error && <p className="export-dialog__warning">{error}</p>}
         <p className="properties-panel__hint">
-          DWG reste propriétaire : ouvrez le DXF dans AutoCAD, BricsCAD ou ODA File Converter. L’import
-          SVG/DXF complexe nécessite un moteur CAO externe ; GeoJSON est importé nativement.
+          DWG reste propriétaire : ouvrez le DXF dans AutoCAD, BricsCAD ou ODA File Converter.
+          L’import SVG/DXF complexe nécessite un moteur CAO externe ; GeoJSON est importé
+          nativement.
         </p>
       </section>
     </div>
@@ -176,15 +190,30 @@ function GeoreferenceForm({ georeference, onConfirm, onCancel }: GeoreferenceFor
     <form className="exchange-dialog__geo" onSubmit={handleSubmit}>
       <label className="calibration-dialog__field">
         <span>Longitude WGS84 de l’origine locale</span>
-        <input type="number" step="any" value={longitude} onChange={(event) => setLongitude(event.target.value)} />
+        <input
+          type="number"
+          step="any"
+          value={longitude}
+          onChange={(event) => setLongitude(event.target.value)}
+        />
       </label>
       <label className="calibration-dialog__field">
         <span>Latitude WGS84 de l’origine locale</span>
-        <input type="number" step="any" value={latitude} onChange={(event) => setLatitude(event.target.value)} />
+        <input
+          type="number"
+          step="any"
+          value={latitude}
+          onChange={(event) => setLatitude(event.target.value)}
+        />
       </label>
       <label className="calibration-dialog__field">
         <span>Rotation du plan vers l’est géographique (degrés)</span>
-        <input type="number" step="any" value={rotation} onChange={(event) => setRotation(event.target.value)} />
+        <input
+          type="number"
+          step="any"
+          value={rotation}
+          onChange={(event) => setRotation(event.target.value)}
+        />
       </label>
       <div className="dialog__actions">
         <button type="button" onClick={onCancel}>

@@ -1,4 +1,10 @@
-import { COMMANDS, COMMAND_GROUP_ICONS, COMMAND_GROUP_LABELS, type CommandGroup, type CommandId } from "../commands";
+import {
+  COMMANDS,
+  COMMAND_GROUP_ICONS,
+  COMMAND_GROUP_LABELS,
+  type CommandGroup,
+  type CommandId,
+} from "../commands";
 
 interface CommandMenuProps {
   group: CommandGroup;
@@ -20,7 +26,13 @@ interface CommandMenuProps {
  * Collapsed state is per-menu and lives in the parent, so a user who only
  * ever opens files can fold the rest away and keep the room for the plan.
  */
-export function CommandMenu({ group, onRun, collapsed, onToggleCollapsed, pinnedIds }: CommandMenuProps) {
+export function CommandMenu({
+  group,
+  onRun,
+  collapsed,
+  onToggleCollapsed,
+  pinnedIds,
+}: CommandMenuProps) {
   const commands = COMMANDS.filter((command) => command.group === group);
   const pinned = new Set(pinnedIds);
   const title = COMMAND_GROUP_LABELS[group];
@@ -40,7 +52,9 @@ export function CommandMenu({ group, onRun, collapsed, onToggleCollapsed, pinned
             *rail* is down to its 48 px icon width. A folded menu in a
             full-width rail still has to say what it is.
           */}
-          <span className="panel__title-icon" aria-hidden="true">{COMMAND_GROUP_ICONS[group]}</span>
+          <span className="panel__title-icon" aria-hidden="true">
+            {COMMAND_GROUP_ICONS[group]}
+          </span>
           <span className="panel__title-text">
             {title} {collapsed ? "›" : "‹"}
           </span>
@@ -59,7 +73,11 @@ export function CommandMenu({ group, onRun, collapsed, onToggleCollapsed, pinned
                 <span aria-hidden="true">{command.icon}</span>
                 <span className="command-menu__label">{command.label}</span>
                 {pinned.has(command.id) && (
-                  <span className="command-menu__pin" title="Épinglé dans la barre du haut" aria-label="épinglé">
+                  <span
+                    className="command-menu__pin"
+                    title="Épinglé dans la barre du haut"
+                    aria-label="épinglé"
+                  >
                     📌
                   </span>
                 )}

@@ -16,7 +16,13 @@ describe("buildSheetPdf title block", () => {
     const project = createEmptyProject({ name: "Festival", location: "Nantes" });
     const sheet = createSheet({
       name: "Sécurité",
-      titleBlock: { client: "Ville de Nantes", author: "Léa", revision: "C", planNumber: "SEC-12", comments: "Accès nord" },
+      titleBlock: {
+        client: "Ville de Nantes",
+        author: "Léa",
+        revision: "C",
+        planNumber: "SEC-12",
+        comments: "Accès nord",
+      },
     });
     const layout = computeSheetLayout(sheet, null);
     const bytes = buildSheetPdf({
@@ -74,14 +80,19 @@ describe("buildSheetPdf object labels (KL-027)", () => {
   });
 
   it("honours the plan's label settings, so what prints is what was on screen", () => {
-    const text = latin1(sheetWith([crate], { name: true, dimensions: false, reference: true, quantity: false }));
+    const text = latin1(
+      sheetWith([crate], { name: true, dimensions: false, reference: true, quantity: false }),
+    );
     expect(text).toContain("Chapiteau");
     expect(text).toContain("CHP-10X5");
     expect(text).not.toContain("10 \xD7 5 m");
   });
 
   it("lets one object override the plan and stay silent", () => {
-    const quiet = { ...crate, display: { name: false, dimensions: false, reference: false, quantity: false } };
+    const quiet = {
+      ...crate,
+      display: { name: false, dimensions: false, reference: false, quantity: false },
+    };
     expect(latin1(sheetWith([quiet]))).not.toContain("Chapiteau");
   });
 });

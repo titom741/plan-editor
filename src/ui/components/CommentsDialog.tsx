@@ -28,7 +28,12 @@ interface CommentsDialogProps {
  * on site. They travel inside the project file, so they reach whoever
  * opens it next; there is no server, so they never sync live.
  */
-export function CommentsDialog({ project, selectedObjectId, onChange, onClose }: CommentsDialogProps) {
+export function CommentsDialog({
+  project,
+  selectedObjectId,
+  onChange,
+  onClose,
+}: CommentsDialogProps) {
   const comments = project.collaboration?.comments ?? [];
   const [text, setText] = useState("");
   const [author, setAuthor] = useState(readStoredAuthor);
@@ -87,7 +92,9 @@ export function CommentsDialog({ project, selectedObjectId, onChange, onClose }:
           <label className="calibration-dialog__field">
             <span>
               Nouveau commentaire
-              {selectedObjectId ? ` sur « ${objectNames.get(selectedObjectId) ?? "la sélection"} »` : ""}
+              {selectedObjectId
+                ? ` sur « ${objectNames.get(selectedObjectId) ?? "la sélection"} »`
+                : ""}
             </span>
             <textarea rows={3} value={text} onChange={(event) => setText(event.target.value)} />
           </label>
@@ -111,7 +118,9 @@ export function CommentsDialog({ project, selectedObjectId, onChange, onClose }:
                 <div>
                   <strong>{comment.author}</strong> ·{" "}
                   {new Date(comment.createdAt).toLocaleString("fr-FR")}
-                  {comment.objectId && <small> · {objectNames.get(comment.objectId) ?? "objet supprimé"}</small>}
+                  {comment.objectId && (
+                    <small> · {objectNames.get(comment.objectId) ?? "objet supprimé"}</small>
+                  )}
                   <p className={comment.resolved ? "comment-resolved" : ""}>{comment.text}</p>
                 </div>
                 <button type="button" onClick={() => toggleResolved(comment.id)}>
@@ -119,7 +128,9 @@ export function CommentsDialog({ project, selectedObjectId, onChange, onClose }:
                 </button>
                 <button
                   type="button"
-                  onClick={() => onChange(comments.filter((candidate) => candidate.id !== comment.id))}
+                  onClick={() =>
+                    onChange(comments.filter((candidate) => candidate.id !== comment.id))
+                  }
                 >
                   Supprimer
                 </button>
@@ -129,8 +140,8 @@ export function CommentsDialog({ project, selectedObjectId, onChange, onClose }:
         )}
 
         <p className="properties-panel__hint">
-          Ces commentaires sont inclus dans le fichier KL et les versions locales. L’édition simultanée
-          nécessite un serveur de synchronisation.
+          Ces commentaires sont inclus dans le fichier KL et les versions locales. L’édition
+          simultanée nécessite un serveur de synchronisation.
         </p>
       </section>
     </div>

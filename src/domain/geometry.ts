@@ -42,16 +42,20 @@ export function constrainPointAngleM(start: PointM, end: PointM, stepDeg = 15): 
   const angle = Math.atan2(vector.yM, vector.xM);
   const step = degToRad(stepDeg);
   const constrained = Math.round(angle / step) * step;
-  return { xM: start.xM + Math.cos(constrained) * length, yM: start.yM + Math.sin(constrained) * length };
+  return {
+    xM: start.xM + Math.cos(constrained) * length,
+    yM: start.yM + Math.sin(constrained) * length,
+  };
 }
 
 /** Tangency points from an external point to a circle; empty inside/on it. */
 export function tangentPointsToCircleM(origin: PointM, center: PointM, radiusM: number): PointM[] {
-  const dx = origin.xM - center.xM; const dy = origin.yM - center.yM;
+  const dx = origin.xM - center.xM;
+  const dy = origin.yM - center.yM;
   const distanceSquared = dx * dx + dy * dy;
   if (!(radiusM > 0) || distanceSquared <= radiusM * radiusM) return [];
-  const base = radiusM * radiusM / distanceSquared;
-  const offset = radiusM * Math.sqrt(distanceSquared - radiusM * radiusM) / distanceSquared;
+  const base = (radiusM * radiusM) / distanceSquared;
+  const offset = (radiusM * Math.sqrt(distanceSquared - radiusM * radiusM)) / distanceSquared;
   return [
     { xM: center.xM + base * dx - offset * dy, yM: center.yM + base * dy + offset * dx },
     { xM: center.xM + base * dx + offset * dy, yM: center.yM + base * dy - offset * dx },
@@ -118,7 +122,16 @@ export function objectLocalToWorld(
 export type ResizeHandleId = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
 /** All eight handles, clockwise from the top-left. */
-export const RESIZE_HANDLE_IDS: readonly ResizeHandleId[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+export const RESIZE_HANDLE_IDS: readonly ResizeHandleId[] = [
+  "nw",
+  "n",
+  "ne",
+  "e",
+  "se",
+  "s",
+  "sw",
+  "w",
+];
 
 /**
  * Where each handle sits in the rectangle's own frame, as a fraction of
@@ -205,7 +218,12 @@ export function resizeRectangleFromHandle(
     const drivesHeight = unit.v !== 0.5;
     const widthScale = widthM / object.widthM;
     const heightScale = heightM / object.heightM;
-    let scale = drivesWidth && drivesHeight ? Math.max(widthScale, heightScale) : drivesWidth ? widthScale : heightScale;
+    let scale =
+      drivesWidth && drivesHeight
+        ? Math.max(widthScale, heightScale)
+        : drivesWidth
+          ? widthScale
+          : heightScale;
     // Clamping the *scale* rather than each side keeps the ratio exact at
     // the minimum size — clamping the sides independently would quietly
     // distort the shape the modifier exists to protect.
@@ -247,7 +265,10 @@ export function getCircleHandleWorld(
   handle: CircleHandleId,
 ): PointM {
   const direction = CIRCLE_HANDLE_DIRECTION[handle];
-  return { xM: object.xM + direction.xM * object.radiusM, yM: object.yM + direction.yM * object.radiusM };
+  return {
+    xM: object.xM + direction.xM * object.radiusM,
+    yM: object.yM + direction.yM * object.radiusM,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -283,10 +304,16 @@ export function getVertexWorld(object: VertexGeometry, index: number): PointM | 
  * and make the shape swim; the anchor is just the local origin, and the
  * model has never required a vertex to sit on it.
  */
-export function moveVertexTo(object: VertexGeometry, index: number, pointerWorld: PointM): { pointsM: PointM[] } | null {
+export function moveVertexTo(
+  object: VertexGeometry,
+  index: number,
+  pointerWorld: PointM,
+): { pointsM: PointM[] } | null {
   if (!object.pointsM[index]) return null;
   const local = worldToObjectLocal(object, pointerWorld);
-  const pointsM = object.pointsM.map((point, i) => (i === index ? { xM: local.xM, yM: local.yM } : point));
+  const pointsM = object.pointsM.map((point, i) =>
+    i === index ? { xM: local.xM, yM: local.yM } : point,
+  );
   return { pointsM };
 }
 
@@ -298,7 +325,11 @@ export function getSegmentCount(object: VertexGeometry, closed: boolean): number
 }
 
 /** World midpoint of segment `index` (the segment leaving vertex `index`), or `null` if there is no such segment. */
-export function getSegmentMidpointWorld(object: VertexGeometry, index: number, closed: boolean): PointM | null {
+export function getSegmentMidpointWorld(
+  object: VertexGeometry,
+  index: number,
+  closed: boolean,
+): PointM | null {
   if (index < 0 || index >= getSegmentCount(object, closed)) return null;
   const start = object.pointsM[index];
   const end = object.pointsM[(index + 1) % object.pointsM.length];
@@ -307,7 +338,11 @@ export function getSegmentMidpointWorld(object: VertexGeometry, index: number, c
 }
 
 /** Inserts a new vertex just after `index` — i.e. splits the segment leaving it — at `pointerWorld`. */
-export function insertVertexAfter(object: VertexGeometry, index: number, pointerWorld: PointM): { pointsM: PointM[] } {
+export function insertVertexAfter(
+  object: VertexGeometry,
+  index: number,
+  pointerWorld: PointM,
+): { pointsM: PointM[] } {
   const local = worldToObjectLocal(object, pointerWorld);
   const pointsM = [...object.pointsM];
   pointsM.splice(index + 1, 0, { xM: local.xM, yM: local.yM });
@@ -315,7 +350,11 @@ export function insertVertexAfter(object: VertexGeometry, index: number, pointer
 }
 
 /** Removes vertex `index`, or returns `null` when doing so would leave fewer than `minimumPoints` — the caller then simply refuses, rather than producing a degenerate object. */
-export function removeVertexAt(object: VertexGeometry, index: number, minimumPoints: number): { pointsM: PointM[] } | null {
+export function removeVertexAt(
+  object: VertexGeometry,
+  index: number,
+  minimumPoints: number,
+): { pointsM: PointM[] } | null {
   if (!object.pointsM[index]) return null;
   if (object.pointsM.length <= minimumPoints) return null;
   return { pointsM: object.pointsM.filter((_, i) => i !== index) };
@@ -335,7 +374,11 @@ export function resizeRectangleFromCorner(
 ): { widthM: number; heightM: number } {
   // Width/height are irrelevant for "se": its fixed opposite handle is the
   // anchor itself, so they never enter the computation.
-  const resized = resizeRectangleFromHandle({ ...object, widthM: 0, heightM: 0 }, "se", pointerWorld);
+  const resized = resizeRectangleFromHandle(
+    { ...object, widthM: 0, heightM: 0 },
+    "se",
+    pointerWorld,
+  );
   return { widthM: resized.widthM, heightM: resized.heightM };
 }
 
@@ -360,7 +403,9 @@ export function resizeCircleFromHandle(
 }
 
 /** World position of a circle's eastern resize handle — the one that existed before KL-004 added the other three. */
-export function getCircleResizeHandleWorld(object: Pick<CircleObject, "xM" | "yM" | "radiusM">): PointM {
+export function getCircleResizeHandleWorld(
+  object: Pick<CircleObject, "xM" | "yM" | "radiusM">,
+): PointM {
   return getCircleHandleWorld(object, "e");
 }
 
@@ -408,7 +453,10 @@ export function getLocalCenter(object: PlanObject): VectorM {
     case "polygon": {
       const first = object.pointsM[0];
       if (!first) return { xM: 0, yM: 0 };
-      let minX = first.xM, maxX = first.xM, minY = first.yM, maxY = first.yM;
+      let minX = first.xM,
+        maxX = first.xM,
+        minY = first.yM,
+        maxY = first.yM;
       for (const point of object.pointsM) {
         if (point.xM < minX) minX = point.xM;
         if (point.xM > maxX) maxX = point.xM;

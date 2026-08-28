@@ -180,11 +180,7 @@ export function getCommand(id: CommandId): CommandDefinition | undefined {
  * actions a plan is actually made with, rather than everything that
  * exists.
  */
-export const DEFAULT_PINNED_COMMANDS: readonly CommandId[] = [
-  "saveFile",
-  "export",
-  "library",
-];
+export const DEFAULT_PINNED_COMMANDS: readonly CommandId[] = ["saveFile", "export", "library"];
 
 const STORAGE_KEY = "kl-implantation/toolbar/v1";
 
@@ -199,7 +195,9 @@ export function loadPinnedCommands(): CommandId[] {
     if (stored === null) return [...DEFAULT_PINNED_COMMANDS];
     const parsed: unknown = JSON.parse(stored);
     if (!Array.isArray(parsed)) return [...DEFAULT_PINNED_COMMANDS];
-    return parsed.filter((id): id is CommandId => typeof id === "string" && COMMANDS_BY_ID.has(id as CommandId));
+    return parsed.filter(
+      (id): id is CommandId => typeof id === "string" && COMMANDS_BY_ID.has(id as CommandId),
+    );
   } catch {
     return [...DEFAULT_PINNED_COMMANDS];
   }

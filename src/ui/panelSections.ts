@@ -36,8 +36,9 @@ export function loadCollapsedSections(): Set<PanelSectionId> {
     // Unknown ids are dropped: a preference written by a later build must
     // not fold away a panel this one cannot unfold.
     return new Set(
-      parsed.filter((id): id is PanelSectionId =>
-        typeof id === "string" && (PANEL_SECTION_IDS as readonly string[]).includes(id),
+      parsed.filter(
+        (id): id is PanelSectionId =>
+          typeof id === "string" && (PANEL_SECTION_IDS as readonly string[]).includes(id),
       ),
     );
   } catch {

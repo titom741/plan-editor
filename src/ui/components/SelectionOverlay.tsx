@@ -104,7 +104,14 @@ interface OverlayHandle {
  * *world* position, never by accumulating pixel deltas. That's what keeps
  * editing drift-free across zoom changes.
  */
-export function SelectionOverlay({ object, viewport, onBeginEdit, onLiveUpdate, onCommit, snapWorld }: SelectionOverlayProps) {
+export function SelectionOverlay({
+  object,
+  viewport,
+  onBeginEdit,
+  onLiveUpdate,
+  onCommit,
+  snapWorld,
+}: SelectionOverlayProps) {
   const gapM = ROTATE_HANDLE_GAP_PX / (viewport.basePixelsPerMeter * viewport.zoom);
   const anchorWorld: PointM = { xM: object.xM, yM: object.yM };
   const handles: OverlayHandle[] = [];
@@ -127,7 +134,9 @@ export function SelectionOverlay({ object, viewport, onBeginEdit, onLiveUpdate, 
     cursor: "grab",
     onDragMove: (pointerWorld, modifiers) => {
       const rawRotation = computeRotationFromPointer(centerWorld, pointerWorld);
-      const rotationDeg = modifiers.shiftKey ? (Math.round(rawRotation / 15) * 15) % 360 : rawRotation;
+      const rotationDeg = modifiers.shiftKey
+        ? (Math.round(rawRotation / 15) * 15) % 360
+        : rawRotation;
       onLiveUpdate(rotateObjectToDeg(object, rotationDeg));
     },
   });
@@ -142,7 +151,9 @@ export function SelectionOverlay({ object, viewport, onBeginEdit, onLiveUpdate, 
         cursor: resizeCursorFor(handle, object.rotationDeg),
         onDragMove: (pointerWorld, modifiers) =>
           onLiveUpdate(
-            resizeRectangleFromHandle(object, handle, pointerWorld, { keepAspectRatio: modifiers.shiftKey }),
+            resizeRectangleFromHandle(object, handle, pointerWorld, {
+              keepAspectRatio: modifiers.shiftKey,
+            }),
           ),
       });
     }
@@ -311,7 +322,13 @@ export function SelectionOverlay({ object, viewport, onBeginEdit, onLiveUpdate, 
  * nudging, duplicating and deleting all work on the group; scaling one is
  * left for a later mission rather than guessed at here.
  */
-export function MultiSelectionOutline({ bounds, viewport }: { bounds: BoundsM; viewport: Viewport }) {
+export function MultiSelectionOutline({
+  bounds,
+  viewport,
+}: {
+  bounds: BoundsM;
+  viewport: Viewport;
+}) {
   const topLeft = worldToScreen({ xM: bounds.minXM, yM: bounds.minYM }, viewport);
   const bottomRight = worldToScreen({ xM: bounds.maxXM, yM: bounds.maxYM }, viewport);
   return (

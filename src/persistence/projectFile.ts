@@ -80,7 +80,10 @@ export type ParseResult = { ok: true; file: ProjectFile } | { ok: false; error: 
 // Writing
 // ---------------------------------------------------------------------------
 
-export function toProjectFile(project: Project, savedAt: string = new Date().toISOString()): ProjectFile {
+export function toProjectFile(
+  project: Project,
+  savedAt: string = new Date().toISOString(),
+): ProjectFile {
   return { kind: FILE_KIND, schemaVersion: SCHEMA_VERSION, savedAt, project };
 }
 
@@ -192,11 +195,16 @@ function readBackground(value: unknown, path: string): Background {
   if (record.kind !== "image") fail(`${path}.kind`);
   const opacity = readFiniteNumber(record.opacity, `${path}.opacity`);
   if (opacity < 0 || opacity > 1) fail(`${path}.opacity`);
-  const brightness = record.brightness === undefined ? 0 : readFiniteNumber(record.brightness, `${path}.brightness`);
+  const brightness =
+    record.brightness === undefined ? 0 : readFiniteNumber(record.brightness, `${path}.brightness`);
   if (brightness < -1 || brightness > 1) fail(`${path}.brightness`);
-  const contrast = record.contrast === undefined ? 0 : readFiniteNumber(record.contrast, `${path}.contrast`);
+  const contrast =
+    record.contrast === undefined ? 0 : readFiniteNumber(record.contrast, `${path}.contrast`);
   if (contrast < -100 || contrast > 100) fail(`${path}.contrast`);
-  const whiteThreshold = record.whiteThreshold === undefined ? 245 : readFiniteNumber(record.whiteThreshold, `${path}.whiteThreshold`);
+  const whiteThreshold =
+    record.whiteThreshold === undefined
+      ? 245
+      : readFiniteNumber(record.whiteThreshold, `${path}.whiteThreshold`);
   if (whiteThreshold < 0 || whiteThreshold > 255) fail(`${path}.whiteThreshold`);
   let crop: BackgroundImage["crop"];
   if (record.crop !== undefined) {
@@ -221,12 +229,19 @@ function readBackground(value: unknown, path: string): Background {
     yM: readFiniteNumber(record.yM, `${path}.yM`),
     widthM: readPositiveNumber(record.widthM, `${path}.widthM`),
     heightM: readPositiveNumber(record.heightM, `${path}.heightM`),
-    rotationDeg: record.rotationDeg === undefined ? 0 : readFiniteNumber(record.rotationDeg, `${path}.rotationDeg`),
+    rotationDeg:
+      record.rotationDeg === undefined
+        ? 0
+        : readFiniteNumber(record.rotationDeg, `${path}.rotationDeg`),
     opacity,
     brightness,
     contrast,
-    grayscale: record.grayscale === undefined ? false : readBoolean(record.grayscale, `${path}.grayscale`),
-    whiteRemoval: record.whiteRemoval === undefined ? false : readBoolean(record.whiteRemoval, `${path}.whiteRemoval`),
+    grayscale:
+      record.grayscale === undefined ? false : readBoolean(record.grayscale, `${path}.grayscale`),
+    whiteRemoval:
+      record.whiteRemoval === undefined
+        ? false
+        : readBoolean(record.whiteRemoval, `${path}.whiteRemoval`),
     whiteThreshold,
     ...(crop ? { crop } : {}),
     visible: readBoolean(record.visible, `${path}.visible`),
@@ -265,7 +280,9 @@ function readLayer(value: unknown, path: string): Layer {
     locked: readBoolean(record.locked, `${path}.locked`),
     order: readFiniteNumber(record.order, `${path}.order`),
     ...(record.folder !== undefined ? { folder: readString(record.folder, `${path}.folder`) } : {}),
-    ...(record.defaultStyle !== undefined ? { defaultStyle: readStyle(record.defaultStyle, `${path}.defaultStyle`) } : {}),
+    ...(record.defaultStyle !== undefined
+      ? { defaultStyle: readStyle(record.defaultStyle, `${path}.defaultStyle`) }
+      : {}),
   };
 }
 
@@ -288,11 +305,19 @@ function readStyle(value: unknown, path: string): PlanObject["style"] {
     if (dash !== "solid" && dash !== "dashed" && dash !== "dotted") fail(`${path}.dash`);
     style.dash = dash;
   }
-  if (record.arrowStart !== undefined) style.arrowStart = readBoolean(record.arrowStart, `${path}.arrowStart`);
-  if (record.arrowEnd !== undefined) style.arrowEnd = readBoolean(record.arrowEnd, `${path}.arrowEnd`);
+  if (record.arrowStart !== undefined)
+    style.arrowStart = readBoolean(record.arrowStart, `${path}.arrowStart`);
+  if (record.arrowEnd !== undefined)
+    style.arrowEnd = readBoolean(record.arrowEnd, `${path}.arrowEnd`);
   if (record.fontFamily !== undefined) {
     const value = readString(record.fontFamily, `${path}.fontFamily`);
-    if (value !== "Arial" && value !== "Helvetica" && value !== "Georgia" && value !== "Courier New") fail(`${path}.fontFamily`);
+    if (
+      value !== "Arial" &&
+      value !== "Helvetica" &&
+      value !== "Georgia" &&
+      value !== "Courier New"
+    )
+      fail(`${path}.fontFamily`);
     style.fontFamily = value;
   }
   if (record.fontWeight !== undefined) {
@@ -320,7 +345,9 @@ function readMeasurement(value: unknown, path: string): PlanObject["measurement"
   if (kind !== "length" && kind !== "angle" && kind !== "area") fail(`${path}.kind`);
   return {
     kind,
-    ...(record.showSegments !== undefined ? { showSegments: readBoolean(record.showSegments, `${path}.showSegments`) } : {}),
+    ...(record.showSegments !== undefined
+      ? { showSegments: readBoolean(record.showSegments, `${path}.showSegments`) }
+      : {}),
   };
 }
 
@@ -345,16 +372,32 @@ function readObject(value: unknown, path: string): PlanObject {
     yM: readFiniteNumber(record.yM, `${path}.yM`),
     rotationDeg: readFiniteNumber(record.rotationDeg, `${path}.rotationDeg`),
     ...(record.label !== undefined ? { label: readString(record.label, `${path}.label`) } : {}),
-    ...(record.display !== undefined ? { display: readLabelDisplay(record.display, `${path}.display`) } : {}),
-    ...(record.catalogId !== undefined ? { catalogId: readString(record.catalogId, `${path}.catalogId`) } : {}),
-    ...(record.category !== undefined ? { category: readString(record.category, `${path}.category`) } : {}),
-    ...(record.reference !== undefined ? { reference: readString(record.reference, `${path}.reference`) } : {}),
-    ...(record.quantity !== undefined ? { quantity: readPositiveNumber(record.quantity, `${path}.quantity`) } : {}),
+    ...(record.display !== undefined
+      ? { display: readLabelDisplay(record.display, `${path}.display`) }
+      : {}),
+    ...(record.catalogId !== undefined
+      ? { catalogId: readString(record.catalogId, `${path}.catalogId`) }
+      : {}),
+    ...(record.category !== undefined
+      ? { category: readString(record.category, `${path}.category`) }
+      : {}),
+    ...(record.reference !== undefined
+      ? { reference: readString(record.reference, `${path}.reference`) }
+      : {}),
+    ...(record.quantity !== undefined
+      ? { quantity: readPositiveNumber(record.quantity, `${path}.quantity`) }
+      : {}),
     ...(record.unit !== undefined ? { unit: readString(record.unit, `${path}.unit`) } : {}),
     ...(record.style !== undefined ? { style: readStyle(record.style, `${path}.style`) } : {}),
-    ...(record.measurement !== undefined ? { measurement: readMeasurement(record.measurement, `${path}.measurement`) } : {}),
-    ...(record.groupId !== undefined ? { groupId: readString(record.groupId, `${path}.groupId`) } : {}),
-    ...(record.groupName !== undefined ? { groupName: readString(record.groupName, `${path}.groupName`) } : {}),
+    ...(record.measurement !== undefined
+      ? { measurement: readMeasurement(record.measurement, `${path}.measurement`) }
+      : {}),
+    ...(record.groupId !== undefined
+      ? { groupId: readString(record.groupId, `${path}.groupId`) }
+      : {}),
+    ...(record.groupName !== undefined
+      ? { groupName: readString(record.groupName, `${path}.groupName`) }
+      : {}),
   };
 
   const type = readString(record.type, `${path}.type`);
@@ -367,7 +410,11 @@ function readObject(value: unknown, path: string): PlanObject {
         heightM: readPositiveNumber(record.heightM, `${path}.heightM`),
       };
     case "circle":
-      return { ...base, type: "circle", radiusM: readPositiveNumber(record.radiusM, `${path}.radiusM`) };
+      return {
+        ...base,
+        type: "circle",
+        radiusM: readPositiveNumber(record.radiusM, `${path}.radiusM`),
+      };
     case "line":
       return { ...base, type: "line", pointsM: readPoints(record.pointsM, `${path}.pointsM`) };
     case "polygon":
@@ -380,7 +427,15 @@ function readObject(value: unknown, path: string): PlanObject {
         fontSizeM: readPositiveNumber(record.fontSizeM, `${path}.fontSizeM`),
       };
     case "image":
-      return { ...base, type: "image", url: readString(record.url, `${path}.url`), widthPx: readPositiveNumber(record.widthPx, `${path}.widthPx`), heightPx: readPositiveNumber(record.heightPx, `${path}.heightPx`), widthM: readPositiveNumber(record.widthM, `${path}.widthM`), heightM: readPositiveNumber(record.heightM, `${path}.heightM`) };
+      return {
+        ...base,
+        type: "image",
+        url: readString(record.url, `${path}.url`),
+        widthPx: readPositiveNumber(record.widthPx, `${path}.widthPx`),
+        heightPx: readPositiveNumber(record.heightPx, `${path}.heightPx`),
+        widthM: readPositiveNumber(record.widthM, `${path}.widthM`),
+        heightM: readPositiveNumber(record.heightM, `${path}.heightM`),
+      };
     default:
       fail(`${path}.type`);
   }
@@ -398,29 +453,60 @@ function readObject(value: unknown, path: string): PlanObject {
  */
 function readSheet(value: unknown, path: string): Sheet {
   const record = readRecord(value, path);
-  const defaults = { paperSize: "A3", orientation: "landscape", scaleDenominator: 200, marginMm: 10 } as const;
+  const defaults = {
+    paperSize: "A3",
+    orientation: "landscape",
+    scaleDenominator: 200,
+    marginMm: 10,
+  } as const;
 
-  const paperSize = record.paperSize === undefined ? defaults.paperSize : readString(record.paperSize, `${path}.paperSize`);
+  const paperSize =
+    record.paperSize === undefined
+      ? defaults.paperSize
+      : readString(record.paperSize, `${path}.paperSize`);
   if (!PAPER_SIZE_ORDER.includes(paperSize as PaperSize)) fail(`${path}.paperSize`);
 
   const orientation =
-    record.orientation === undefined ? defaults.orientation : readString(record.orientation, `${path}.orientation`);
+    record.orientation === undefined
+      ? defaults.orientation
+      : readString(record.orientation, `${path}.orientation`);
   if (orientation !== "portrait" && orientation !== "landscape") fail(`${path}.orientation`);
 
   let titleBlock: Sheet["titleBlock"];
   if (record.titleBlock !== undefined) {
     const block = readRecord(record.titleBlock, `${path}.titleBlock`);
     titleBlock = {
-      ...(block.client !== undefined ? { client: readString(block.client, `${path}.titleBlock.client`) } : {}),
-      ...(block.author !== undefined ? { author: readString(block.author, `${path}.titleBlock.author`) } : {}),
-      ...(block.revision !== undefined ? { revision: readString(block.revision, `${path}.titleBlock.revision`) } : {}),
-      ...(block.planNumber !== undefined ? { planNumber: readString(block.planNumber, `${path}.titleBlock.planNumber`) } : {}),
-      ...(block.comments !== undefined ? { comments: readString(block.comments, `${path}.titleBlock.comments`) } : {}),
-      ...(block.logoDataUrl !== undefined ? { logoDataUrl: readString(block.logoDataUrl, `${path}.titleBlock.logoDataUrl`) } : {}),
-      ...(block.customFields !== undefined ? { customFields: readArray(block.customFields, `${path}.titleBlock.customFields`).map((value, index) => {
-        const field = readRecord(value, `${path}.titleBlock.customFields[${index}]`);
-        return { label: readString(field.label, `${path}.titleBlock.customFields[${index}].label`), value: readString(field.value, `${path}.titleBlock.customFields[${index}].value`) };
-      }) } : {}),
+      ...(block.client !== undefined
+        ? { client: readString(block.client, `${path}.titleBlock.client`) }
+        : {}),
+      ...(block.author !== undefined
+        ? { author: readString(block.author, `${path}.titleBlock.author`) }
+        : {}),
+      ...(block.revision !== undefined
+        ? { revision: readString(block.revision, `${path}.titleBlock.revision`) }
+        : {}),
+      ...(block.planNumber !== undefined
+        ? { planNumber: readString(block.planNumber, `${path}.titleBlock.planNumber`) }
+        : {}),
+      ...(block.comments !== undefined
+        ? { comments: readString(block.comments, `${path}.titleBlock.comments`) }
+        : {}),
+      ...(block.logoDataUrl !== undefined
+        ? { logoDataUrl: readString(block.logoDataUrl, `${path}.titleBlock.logoDataUrl`) }
+        : {}),
+      ...(block.customFields !== undefined
+        ? {
+            customFields: readArray(block.customFields, `${path}.titleBlock.customFields`).map(
+              (value, index) => {
+                const field = readRecord(value, `${path}.titleBlock.customFields[${index}]`);
+                return {
+                  label: readString(field.label, `${path}.titleBlock.customFields[${index}].label`),
+                  value: readString(field.value, `${path}.titleBlock.customFields[${index}].value`),
+                };
+              },
+            ),
+          }
+        : {}),
     };
   }
 
@@ -434,7 +520,9 @@ function readSheet(value: unknown, path: string): Sheet {
         ? defaults.scaleDenominator
         : readPositiveNumber(record.scaleDenominator, `${path}.scaleDenominator`),
     marginMm:
-      record.marginMm === undefined ? defaults.marginMm : readFiniteNumber(record.marginMm, `${path}.marginMm`),
+      record.marginMm === undefined
+        ? defaults.marginMm
+        : readFiniteNumber(record.marginMm, `${path}.marginMm`),
     ...(titleBlock ? { titleBlock } : {}),
   };
 }
@@ -457,7 +545,11 @@ function readProject(value: unknown, path: string): Project {
   const layerIds = new Set(layers.map((layer) => layer.id));
   for (const object of objects) {
     if (!layerIds.has(object.layerId)) {
-      throw new FieldError({ code: "danglingLayerRef", objectId: object.id, layerId: object.layerId });
+      throw new FieldError({
+        code: "danglingLayerRef",
+        objectId: object.id,
+        layerId: object.layerId,
+      });
     }
   }
 
@@ -465,15 +557,45 @@ function readProject(value: unknown, path: string): Project {
   if (record.georeference !== undefined) {
     const geo = readRecord(record.georeference, `${path}.georeference`);
     if (geo.crs !== "EPSG:4326") fail(`${path}.georeference.crs`);
-    georeference = { crs: "EPSG:4326", originLongitude: readFiniteNumber(geo.originLongitude, `${path}.georeference.originLongitude`), originLatitude: readFiniteNumber(geo.originLatitude, `${path}.georeference.originLatitude`), rotationDeg: readFiniteNumber(geo.rotationDeg, `${path}.georeference.rotationDeg`) };
+    georeference = {
+      crs: "EPSG:4326",
+      originLongitude: readFiniteNumber(
+        geo.originLongitude,
+        `${path}.georeference.originLongitude`,
+      ),
+      originLatitude: readFiniteNumber(geo.originLatitude, `${path}.georeference.originLatitude`),
+      rotationDeg: readFiniteNumber(geo.rotationDeg, `${path}.georeference.rotationDeg`),
+    };
   }
   let collaboration: Project["collaboration"];
   if (record.collaboration !== undefined) {
     const value = readRecord(record.collaboration, `${path}.collaboration`);
-    collaboration = { comments: readArray(value.comments, `${path}.collaboration.comments`).map((raw, index) => {
-      const comment = readRecord(raw, `${path}.collaboration.comments[${index}]`);
-      return { id: readString(comment.id, `${path}.collaboration.comments[${index}].id`), author: readString(comment.author, `${path}.collaboration.comments[${index}].author`), text: readString(comment.text, `${path}.collaboration.comments[${index}].text`), createdAt: readString(comment.createdAt, `${path}.collaboration.comments[${index}].createdAt`), resolved: readBoolean(comment.resolved, `${path}.collaboration.comments[${index}].resolved`), ...(comment.objectId !== undefined ? { objectId: readString(comment.objectId, `${path}.collaboration.comments[${index}].objectId`) } : {}) };
-    }) };
+    collaboration = {
+      comments: readArray(value.comments, `${path}.collaboration.comments`).map((raw, index) => {
+        const comment = readRecord(raw, `${path}.collaboration.comments[${index}]`);
+        return {
+          id: readString(comment.id, `${path}.collaboration.comments[${index}].id`),
+          author: readString(comment.author, `${path}.collaboration.comments[${index}].author`),
+          text: readString(comment.text, `${path}.collaboration.comments[${index}].text`),
+          createdAt: readString(
+            comment.createdAt,
+            `${path}.collaboration.comments[${index}].createdAt`,
+          ),
+          resolved: readBoolean(
+            comment.resolved,
+            `${path}.collaboration.comments[${index}].resolved`,
+          ),
+          ...(comment.objectId !== undefined
+            ? {
+                objectId: readString(
+                  comment.objectId,
+                  `${path}.collaboration.comments[${index}].objectId`,
+                ),
+              }
+            : {}),
+        };
+      }),
+    };
   }
   return {
     id: readString(record.id, `${path}.id`),

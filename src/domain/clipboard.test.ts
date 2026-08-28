@@ -6,11 +6,24 @@ import { getObjectBoundsM } from "./bounds";
 const layerIds = new Set(["keep"]);
 
 function context(overrides: Partial<Parameters<typeof duplicateObjects>[1]> = {}) {
-  return { offsetM: { xM: 1, yM: 1 }, existingLayerIds: layerIds, fallbackLayerId: "keep", ...overrides };
+  return {
+    offsetM: { xM: 1, yM: 1 },
+    existingLayerIds: layerIds,
+    fallbackLayerId: "keep",
+    ...overrides,
+  };
 }
 
 describe("duplicateObjects", () => {
-  const original = createRectangleObject({ layerId: "keep", name: "Chapiteau", xM: 5, yM: 5, widthM: 10, heightM: 4, rotationDeg: 30 });
+  const original = createRectangleObject({
+    layerId: "keep",
+    name: "Chapiteau",
+    xM: 5,
+    yM: 5,
+    widthM: 10,
+    heightM: 4,
+    rotationDeg: 30,
+  });
 
   it("gives every copy a fresh id", () => {
     const [copy] = duplicateObjects([original], context());
@@ -50,15 +63,36 @@ describe("duplicateObjects", () => {
   });
 
   it("rehomes a copy whose layer no longer exists, and leaves the others alone", () => {
-    const orphan = createRectangleObject({ layerId: "deleted", name: "x", xM: 0, yM: 0, widthM: 1, heightM: 1 });
+    const orphan = createRectangleObject({
+      layerId: "deleted",
+      name: "x",
+      xM: 0,
+      yM: 0,
+      widthM: 1,
+      heightM: 1,
+    });
     const copies = duplicateObjects([original, orphan], context());
     expect(copies[0]!.layerId).toBe("keep");
     expect(copies[1]!.layerId).toBe("keep");
   });
 
   it("preserves the relative arrangement of a whole selection", () => {
-    const a = createRectangleObject({ layerId: "keep", name: "a", xM: 0, yM: 0, widthM: 1, heightM: 1 });
-    const b = createRectangleObject({ layerId: "keep", name: "b", xM: 7, yM: 3, widthM: 1, heightM: 1 });
+    const a = createRectangleObject({
+      layerId: "keep",
+      name: "a",
+      xM: 0,
+      yM: 0,
+      widthM: 1,
+      heightM: 1,
+    });
+    const b = createRectangleObject({
+      layerId: "keep",
+      name: "b",
+      xM: 7,
+      yM: 3,
+      widthM: 1,
+      heightM: 1,
+    });
     const [copyA, copyB] = duplicateObjects([a, b], context({ offsetM: { xM: 0.5, yM: 0.5 } }));
     expect(copyB!.xM - copyA!.xM).toBeCloseTo(b.xM - a.xM, 9);
     expect(copyB!.yM - copyA!.yM).toBeCloseTo(b.yM - a.yM, 9);

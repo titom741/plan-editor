@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { saveAutomaticProjectVersion, saveAutosavedProject } from "../../persistence/projectStorage";
+import {
+  saveAutomaticProjectVersion,
+  saveAutosavedProject,
+} from "../../persistence/projectStorage";
 import type { Project } from "../../domain/types";
 
 /**

@@ -1,6 +1,11 @@
 import { boundsCenterM } from "../domain/bounds";
 import type { BoundsM } from "../domain/bounds";
-import { getPaperSizeMm, getPrintableAreaMm, metersToPaperMm, paperMmToMeters } from "../domain/sheets";
+import {
+  getPaperSizeMm,
+  getPrintableAreaMm,
+  metersToPaperMm,
+  paperMmToMeters,
+} from "../domain/sheets";
 import type { PointM, Sheet } from "../domain/types";
 import type { Viewport } from "../rendering/viewport";
 import { MM_PER_INCH, mmToPt, ptToMm } from "./pdf";
@@ -27,7 +32,9 @@ const TITLE_BLOCK_HEIGHT_MM = 16;
  * fine end: on a 1:20 detail sheet even 1 m is 50 mm of ink, too wide for
  * a narrow title block, and a 0.5 m bar is perfectly ordinary there.
  */
-const SCALE_BAR_CANDIDATES_M = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000] as const;
+const SCALE_BAR_CANDIDATES_M = [
+  0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000,
+] as const;
 
 /** Upper cap on the drawn length of a scale bar, in millimetres — a bar wider than this looks absurd even on A0. */
 const SCALE_BAR_MAX_MM = 50;
@@ -88,7 +95,10 @@ export interface SheetLayout {
  * candidate at very coarse scales, where even 1 m is wider than the
  * allowance — a bar slightly too long is more useful than none.
  */
-export function chooseScaleBarLengthM(scaleDenominator: number, maxMm: number = SCALE_BAR_MAX_MM): number {
+export function chooseScaleBarLengthM(
+  scaleDenominator: number,
+  maxMm: number = SCALE_BAR_MAX_MM,
+): number {
   let chosen: number = SCALE_BAR_CANDIDATES_M[0];
   for (const candidate of SCALE_BAR_CANDIDATES_M) {
     if (metersToPaperMm(candidate, scaleDenominator) <= maxMm) chosen = candidate;
@@ -157,7 +167,8 @@ export function computeSheetLayout(sheet: Sheet, contentBounds: BoundsM | null):
   // allowance comes from the width actually available between the middle
   // and right columns rather than a fixed number, or a narrow sheet (A4
   // portrait) leaves it running into the date.
-  const columnWidthMm = ptToMm(titleBlock.rightColumnXPt - titleBlock.middleColumnXPt) - SCALE_BAR_GUTTER_MM;
+  const columnWidthMm =
+    ptToMm(titleBlock.rightColumnXPt - titleBlock.middleColumnXPt) - SCALE_BAR_GUTTER_MM;
   const scaleBarLengthM = chooseScaleBarLengthM(
     sheet.scaleDenominator,
     Math.min(SCALE_BAR_MAX_MM, Math.max(0, columnWidthMm)),
@@ -246,7 +257,10 @@ export interface PrintRaster {
  * viewport whose scale comes from paper rather than from the user's zoom.
  * One renderer, one source of truth for what a plan looks like.
  */
-export function computePrintRaster(layout: SheetLayout, requestedDpi: number = DEFAULT_EXPORT_DPI): PrintRaster {
+export function computePrintRaster(
+  layout: SheetLayout,
+  requestedDpi: number = DEFAULT_EXPORT_DPI,
+): PrintRaster {
   const widthMm = ptToMm(layout.drawing.widthPt);
   const heightMm = ptToMm(layout.drawing.heightPt);
 
@@ -266,7 +280,8 @@ export function computePrintRaster(layout: SheetLayout, requestedDpi: number = D
   // `pixels.width` pixels; that ratio *is* the print scale expressed in
   // pixels. Zoom stays at 1 — zoom is a screen concept and has no meaning
   // on paper.
-  const pixelsPerMeter = layout.drawingAreaM.widthM > 0 ? pixels.width / layout.drawingAreaM.widthM : 1;
+  const pixelsPerMeter =
+    layout.drawingAreaM.widthM > 0 ? pixels.width / layout.drawingAreaM.widthM : 1;
 
   return {
     pixelWidth: pixels.width,

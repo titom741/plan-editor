@@ -49,7 +49,13 @@ function describeCatalogSize(item: CatalogItem): string {
   }
 }
 
-export function LibraryDialog({ onInsert, onClose, templates, onInsertTemplate, onDeleteTemplate }: LibraryDialogProps) {
+export function LibraryDialog({
+  onInsert,
+  onClose,
+  templates,
+  onInsertTemplate,
+  onDeleteTemplate,
+}: LibraryDialogProps) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Toutes");
   const [customItems, setCustomItems] = useState<CatalogItem[]>(() => loadCustomCatalog());
@@ -71,19 +77,41 @@ export function LibraryDialog({ onInsert, onClose, templates, onInsertTemplate, 
     const haystack = `${item.name} ${item.reference} ${item.category}`.toLocaleLowerCase("fr");
     return matchesCategory && haystack.includes(query.trim().toLocaleLowerCase("fr"));
   });
-  const editedItem = editing && editing !== "new" ? customItems.find((item) => item.id === editing) : undefined;
+  const editedItem =
+    editing && editing !== "new" ? customItems.find((item) => item.id === editing) : undefined;
 
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
-      <section className="dialog library-dialog" role="dialog" aria-modal="true" aria-labelledby="library-title" onMouseDown={(event) => event.stopPropagation()}>
+      <section
+        className="dialog library-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="library-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className="dialog__header">
           <h2 id="library-title">Bibliothèque de matériels</h2>
-          <button type="button" className="dialog__close" onClick={onClose} aria-label="Fermer">✕</button>
+          <button type="button" className="dialog__close" onClick={onClose} aria-label="Fermer">
+            ✕
+          </button>
         </div>
         <div className="library-dialog__filters">
-          <input autoFocus type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher un matériel…" aria-label="Rechercher" />
-          <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Catégorie">
-            {categories.map((value) => <option key={value}>{value}</option>)}
+          <input
+            autoFocus
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Rechercher un matériel…"
+            aria-label="Rechercher"
+          />
+          <select
+            value={category}
+            onChange={(event) => setCategory(event.target.value)}
+            aria-label="Catégorie"
+          >
+            {categories.map((value) => (
+              <option key={value}>{value}</option>
+            ))}
           </select>
         </div>
         {editing !== null ? (
@@ -92,53 +120,102 @@ export function LibraryDialog({ onInsert, onClose, templates, onInsertTemplate, 
             onCancel={() => setEditing(null)}
             onSubmit={(draft) => {
               setCustomItems(
-                editing === "new" ? addCustomCatalogItem(draft) : updateCustomCatalogItem(editing, draft),
+                editing === "new"
+                  ? addCustomCatalogItem(draft)
+                  : updateCustomCatalogItem(editing, draft),
               );
               setEditing(null);
             }}
           />
         ) : (
-        <div className="library-dialog__grid">
-          {templates.filter((template) => category === "Toutes" && template.name.toLocaleLowerCase("fr").includes(query.trim().toLocaleLowerCase("fr"))).map((template) => (
-            <div key={template.id} className="library-card"><button type="button" className="library-card__template" onClick={() => onInsertTemplate(template)}><strong>{template.name}</strong><span>Composant personnel</span><small>{template.objects.length} objet(s)</small></button><button type="button" className="dialog__close" onClick={() => onDeleteTemplate(template.id)} aria-label={`Supprimer ${template.name}`}>🗑</button></div>
-          ))}
-          {filtered.map((item) => (
-            <div key={item.id} className={`library-card${hiddenIds.has(item.id) ? " is-hidden-item" : ""}`}>
-              <button type="button" className="library-card__insert" onClick={() => onInsert(item)}>
-                <span className="library-card__preview" style={{ background: item.style.fill, borderColor: item.style.stroke }} aria-hidden="true" />
-                <strong>{item.name}</strong>
-                <span>{item.category} · {item.reference}</span>
-                <small>{describeCatalogSize(item)}</small>
-              </button>
-              {managing && (
-                <div className="library-card__actions">
+          <div className="library-dialog__grid">
+            {templates
+              .filter(
+                (template) =>
+                  category === "Toutes" &&
+                  template.name
+                    .toLocaleLowerCase("fr")
+                    .includes(query.trim().toLocaleLowerCase("fr")),
+              )
+              .map((template) => (
+                <div key={template.id} className="library-card">
                   <button
                     type="button"
-                    onClick={() => setHiddenIds(toggleHiddenCatalogId(item.id))}
-                    title={hiddenIds.has(item.id) ? "Rétablir dans la bibliothèque" : "Masquer de la bibliothèque"}
+                    className="library-card__template"
+                    onClick={() => onInsertTemplate(template)}
                   >
-                    {hiddenIds.has(item.id) ? "👁" : "🚫"}
+                    <strong>{template.name}</strong>
+                    <span>Composant personnel</span>
+                    <small>{template.objects.length} objet(s)</small>
                   </button>
-                  {customIds.has(item.id) && (
-                    <>
-                      <button type="button" onClick={() => setEditing(item.id)} title="Modifier ce matériel">
-                        ✎
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCustomItems(deleteCustomCatalogItem(item.id))}
-                        title="Supprimer ce matériel"
-                      >
-                        🗑
-                      </button>
-                    </>
-                  )}
+                  <button
+                    type="button"
+                    className="dialog__close"
+                    onClick={() => onDeleteTemplate(template.id)}
+                    aria-label={`Supprimer ${template.name}`}
+                  >
+                    🗑
+                  </button>
                 </div>
-              )}
-            </div>
-          ))}
-          {filtered.length === 0 && <p>Aucun matériel ne correspond à la recherche.</p>}
-        </div>
+              ))}
+            {filtered.map((item) => (
+              <div
+                key={item.id}
+                className={`library-card${hiddenIds.has(item.id) ? " is-hidden-item" : ""}`}
+              >
+                <button
+                  type="button"
+                  className="library-card__insert"
+                  onClick={() => onInsert(item)}
+                >
+                  <span
+                    className="library-card__preview"
+                    style={{ background: item.style.fill, borderColor: item.style.stroke }}
+                    aria-hidden="true"
+                  />
+                  <strong>{item.name}</strong>
+                  <span>
+                    {item.category} · {item.reference}
+                  </span>
+                  <small>{describeCatalogSize(item)}</small>
+                </button>
+                {managing && (
+                  <div className="library-card__actions">
+                    <button
+                      type="button"
+                      onClick={() => setHiddenIds(toggleHiddenCatalogId(item.id))}
+                      title={
+                        hiddenIds.has(item.id)
+                          ? "Rétablir dans la bibliothèque"
+                          : "Masquer de la bibliothèque"
+                      }
+                    >
+                      {hiddenIds.has(item.id) ? "👁" : "🚫"}
+                    </button>
+                    {customIds.has(item.id) && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setEditing(item.id)}
+                          title="Modifier ce matériel"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCustomItems(deleteCustomCatalogItem(item.id))}
+                          title="Supprimer ce matériel"
+                        >
+                          🗑
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+            {filtered.length === 0 && <p>Aucun matériel ne correspond à la recherche.</p>}
+          </div>
         )}
         {editing === null && (
           <div className="dialog__actions">
@@ -146,7 +223,9 @@ export function LibraryDialog({ onInsert, onClose, templates, onInsertTemplate, 
               ＋ Nouveau matériel…
             </button>
             <button type="button" onClick={() => setManaging((value) => !value)}>
-              {managing ? "Terminer" : `Masquer / rétablir des matériels${hiddenIds.size > 0 ? ` (${hiddenIds.size})` : ""}`}
+              {managing
+                ? "Terminer"
+                : `Masquer / rétablir des matériels${hiddenIds.size > 0 ? ` (${hiddenIds.size})` : ""}`}
             </button>
           </div>
         )}

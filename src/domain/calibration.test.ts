@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { calibrationFromKnownDistance, calibrationFromKnownScale, createDefaultCalibration, DEFAULT_PIXELS_PER_METER } from "./calibration";
+import {
+  calibrationFromKnownDistance,
+  calibrationFromKnownScale,
+  createDefaultCalibration,
+  DEFAULT_PIXELS_PER_METER,
+} from "./calibration";
 
 describe("createDefaultCalibration", () => {
   it("returns the default pixelsPerMeter with a 'default' source", () => {
@@ -30,7 +35,11 @@ describe("calibrationFromKnownDistance", () => {
 
   it("records the source as knownDistance with the inputs it was derived from", () => {
     const calibration = calibrationFromKnownDistance(240, 12);
-    expect(calibration.source).toEqual({ type: "knownDistance", pixelDistance: 240, realDistanceM: 12 });
+    expect(calibration.source).toEqual({
+      type: "knownDistance",
+      pixelDistance: 240,
+      realDistanceM: 12,
+    });
   });
 
   it("scales inversely with the real-world distance", () => {

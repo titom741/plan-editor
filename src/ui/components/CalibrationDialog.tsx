@@ -22,7 +22,11 @@ interface CalibrationDialogProps {
  * the backdrop also stops stray clicks from ever reaching the canvas or
  * the other panels until the user confirms or cancels.
  */
-export function CalibrationDialog({ measuredDistanceM, onConfirm, onCancel }: CalibrationDialogProps) {
+export function CalibrationDialog({
+  measuredDistanceM,
+  onConfirm,
+  onCancel,
+}: CalibrationDialogProps) {
   const [text, setText] = useState("");
   const parsed = Number.parseFloat(text);
   const isValid = Number.isFinite(parsed) && parsed > 0;

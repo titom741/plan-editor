@@ -54,7 +54,8 @@ export function useClipboard({
     (sources: readonly PlanObject[], step: number) => {
       if (sources.length === 0) return;
       const fallbackLayer =
-        project.layers.find((layer) => layer.id === fallbackLayerId) ?? getDefaultTargetLayer(project.layers);
+        project.layers.find((layer) => layer.id === fallbackLayerId) ??
+        getDefaultTargetLayer(project.layers);
       if (!fallbackLayer) return;
       const copies = duplicateObjects(sources, {
         offsetM: { xM: PASTE_OFFSET_M * step, yM: PASTE_OFFSET_M * step },
@@ -74,7 +75,11 @@ export function useClipboard({
     clipboardRef.current = selectedObjects.map((object) => ({ ...object }));
     pasteCountRef.current = 0;
     if (navigator.clipboard?.writeText) {
-      const payload = serializeProject({ ...project, backgrounds: [], objects: clipboardRef.current });
+      const payload = serializeProject({
+        ...project,
+        backgrounds: [],
+        objects: clipboardRef.current,
+      });
       void navigator.clipboard.writeText(payload).catch(() => undefined);
     }
   }, [selectedObjects, project]);
@@ -105,7 +110,10 @@ export function useClipboard({
   }, [pasteObjects]);
 
   /** Duplicate is a paste of the current selection that never touches either clipboard. */
-  const duplicate = useCallback(() => pasteObjects(selectedObjects, 1), [pasteObjects, selectedObjects]);
+  const duplicate = useCallback(
+    () => pasteObjects(selectedObjects, 1),
+    [pasteObjects, selectedObjects],
+  );
 
   return { copy, paste, duplicate, pasteObjects };
 }

@@ -7,7 +7,8 @@ export function createWhiteRemovalFilter(threshold: number) {
       const red = data[index] ?? 0;
       const green = data[index + 1] ?? 0;
       const blue = data[index + 2] ?? 0;
-      if (red >= safeThreshold && green >= safeThreshold && blue >= safeThreshold) data[index + 3] = 0;
+      if (red >= safeThreshold && green >= safeThreshold && blue >= safeThreshold)
+        data[index + 3] = 0;
     }
   };
 }

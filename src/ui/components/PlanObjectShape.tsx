@@ -1,7 +1,11 @@
 import { Arrow, Circle, Group, Image as KonvaImage, Line, Rect, Text } from "react-konva";
 import type Konva from "konva";
 import { getObjectDisplayLabel } from "../../domain/labels";
-import { DEFAULT_LABEL_DISPLAY, resolveLabelDisplay, type LabelDisplay } from "../../domain/display";
+import {
+  DEFAULT_LABEL_DISPLAY,
+  resolveLabelDisplay,
+  type LabelDisplay,
+} from "../../domain/display";
 import type { PlanObject } from "../../domain/types";
 import { metersToPixels, screenToWorld, worldToScreen } from "../../rendering/viewport";
 import type { Viewport } from "../../rendering/viewport";
@@ -71,7 +75,12 @@ export function PlanObjectShape({
   const anchor = worldToScreen({ xM: object.xM, yM: object.yM }, viewport);
   /** A width given in screen pixels, converted to this render target's pixels. */
   const px = (screenPx: number) => screenPx * renderScale;
-  const dash = object.style?.dash === "dashed" ? [px(10), px(6)] : object.style?.dash === "dotted" ? [px(2), px(5)] : undefined;
+  const dash =
+    object.style?.dash === "dashed"
+      ? [px(10), px(6)]
+      : object.style?.dash === "dotted"
+        ? [px(2), px(5)]
+        : undefined;
 
   const handleSelect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     // Outside the select tool, let the click bubble up to the Stage so
@@ -137,16 +146,18 @@ export function PlanObjectShape({
             opacity={object.style?.opacity ?? 1}
             dash={dash}
           />
-          {showLabel && <Text
-            text={labelText}
-            width={widthPx}
-            height={heightPx}
-            align="center"
-            verticalAlign="middle"
-            fontSize={px(14)}
-            fill="#0f172a"
-            listening={false}
-          />}
+          {showLabel && (
+            <Text
+              text={labelText}
+              width={widthPx}
+              height={heightPx}
+              align="center"
+              verticalAlign="middle"
+              fontSize={px(14)}
+              fill="#0f172a"
+              listening={false}
+            />
+          )}
         </Group>
       );
     }
@@ -162,16 +173,18 @@ export function PlanObjectShape({
             opacity={object.style?.opacity ?? 1}
             dash={dash}
           />
-          {showLabel && <Text
-            text={labelText}
-            x={-radiusPx}
-            y={px(-8)}
-            width={radiusPx * 2}
-            align="center"
-            fontSize={px(13)}
-            fill="#0f172a"
-            listening={false}
-          />}
+          {showLabel && (
+            <Text
+              text={labelText}
+              x={-radiusPx}
+              y={px(-8)}
+              width={radiusPx * 2}
+              align="center"
+              fontSize={px(13)}
+              fill="#0f172a"
+              listening={false}
+            />
+          )}
         </Group>
       );
     }
@@ -182,35 +195,41 @@ export function PlanObjectShape({
       ]);
       return (
         <Group {...commonGroupProps}>
-          {object.style?.arrowStart || object.style?.arrowEnd ? <Arrow
-            points={points}
-            stroke={selected ? SELECTED_STROKE : (object.style?.stroke ?? "#0f172a")}
-            strokeWidth={px(selected ? 3 : (object.style?.strokeWidth ?? 2))}
-            hitStrokeWidth={Math.max(12, object.style?.strokeWidth ?? 2)}
-            opacity={object.style?.opacity ?? 1}
-            dash={dash}
-            pointerAtBeginning={object.style?.arrowStart}
-            pointerAtEnding={object.style?.arrowEnd}
-            pointerLength={px(10)}
-            pointerWidth={px(9)}
-            fill={selected ? SELECTED_STROKE : (object.style?.stroke ?? "#0f172a")}
-          /> : <Line
-            points={points}
-            stroke={selected ? SELECTED_STROKE : (object.style?.stroke ?? "#0f172a")}
-            strokeWidth={px(selected ? 3 : (object.style?.strokeWidth ?? 2))}
-            hitStrokeWidth={Math.max(12, object.style?.strokeWidth ?? 2)}
-            opacity={object.style?.opacity ?? 1}
-            dash={dash}
-          />}
-          {showLabel && <Text
-            text={labelText}
-            x={points.length >= 2 ? points[0] : 0}
-            y={-px(18)}
-            fontSize={px(12)}
-            fill={object.style?.fill ?? "#0f172a"}
-            opacity={object.style?.opacity ?? 1}
-            listening={false}
-          />}
+          {object.style?.arrowStart || object.style?.arrowEnd ? (
+            <Arrow
+              points={points}
+              stroke={selected ? SELECTED_STROKE : (object.style?.stroke ?? "#0f172a")}
+              strokeWidth={px(selected ? 3 : (object.style?.strokeWidth ?? 2))}
+              hitStrokeWidth={Math.max(12, object.style?.strokeWidth ?? 2)}
+              opacity={object.style?.opacity ?? 1}
+              dash={dash}
+              pointerAtBeginning={object.style?.arrowStart}
+              pointerAtEnding={object.style?.arrowEnd}
+              pointerLength={px(10)}
+              pointerWidth={px(9)}
+              fill={selected ? SELECTED_STROKE : (object.style?.stroke ?? "#0f172a")}
+            />
+          ) : (
+            <Line
+              points={points}
+              stroke={selected ? SELECTED_STROKE : (object.style?.stroke ?? "#0f172a")}
+              strokeWidth={px(selected ? 3 : (object.style?.strokeWidth ?? 2))}
+              hitStrokeWidth={Math.max(12, object.style?.strokeWidth ?? 2)}
+              opacity={object.style?.opacity ?? 1}
+              dash={dash}
+            />
+          )}
+          {showLabel && (
+            <Text
+              text={labelText}
+              x={points.length >= 2 ? points[0] : 0}
+              y={-px(18)}
+              fontSize={px(12)}
+              fill={object.style?.fill ?? "#0f172a"}
+              opacity={object.style?.opacity ?? 1}
+              listening={false}
+            />
+          )}
         </Group>
       );
     }
@@ -235,17 +254,19 @@ export function PlanObjectShape({
             opacity={object.style?.opacity ?? 1}
             dash={dash}
           />
-          {showLabel && <Text
-            text={labelText}
-            x={minX}
-            y={minY + px(6)}
-            width={Math.max(maxX - minX, px(80))}
-            align="center"
-            fontSize={px(12)}
-            fill="#0f172a"
-            opacity={object.style?.opacity ?? 1}
-            listening={false}
-          />}
+          {showLabel && (
+            <Text
+              text={labelText}
+              x={minX}
+              y={minY + px(6)}
+              width={Math.max(maxX - minX, px(80))}
+              align="center"
+              fontSize={px(12)}
+              fill="#0f172a"
+              opacity={object.style?.opacity ?? 1}
+              listening={false}
+            />
+          )}
         </Group>
       );
     }
@@ -256,7 +277,14 @@ export function PlanObjectShape({
             text={object.text}
             fontSize={metersToPixels(object.fontSizeM, viewport)}
             fontFamily={object.style?.fontFamily ?? "Arial"}
-            fontStyle={[object.style?.fontWeight === "bold" ? "bold" : "", object.style?.fontStyle === "italic" ? "italic" : ""].filter(Boolean).join(" ") || "normal"}
+            fontStyle={
+              [
+                object.style?.fontWeight === "bold" ? "bold" : "",
+                object.style?.fontStyle === "italic" ? "italic" : "",
+              ]
+                .filter(Boolean)
+                .join(" ") || "normal"
+            }
             align={object.style?.textAlign ?? "left"}
             fill={selected ? SELECTED_STROKE : (object.style?.fill ?? "#0f172a")}
             opacity={object.style?.opacity ?? 1}
@@ -266,7 +294,18 @@ export function PlanObjectShape({
     }
     case "image": {
       if (!objectImage) return null;
-      return <Group {...commonGroupProps}><KonvaImage image={objectImage} width={metersToPixels(object.widthM, viewport)} height={metersToPixels(object.heightM, viewport)} opacity={object.style?.opacity ?? 1} stroke={selected ? SELECTED_STROKE : object.style?.stroke} strokeWidth={px(selected ? 3 : (object.style?.strokeWidth ?? 0))} /></Group>;
+      return (
+        <Group {...commonGroupProps}>
+          <KonvaImage
+            image={objectImage}
+            width={metersToPixels(object.widthM, viewport)}
+            height={metersToPixels(object.heightM, viewport)}
+            opacity={object.style?.opacity ?? 1}
+            stroke={selected ? SELECTED_STROKE : object.style?.stroke}
+            strokeWidth={px(selected ? 3 : (object.style?.strokeWidth ?? 0))}
+          />
+        </Group>
+      );
     }
   }
 }

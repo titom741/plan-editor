@@ -69,7 +69,13 @@ export function LayersPanel({
   const [editing, setEditing] = useState<{ layerId: string; name: string } | null>(null);
   const [expandedLayerIds, setExpandedLayerIds] = useState<Set<string>>(() => new Set());
   const orderedLayers = sortLayersByOrder(layers);
-  const folders = [...new Set(orderedLayers.map((layer) => layer.folder).filter((folder): folder is string => Boolean(folder)))];
+  const folders = [
+    ...new Set(
+      orderedLayers
+        .map((layer) => layer.folder)
+        .filter((folder): folder is string => Boolean(folder)),
+    ),
+  ];
 
   const commitRename = () => {
     if (editing) onRenameLayer(editing.layerId, editing.name);
@@ -135,7 +141,11 @@ export function LayersPanel({
           );
         })}
         <li className="layers-panel__row layers-panel__row--background">
-          <button type="button" className="layers-panel__name layers-panel__name-button" onClick={onRequestImportBackground}>
+          <button
+            type="button"
+            className="layers-panel__name layers-panel__name-button"
+            onClick={onRequestImportBackground}
+          >
             🖼 {backgrounds.length === 0 ? "Importer un fond de plan…" : "Ajouter un fond…"}
           </button>
         </li>
@@ -147,7 +157,10 @@ export function LayersPanel({
           // flipping each one: from "all visible" everything hides, and from
           // any mixed state everything shows.
           return (
-            <li key={`folder-${folder}`} className="layers-panel__row layers-panel__row--background">
+            <li
+              key={`folder-${folder}`}
+              className="layers-panel__row layers-panel__row--background"
+            >
               <button
                 type="button"
                 className="layers-panel__icon-button"
@@ -199,11 +212,14 @@ export function LayersPanel({
                 className="layers-panel__icon-button"
                 disabled={count === 0}
                 title={isExpanded ? "Masquer les éléments" : "Afficher les éléments"}
-                onClick={() => setExpandedLayerIds((current) => {
-                  const next = new Set(current);
-                  if (next.has(layer.id)) next.delete(layer.id); else next.add(layer.id);
-                  return next;
-                })}
+                onClick={() =>
+                  setExpandedLayerIds((current) => {
+                    const next = new Set(current);
+                    if (next.has(layer.id)) next.delete(layer.id);
+                    else next.add(layer.id);
+                    return next;
+                  })
+                }
               >
                 {isExpanded ? "▾" : "▸"}
               </button>
@@ -259,13 +275,17 @@ export function LayersPanel({
                 className="layers-panel__icon-button"
                 onClick={() => onSetLayerFolder(layer.id)}
                 title="Classer dans un dossier"
-              >📁</button>
+              >
+                📁
+              </button>
               <button
                 type="button"
                 className="layers-panel__icon-button"
                 onClick={() => onSetLayerDefaultStyle(layer.id)}
                 title="Définir le style par défaut du calque"
-              >🎨</button>
+              >
+                🎨
+              </button>
               <button
                 type="button"
                 className="layers-panel__icon-button"
@@ -301,7 +321,16 @@ export function LayersPanel({
                 <ul className="layers-panel__objects">
                   {layerObjects.map((object) => (
                     <li key={object.id}>
-                      <button type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("application/x-kl-object", object.id); event.dataTransfer.effectAllowed = "move"; }} onClick={() => onSelectObject(object.id)} title="Glisser vers un autre calque">
+                      <button
+                        type="button"
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData("application/x-kl-object", object.id);
+                          event.dataTransfer.effectAllowed = "move";
+                        }}
+                        onClick={() => onSelectObject(object.id)}
+                        title="Glisser vers un autre calque"
+                      >
                         {object.name}
                       </button>
                     </li>
@@ -312,7 +341,12 @@ export function LayersPanel({
           );
         })}
         <li className="layers-panel__row layers-panel__row--add">
-          <button type="button" className="layers-panel__name-button" onClick={onAddLayer} title="Ajouter un calque">
+          <button
+            type="button"
+            className="layers-panel__name-button"
+            onClick={onAddLayer}
+            title="Ajouter un calque"
+          >
             ＋ Calque
           </button>
         </li>

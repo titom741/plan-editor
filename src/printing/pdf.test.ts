@@ -58,7 +58,9 @@ describe("buildPdf — structure", () => {
     // Locate the table via the file's own startxref pointer rather than by
     // searching for "xref", which also matches "startxref".
     const xrefStart = Number(/startxref\n(\d+)\n%%EOF/.exec(text)?.[1]);
-    const entries = [...text.slice(xrefStart).matchAll(/^(\d{10}) 00000 n $/gm)].map((m) => Number(m[1]));
+    const entries = [...text.slice(xrefStart).matchAll(/^(\d{10}) 00000 n $/gm)].map((m) =>
+      Number(m[1]),
+    );
     expect(entries.length).toBeGreaterThan(0);
     entries.forEach((offset, index) => {
       expect(text.slice(offset)).toMatch(new RegExp(`^${index + 1} 0 obj`));
@@ -77,7 +79,9 @@ describe("buildPdf — structure", () => {
   });
 
   it("replaces characters the standard fonts can't encode instead of emitting broken bytes", () => {
-    const text = asLatin1(buildPdf({ ...page, text: [{ text: "Fête 🎪", xPt: 0, yPt: 0, sizePt: 10 }] }, metadata));
+    const text = asLatin1(
+      buildPdf({ ...page, text: [{ text: "Fête 🎪", xPt: 0, yPt: 0, sizePt: 10 }] }, metadata),
+    );
     expect(text).toContain("(F\xEAte ?)");
   });
 
@@ -86,13 +90,18 @@ describe("buildPdf — structure", () => {
     // typographic apostrophe, ellipsis. Written as escapes so the test
     // still means what it says after any tool touches the file.
     const source = "C\u0153ur \u2014 l\u2019entr\u00e9e\u2026";
-    const text = asLatin1(buildPdf({ ...page, text: [{ text: source, xPt: 0, yPt: 0, sizePt: 10 }] }, metadata));
+    const text = asLatin1(
+      buildPdf({ ...page, text: [{ text: source, xPt: 0, yPt: 0, sizePt: 10 }] }, metadata),
+    );
     expect(text).toContain("(C\x9Cur \x97 l\x92entr\xE9e\x85)");
   });
 
   it("escapes parentheses and backslashes, which would otherwise end the string early", () => {
     const text = asLatin1(
-      buildPdf({ ...page, text: [{ text: "Zone (nord) \\ sud", xPt: 0, yPt: 0, sizePt: 10 }] }, metadata),
+      buildPdf(
+        { ...page, text: [{ text: "Zone (nord) \\ sud", xPt: 0, yPt: 0, sizePt: 10 }] },
+        metadata,
+      ),
     );
     expect(text).toContain("(Zone \\(nord\\) \\\\ sud)");
   });
@@ -104,7 +113,16 @@ describe("buildPdf — structure", () => {
   });
 
   it("écrit les tracés vectoriels et les matrices de rotation du texte", () => {
-    const text = asLatin1(buildPdf({ ...page, paths: [{ commands: "10 10 m 20 20 l", strokeRgb: [1, 0, 0], widthPt: 2 }], text: [{ text: "Cote", xPt: 30, yPt: 40, sizePt: 8, rotationDeg: 90 }] }, metadata));
+    const text = asLatin1(
+      buildPdf(
+        {
+          ...page,
+          paths: [{ commands: "10 10 m 20 20 l", strokeRgb: [1, 0, 0], widthPt: 2 }],
+          text: [{ text: "Cote", xPt: 30, yPt: 40, sizePt: 8, rotationDeg: 90 }],
+        },
+        metadata,
+      ),
+    );
     expect(text).toContain("1 0 0 RG 2 w 10 10 m 20 20 l S");
     expect(text).toContain("0 1 -1 0 30 40 Tm (Cote)");
   });
@@ -159,8 +177,24 @@ describe("toPdfDate", () => {
 describe("buildMultiPagePdf", () => {
   it("produit un arbre de pages et plusieurs ressources image", () => {
     const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
-    const image = { jpeg, pixelWidth: 1, pixelHeight: 1, xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 };
-    const text = asLatin1(buildMultiPagePdf([{ widthPt: 100, heightPt: 100, image, images: [{ ...image, xPt: 20 }] }, { widthPt: 100, heightPt: 100, text: [{ text: "Page 2", xPt: 10, yPt: 10, sizePt: 8 }] }], metadata));
+    const image = {
+      jpeg,
+      pixelWidth: 1,
+      pixelHeight: 1,
+      xPt: 0,
+      yPt: 0,
+      widthPt: 10,
+      heightPt: 10,
+    };
+    const text = asLatin1(
+      buildMultiPagePdf(
+        [
+          { widthPt: 100, heightPt: 100, image, images: [{ ...image, xPt: 20 }] },
+          { widthPt: 100, heightPt: 100, text: [{ text: "Page 2", xPt: 10, yPt: 10, sizePt: 8 }] },
+        ],
+        metadata,
+      ),
+    );
     expect(text).toContain("/Count 2");
     expect(text).toContain("/Im0");
     expect(text).toContain("/Im1");

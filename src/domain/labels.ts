@@ -1,6 +1,14 @@
 import { DEFAULT_LABEL_DISPLAY, type LabelDisplay } from "./display";
 import type { PlanObject, Project } from "./types";
-import { angleAtPointDeg, formatAngleDeg, polygonAreaM2, polygonPerimeterM, polylineLengthM, formatAreaM2, formatLengthM } from "./measure";
+import {
+  angleAtPointDeg,
+  formatAngleDeg,
+  polygonAreaM2,
+  polygonPerimeterM,
+  polylineLengthM,
+  formatAreaM2,
+  formatLengthM,
+} from "./measure";
 
 /**
  * Formats a meter value for display: whole numbers with no decimals,
@@ -68,7 +76,11 @@ export function getObjectDisplayLabel(
 
 /** What a persisted measurement states, or `null` for an ordinary object. */
 function getMeasurementSummary(object: PlanObject): string | null {
-  if (object.measurement?.kind === "angle" && object.type === "line" && object.pointsM.length >= 3) {
+  if (
+    object.measurement?.kind === "angle" &&
+    object.type === "line" &&
+    object.pointsM.length >= 3
+  ) {
     const [a, b, c] = object.pointsM;
     if (a && b && c) return formatAngleDeg(angleAtPointDeg(a, b, c));
   }

@@ -79,7 +79,9 @@ describe("clampRailSize", () => {
   });
 
   it("falls back to the default rather than propagating NaN", () => {
-    expect(clampRailSize("propertiesWidthPx", Number.NaN)).toBe(DEFAULT_RAIL_SIZES.propertiesWidthPx);
+    expect(clampRailSize("propertiesWidthPx", Number.NaN)).toBe(
+      DEFAULT_RAIL_SIZES.propertiesWidthPx,
+    );
   });
 });
 
@@ -94,7 +96,11 @@ describe("loadRailSizes", () => {
 
   it("round-trips through save", () => {
     saveRailSizes({ toolsWidthPx: 300, propertiesWidthPx: 240, propertiesPercent: 35 });
-    expect(loadRailSizes()).toEqual({ toolsWidthPx: 300, propertiesWidthPx: 240, propertiesPercent: 35 });
+    expect(loadRailSizes()).toEqual({
+      toolsWidthPx: 300,
+      propertiesWidthPx: 240,
+      propertiesPercent: 35,
+    });
   });
 
   it("clamps a stored size instead of reopening with a rail off the screen", () => {

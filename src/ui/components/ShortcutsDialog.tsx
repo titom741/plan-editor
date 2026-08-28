@@ -37,8 +37,8 @@ export function ShortcutsDialog({ shortcuts, onChange, onClose }: ShortcutsDialo
         </div>
 
         <p className="properties-panel__hint">
-          Cliquez dans un champ puis pressez la nouvelle combinaison. Les flèches déplacent toujours la
-          sélection de 0,1 m (Maj : 1 m).
+          Cliquez dans un champ puis pressez la nouvelle combinaison. Les flèches déplacent toujours
+          la sélection de 0,1 m (Maj : 1 m).
         </p>
 
         {actions.map((action) => (

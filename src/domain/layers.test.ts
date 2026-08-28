@@ -31,7 +31,14 @@ function projectWithObjects(): Project {
     ...base,
     objects: [
       createRectangleObject({ layerId: first!.id, name: "a", xM: 0, yM: 0, widthM: 1, heightM: 1 }),
-      createRectangleObject({ layerId: second!.id, name: "b", xM: 0, yM: 0, widthM: 1, heightM: 1 }),
+      createRectangleObject({
+        layerId: second!.id,
+        name: "b",
+        xM: 0,
+        yM: 0,
+        widthM: 1,
+        heightM: 1,
+      }),
     ],
   };
 }
@@ -139,9 +146,19 @@ describe("layer operations on a project", () => {
   it("assigns objects to another layer, and is a no-op when nothing would change", () => {
     const before = projectWithObjects();
     const target = before.layers[3]!.id;
-    const after = assignObjectsToLayer(before, before.objects.map((o) => o.id), target);
+    const after = assignObjectsToLayer(
+      before,
+      before.objects.map((o) => o.id),
+      target,
+    );
     expect(after.objects.every((object) => object.layerId === target)).toBe(true);
-    expect(assignObjectsToLayer(after, after.objects.map((o) => o.id), target)).toBe(after);
+    expect(
+      assignObjectsToLayer(
+        after,
+        after.objects.map((o) => o.id),
+        target,
+      ),
+    ).toBe(after);
     expect(assignObjectsToLayer(before, [before.objects[0]!.id], "ghost")).toBe(before);
   });
 });

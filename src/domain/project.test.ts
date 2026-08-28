@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { createBackgroundImage, worldDistanceToImagePixels } from "./background";
 import { calibrationFromKnownDistance } from "./calibration";
 import { getObjectDimensionSummary, getObjectDisplayLabel, nextObjectName } from "./labels";
-import { createCircleObject, createLineObject, createPolygonObject, createRectangleObject } from "./objects";
+import {
+  createCircleObject,
+  createLineObject,
+  createPolygonObject,
+  createRectangleObject,
+} from "./objects";
 import { createDefaultLayers, DEFAULT_LAYER_NAMES, getDefaultTargetLayer } from "./layers";
 import {
   addObject,
@@ -75,14 +80,27 @@ describe("object geometry factories", () => {
   });
 
   it("stores circle radius in meters", () => {
-    const circle = createCircleObject({ layerId: "layer_1", name: "Poteau", xM: 0, yM: 0, radiusM: 1.5 });
+    const circle = createCircleObject({
+      layerId: "layer_1",
+      name: "Poteau",
+      xM: 0,
+      yM: 0,
+      radiusM: 1.5,
+    });
     expect(circle.radiusM).toBe(1.5);
   });
 });
 
 describe("getObjectDimensionSummary / getObjectDisplayLabel", () => {
   it("summarizes a rectangle's dimensions", () => {
-    const rect = createRectangleObject({ layerId: "l", name: "Chapiteau principal", xM: 0, yM: 0, widthM: 10, heightM: 5 });
+    const rect = createRectangleObject({
+      layerId: "l",
+      name: "Chapiteau principal",
+      xM: 0,
+      yM: 0,
+      widthM: 10,
+      heightM: 5,
+    });
     expect(getObjectDimensionSummary(rect)).toBe("10 × 5 m");
     expect(getObjectDisplayLabel(rect)).toBe("Chapiteau principal\n10 × 5 m");
   });
@@ -111,14 +129,21 @@ describe("getObjectDimensionSummary / getObjectDisplayLabel", () => {
       name: "Mesure",
       xM: 0,
       yM: 0,
-      pointsM: [{ xM: 0, yM: 0 }, { xM: 3, yM: 4 }],
+      pointsM: [
+        { xM: 0, yM: 0 },
+        { xM: 3, yM: 4 },
+      ],
     });
     const area = createPolygonObject({
       layerId: "l",
       name: "Mesure de zone",
       xM: 0,
       yM: 0,
-      pointsM: [{ xM: 0, yM: 0 }, { xM: 4, yM: 0 }, { xM: 4, yM: 3 }],
+      pointsM: [
+        { xM: 0, yM: 0 },
+        { xM: 4, yM: 0 },
+        { xM: 4, yM: 3 },
+      ],
     });
     expect(getObjectDimensionSummary(line)).toBe("5 m");
     expect(getObjectDimensionSummary(area)).toBe("12 m · 6 m²");
@@ -144,7 +169,14 @@ describe("addObject / removeObjects / patchObject", () => {
     const project = createEmptyProject({ name: "Test" });
     const layer = project.layers[0];
     if (!layer) throw new Error("expected a default layer");
-    const rect = createRectangleObject({ layerId: layer.id, name: "R", xM: 0, yM: 0, widthM: 1, heightM: 1 });
+    const rect = createRectangleObject({
+      layerId: layer.id,
+      name: "R",
+      xM: 0,
+      yM: 0,
+      widthM: 1,
+      heightM: 1,
+    });
 
     const next = addObject(project, rect);
     expect(project.objects).toHaveLength(0); // original untouched
@@ -224,9 +256,23 @@ describe("setBackground / removeBackground / patchBackground", () => {
   });
 
   it("stacks a second background above the first, in import order", () => {
-    const second = createBackgroundImage({ url: "data:image/png;base64,second", widthPx: 10, heightPx: 10, xM: 0, yM: 0, widthM: 1, heightM: 1 });
-    const next = addBackground(addBackground(createEmptyProject({ name: "Test" }), sampleBackground), second);
-    expect(next.backgrounds.map((background) => background.id)).toEqual([sampleBackground.id, second.id]);
+    const second = createBackgroundImage({
+      url: "data:image/png;base64,second",
+      widthPx: 10,
+      heightPx: 10,
+      xM: 0,
+      yM: 0,
+      widthM: 1,
+      heightM: 1,
+    });
+    const next = addBackground(
+      addBackground(createEmptyProject({ name: "Test" }), sampleBackground),
+      second,
+    );
+    expect(next.backgrounds.map((background) => background.id)).toEqual([
+      sampleBackground.id,
+      second.id,
+    ]);
   });
 
   it("removeBackground drops the matching one and is a no-op for an unknown id", () => {
@@ -237,7 +283,11 @@ describe("setBackground / removeBackground / patchBackground", () => {
 
   it("patchBackground merges fields into the matching background only", () => {
     const withBackground = addBackground(createEmptyProject({ name: "Test" }), sampleBackground);
-    const patched = patchBackground(withBackground, sampleBackground.id, { xM: 5, yM: 5, opacity: 0.5 });
+    const patched = patchBackground(withBackground, sampleBackground.id, {
+      xM: 5,
+      yM: 5,
+      opacity: 0.5,
+    });
     expect(patched.backgrounds[0]?.xM).toBe(5);
     expect(patched.backgrounds[0]?.yM).toBe(5);
     expect(patched.backgrounds[0]?.opacity).toBe(0.5);
@@ -247,10 +297,24 @@ describe("setBackground / removeBackground / patchBackground", () => {
   });
 
   it("moveBackground reorders the stack and stops at either end rather than wrapping", () => {
-    const second = createBackgroundImage({ url: "data:image/png;base64,second", widthPx: 10, heightPx: 10, xM: 0, yM: 0, widthM: 1, heightM: 1 });
-    const stacked = addBackground(addBackground(createEmptyProject({ name: "Test" }), sampleBackground), second);
+    const second = createBackgroundImage({
+      url: "data:image/png;base64,second",
+      widthPx: 10,
+      heightPx: 10,
+      xM: 0,
+      yM: 0,
+      widthM: 1,
+      heightM: 1,
+    });
+    const stacked = addBackground(
+      addBackground(createEmptyProject({ name: "Test" }), sampleBackground),
+      second,
+    );
     const raised = moveBackground(stacked, sampleBackground.id, 1);
-    expect(raised.backgrounds.map((background) => background.id)).toEqual([second.id, sampleBackground.id]);
+    expect(raised.backgrounds.map((background) => background.id)).toEqual([
+      second.id,
+      sampleBackground.id,
+    ]);
     // Already at the bottom: nothing to do, and the same object comes back.
     expect(moveBackground(stacked, sampleBackground.id, -1)).toBe(stacked);
     expect(moveBackground(stacked, second.id, 1)).toBe(stacked);
@@ -313,7 +377,11 @@ describe("applyCalibration", () => {
 
   it("keeps the background's aspect ratio, whatever the measured distance", () => {
     const project = addBackground(createEmptyProject({ name: "Test" }), sampleBackground);
-    const next = applyCalibration(project, calibrationFromKnownDistance(137, 3.7), sampleBackground.id);
+    const next = applyCalibration(
+      project,
+      calibrationFromKnownDistance(137, 3.7),
+      sampleBackground.id,
+    );
     const bg = next.backgrounds[0];
     if (!bg) throw new Error("background missing");
     expect(bg.widthM / bg.heightM).toBeCloseTo(bg.widthPx / bg.heightPx, 9);
@@ -326,7 +394,11 @@ describe("applyCalibration", () => {
     // back on the same pixelsPerMeter — otherwise recalibrating would
     // drift the plan a little further every time.
     const project = addBackground(createEmptyProject({ name: "Test" }), sampleBackground);
-    const first = applyCalibration(project, calibrationFromKnownDistance(500, 5), sampleBackground.id);
+    const first = applyCalibration(
+      project,
+      calibrationFromKnownDistance(500, 5),
+      sampleBackground.id,
+    );
     const bg = first.backgrounds[0];
     if (!bg) throw new Error("background missing");
 
@@ -353,7 +425,14 @@ describe("multi-object operations (KL-004)", () => {
 
   it("appends several objects in one go", () => {
     const { project, objects } = projectWithThree();
-    const extra = createRectangleObject({ layerId: objects[0]!.layerId, name: "d", xM: 30, yM: 0, widthM: 1, heightM: 1 });
+    const extra = createRectangleObject({
+      layerId: objects[0]!.layerId,
+      name: "d",
+      xM: 30,
+      yM: 0,
+      widthM: 1,
+      heightM: 1,
+    });
     const next = addObjects(project, [extra]);
     expect(next.objects).toHaveLength(4);
     expect(next.objects[3]).toBe(extra);

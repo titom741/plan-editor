@@ -26,7 +26,9 @@ export const PAPER_SIZE_ORDER: PaperSize[] = ["A4", "A3", "A2", "A1", "A0"];
  * marked 1:137 is one nobody can check with a ruler, and rounding to a
  * standard scale is what makes a printed plan usable on site.
  */
-export const STANDARD_SCALE_DENOMINATORS = [20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000] as const;
+export const STANDARD_SCALE_DENOMINATORS = [
+  20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000,
+] as const;
 
 export const DEFAULT_MARGIN_MM = 10;
 
@@ -80,7 +82,9 @@ export function paperMmToMeters(mm: number, scaleDenominator: number): number {
 }
 
 /** How much ground the printable area covers at the sheet's scale — the number that tells a user whether their plan will fit. */
-export function getCoveredAreaM(sheet: Pick<Sheet, "paperSize" | "orientation" | "marginMm" | "scaleDenominator">): {
+export function getCoveredAreaM(
+  sheet: Pick<Sheet, "paperSize" | "orientation" | "marginMm" | "scaleDenominator">,
+): {
   widthM: number;
   heightM: number;
 } {
@@ -108,7 +112,8 @@ export function fitScaleDenominator(
 ): number {
   const printable = getPrintableAreaMm(sheet);
   const finest: number = STANDARD_SCALE_DENOMINATORS[0];
-  const largest: number = STANDARD_SCALE_DENOMINATORS[STANDARD_SCALE_DENOMINATORS.length - 1] ?? finest;
+  const largest: number =
+    STANDARD_SCALE_DENOMINATORS[STANDARD_SCALE_DENOMINATORS.length - 1] ?? finest;
   if (printable.widthMm <= 0 || printable.heightMm <= 0) return largest;
 
   // Empty content: nothing to fit, so keep the most detailed scale.

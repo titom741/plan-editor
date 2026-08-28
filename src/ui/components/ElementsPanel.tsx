@@ -100,7 +100,9 @@ export function ElementsPanel({
             />
           </label>
 
-          {total === 0 && <p className="properties-panel__empty">Le plan ne contient encore aucun élément.</p>}
+          {total === 0 && (
+            <p className="properties-panel__empty">Le plan ne contient encore aucun élément.</p>
+          )}
 
           {visibleGroups.map(({ layer, objects: layerObjects }) => (
             <section key={layer.id} className="elements-panel__group">
@@ -123,7 +125,12 @@ export function ElementsPanel({
                           className={`elements-panel__item${selected.has(object.id) ? " is-selected" : ""}`}
                           aria-pressed={selected.has(object.id)}
                           title={dimensions ? `${object.name} — ${dimensions}` : object.name}
-                          onClick={(event) => onSelectObject(object.id, event.shiftKey || event.metaKey || event.ctrlKey)}
+                          onClick={(event) =>
+                            onSelectObject(
+                              object.id,
+                              event.shiftKey || event.metaKey || event.ctrlKey,
+                            )
+                          }
                         >
                           <span aria-hidden="true" className="elements-panel__icon">
                             {TYPE_ICONS[object.type]}

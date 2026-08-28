@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { boundsCenterM, boundsSizeM, getBackgroundBoundsM, getObjectBoundsM, getProjectBoundsM, unionBounds } from "./bounds";
+import {
+  boundsCenterM,
+  boundsSizeM,
+  getBackgroundBoundsM,
+  getObjectBoundsM,
+  getProjectBoundsM,
+  unionBounds,
+} from "./bounds";
 import { createBackgroundImage } from "./background";
 import { getDefaultTargetLayer } from "./layers";
-import { createCircleObject, createLineObject, createRectangleObject, createTextObject } from "./objects";
+import {
+  createCircleObject,
+  createLineObject,
+  createRectangleObject,
+  createTextObject,
+} from "./objects";
 import { addBackground, addObject, createEmptyProject } from "./project";
 import type { Project } from "./types";
 
@@ -50,7 +62,15 @@ describe("getObjectBoundsM — rectangles", () => {
 describe("getBackgroundBoundsM", () => {
   it("inclut les quatre coins d'un fond tourné", () => {
     const background = {
-      ...createBackgroundImage({ url: "data:,", widthPx: 100, heightPx: 50, xM: 10, yM: 20, widthM: 10, heightM: 5 }),
+      ...createBackgroundImage({
+        url: "data:,",
+        widthPx: 100,
+        heightPx: 50,
+        xM: 10,
+        yM: 20,
+        widthM: 10,
+        heightM: 5,
+      }),
       rotationDeg: 90,
     };
     const bounds = getBackgroundBoundsM(background);
@@ -63,7 +83,10 @@ describe("getBackgroundBoundsM", () => {
 
 describe("getObjectBoundsM — other shapes", () => {
   it("bounds a circle around its centre, ignoring rotation", () => {
-    const circle = { ...createCircleObject({ layerId: "l", name: "C", xM: 5, yM: 5, radiusM: 2 }), rotationDeg: 37 };
+    const circle = {
+      ...createCircleObject({ layerId: "l", name: "C", xM: 5, yM: 5, radiusM: 2 }),
+      rotationDeg: 37,
+    };
     expect(getObjectBoundsM(circle)).toEqual({ minXM: 3, minYM: 3, maxXM: 7, maxYM: 7 });
   });
 
@@ -84,7 +107,14 @@ describe("getObjectBoundsM — other shapes", () => {
   it("estime l'étendue réelle d'un texte au lieu de le réduire à son ancre", () => {
     // The size is pinned rather than left to the factory default: this
     // test is about the extent maths, not about what a new text starts at.
-    const text = createTextObject({ layerId: "l", name: "T", xM: 4, yM: 6, text: "Entrée pompiers", fontSizeM: 0.3 });
+    const text = createTextObject({
+      layerId: "l",
+      name: "T",
+      xM: 4,
+      yM: 6,
+      text: "Entrée pompiers",
+      fontSizeM: 0.3,
+    });
     const bounds = getObjectBoundsM(text);
     expect(bounds?.minXM).toBe(4);
     expect(bounds?.minYM).toBe(6);
@@ -102,10 +132,12 @@ describe("unionBounds", () => {
   });
 
   it("covers both boxes", () => {
-    const union = unionBounds({ minXM: 0, minYM: 0, maxXM: 2, maxYM: 2 }, { minXM: -1, minYM: 5, maxXM: 1, maxYM: 6 });
+    const union = unionBounds(
+      { minXM: 0, minYM: 0, maxXM: 2, maxYM: 2 },
+      { minXM: -1, minYM: 5, maxXM: 1, maxYM: 6 },
+    );
     expect(union).toEqual({ minXM: -1, minYM: 0, maxXM: 2, maxYM: 6 });
   });
-
 
   it("reports size and centre", () => {
     const bounds = { minXM: -10, minYM: 0, maxXM: 10, maxYM: 4 };
@@ -129,7 +161,10 @@ describe("getProjectBoundsM", () => {
   it("covers every visible object", () => {
     const { project, layerId } = projectWithLayer();
     const withObjects = addObject(
-      addObject(project, createRectangleObject({ layerId, name: "R", xM: 0, yM: 0, widthM: 10, heightM: 5 })),
+      addObject(
+        project,
+        createRectangleObject({ layerId, name: "R", xM: 0, yM: 0, widthM: 10, heightM: 5 }),
+      ),
       createCircleObject({ layerId, name: "C", xM: 30, yM: 20, radiusM: 5 }),
     );
     expect(getProjectBoundsM(withObjects)).toEqual({ minXM: 0, minYM: 0, maxXM: 35, maxYM: 25 });
@@ -153,13 +188,21 @@ describe("getProjectBoundsM", () => {
         heightM: 20,
       }),
     );
-    expect(getProjectBoundsM(withBackground)).toEqual({ minXM: -20, minYM: -10, maxXM: 20, maxYM: 10 });
+    expect(getProjectBoundsM(withBackground)).toEqual({
+      minXM: -20,
+      minYM: -10,
+      maxXM: 20,
+      maxYM: 10,
+    });
   });
 
   it("ignores objects on a hidden layer — what you export is what you see", () => {
     const { project, layerId } = projectWithLayer();
     const withObjects = addObject(
-      addObject(project, createRectangleObject({ layerId, name: "R", xM: 0, yM: 0, widthM: 10, heightM: 5 })),
+      addObject(
+        project,
+        createRectangleObject({ layerId, name: "R", xM: 0, yM: 0, widthM: 10, heightM: 5 }),
+      ),
       createCircleObject({ layerId, name: "Loin", xM: 500, yM: 500, radiusM: 5 }),
     );
     const hidden: Project = {
@@ -185,7 +228,10 @@ describe("getProjectBoundsM", () => {
     );
     const hidden: Project = {
       ...withBackground,
-      backgrounds: withBackground.backgrounds.map((background) => ({ ...background, visible: false })),
+      backgrounds: withBackground.backgrounds.map((background) => ({
+        ...background,
+        visible: false,
+      })),
     };
     expect(getProjectBoundsM(hidden)).toBeNull();
   });

@@ -27,7 +27,10 @@ export function createDefaultCalibration(): Calibration {
  * in `domain/background.ts`, which uses it to recompute the background's
  * true `widthM`/`heightM` from its native `widthPx`/`heightPx`.
  */
-export function calibrationFromKnownDistance(pixelDistance: number, realDistanceM: number): Calibration {
+export function calibrationFromKnownDistance(
+  pixelDistance: number,
+  realDistanceM: number,
+): Calibration {
   return {
     pixelsPerMeter: pixelDistance / realDistanceM,
     source: { type: "knownDistance", pixelDistance, realDistanceM },

@@ -64,7 +64,10 @@ function write(templates: readonly ComponentTemplate[]): void {
   }
 }
 
-export function saveComponentTemplate(name: string, objects: readonly PlanObject[]): ComponentTemplate {
+export function saveComponentTemplate(
+  name: string,
+  objects: readonly PlanObject[],
+): ComponentTemplate {
   const template: ComponentTemplate = {
     id: createId("component"),
     name: name.trim() || "Composant",

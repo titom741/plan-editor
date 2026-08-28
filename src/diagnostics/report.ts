@@ -30,13 +30,27 @@ export interface DiagnosticReport {
   };
 }
 
-export function buildDiagnosticReport(project: Project, environment: DiagnosticEnvironment, generatedAt = new Date().toISOString()): DiagnosticReport {
-  const objectsByType: DiagnosticReport["project"]["objectsByType"] = { rectangle: 0, circle: 0, line: 0, polygon: 0, text: 0, image: 0 };
-  project.objects.forEach((object) => { objectsByType[object.type] += 1; });
+export function buildDiagnosticReport(
+  project: Project,
+  environment: DiagnosticEnvironment,
+  generatedAt = new Date().toISOString(),
+): DiagnosticReport {
+  const objectsByType: DiagnosticReport["project"]["objectsByType"] = {
+    rectangle: 0,
+    circle: 0,
+    line: 0,
+    polygon: 0,
+    text: 0,
+    image: 0,
+  };
+  project.objects.forEach((object) => {
+    objectsByType[object.type] += 1;
+  });
   return {
     kind: "kl-implantation/diagnostic",
     generatedAt,
-    privacy: "Aucun nom d'objet, coordonnée, contenu de texte ou pixel du fond de plan n'est inclus.",
+    privacy:
+      "Aucun nom d'objet, coordonnée, contenu de texte ou pixel du fond de plan n'est inclus.",
     environment,
     project: {
       id: project.id,

@@ -157,7 +157,9 @@ export async function listStoredProjects(): Promise<StoredProjectSummary[]> {
     const keysRequest = promisifyRequest(store.getAllKeys());
     const valuesRequest = promisifyRequest(store.getAll());
     const [keys, allValues] = await Promise.all([keysRequest, valuesRequest]);
-    const projectKeys = keys.filter((key): key is string => typeof key === "string" && key.startsWith(PROJECT_KEY_PREFIX));
+    const projectKeys = keys.filter(
+      (key): key is string => typeof key === "string" && key.startsWith(PROJECT_KEY_PREFIX),
+    );
     const summaries: StoredProjectSummary[] = [];
     keys.forEach((key, index) => {
       if (typeof key !== "string" || !projectKeys.includes(key)) return;
@@ -165,7 +167,14 @@ export async function listStoredProjects(): Promise<StoredProjectSummary[]> {
       const parsed = parseProjectFile(value);
       if (!parsed.ok) return;
       const { project } = parsed.file;
-      summaries.push({ id: project.id, name: project.name, location: project.location, updatedAt: project.updatedAt, savedAt: parsed.file.savedAt, objectCount: project.objects.length });
+      summaries.push({
+        id: project.id,
+        name: project.name,
+        location: project.location,
+        updatedAt: project.updatedAt,
+        savedAt: parsed.file.savedAt,
+        objectCount: project.objects.length,
+      });
     });
     return summaries.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
   } catch {
@@ -180,10 +189,14 @@ export async function loadStoredProject(id: string): Promise<LoadResult> {
   if (!db) return { status: "unavailable" };
   try {
     const transaction = db.transaction(STORE_NAME, "readonly");
-    const stored = await promisifyRequest(transaction.objectStore(STORE_NAME).get(`${PROJECT_KEY_PREFIX}${id}`));
+    const stored = await promisifyRequest(
+      transaction.objectStore(STORE_NAME).get(`${PROJECT_KEY_PREFIX}${id}`),
+    );
     if (stored === undefined) return { status: "empty" };
     const result = parseProjectFile(stored);
-    return result.ok ? { status: "loaded", file: result.file } : { status: "corrupt", error: result.error };
+    return result.ok
+      ? { status: "loaded", file: result.file }
+      : { status: "corrupt", error: result.error };
   } catch {
     return { status: "unavailable" };
   } finally {
@@ -196,7 +209,9 @@ export async function deleteStoredProject(id: string): Promise<boolean> {
   if (!db) return false;
   try {
     const transaction = db.transaction(STORE_NAME, "readwrite");
-    await promisifyRequest(transaction.objectStore(STORE_NAME).delete(`${PROJECT_KEY_PREFIX}${id}`));
+    await promisifyRequest(
+      transaction.objectStore(STORE_NAME).delete(`${PROJECT_KEY_PREFIX}${id}`),
+    );
     return true;
   } catch {
     return false;
@@ -214,7 +229,8 @@ async function putProjectFile(key: string, project: Project): Promise<SaveResult
     await promisifyRequest(transaction.objectStore(STORE_NAME).put(file, key));
     return { status: "saved", savedAt: file.savedAt };
   } catch (error) {
-    if (error instanceof DOMException && error.name === "QuotaExceededError") return { status: "quotaExceeded" };
+    if (error instanceof DOMException && error.name === "QuotaExceededError")
+      return { status: "quotaExceeded" };
     return { status: "failed", message: error instanceof Error ? error.message : String(error) };
   } finally {
     db.close();
@@ -225,7 +241,11 @@ export async function renameStoredProject(id: string, name: string): Promise<boo
   const loaded = await loadStoredProject(id);
   if (loaded.status !== "loaded") return false;
   const now = new Date().toISOString();
-  const project = { ...loaded.file.project, name: name.trim() || loaded.file.project.name, updatedAt: now };
+  const project = {
+    ...loaded.file.project,
+    name: name.trim() || loaded.file.project.name,
+    updatedAt: now,
+  };
   return (await putProjectFile(`${PROJECT_KEY_PREFIX}${id}`, project)).status === "saved";
 }
 
@@ -256,17 +276,25 @@ const MAX_AUTOMATIC_VERSIONS = 20;
 export async function saveAutomaticProjectVersion(project: Project): Promise<SaveResult> {
   const versions = await listProjectVersions(project.id);
   const latestAutomatic = versions.find((version) => version.automatic);
-  if (latestAutomatic && Date.now() - new Date(latestAutomatic.savedAt).getTime() < AUTOMATIC_VERSION_INTERVAL_MS) {
+  if (
+    latestAutomatic &&
+    Date.now() - new Date(latestAutomatic.savedAt).getTime() < AUTOMATIC_VERSION_INTERVAL_MS
+  ) {
     return { status: "saved", savedAt: latestAutomatic.savedAt };
   }
   const savedAt = new Date().toISOString();
-  const result = await putProjectFile(`${VERSION_KEY_PREFIX}${project.id}:auto:${savedAt}`, project);
+  const result = await putProjectFile(
+    `${VERSION_KEY_PREFIX}${project.id}:auto:${savedAt}`,
+    project,
+  );
   if (result.status !== "saved") return result;
 
   const db = await openDatabase();
   if (!db) return result;
   try {
-    const automatic = (await listProjectVersions(project.id)).filter((version) => version.automatic);
+    const automatic = (await listProjectVersions(project.id)).filter(
+      (version) => version.automatic,
+    );
     const obsolete = automatic.slice(MAX_AUTOMATIC_VERSIONS);
     if (obsolete.length > 0) {
       const store = db.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME);
@@ -285,16 +313,28 @@ export async function listProjectVersions(projectId: string): Promise<StoredVers
   if (!db) return [];
   try {
     const store = db.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME);
-    const [keys, values] = await Promise.all([promisifyRequest(store.getAllKeys()), promisifyRequest(store.getAll())]);
+    const [keys, values] = await Promise.all([
+      promisifyRequest(store.getAllKeys()),
+      promisifyRequest(store.getAll()),
+    ]);
     const prefix = `${VERSION_KEY_PREFIX}${projectId}:`;
-    const versionKeys = keys.filter((key): key is string => typeof key === "string" && key.startsWith(prefix));
+    const versionKeys = keys.filter(
+      (key): key is string => typeof key === "string" && key.startsWith(prefix),
+    );
     const versions: StoredVersionSummary[] = [];
     keys.forEach((key, index) => {
       if (typeof key !== "string" || !versionKeys.includes(key)) return;
       const value = values[index];
       const parsed = parseProjectFile(value);
       if (!parsed.ok) return;
-      versions.push({ key, projectId, savedAt: parsed.file.savedAt, name: parsed.file.project.name, objectCount: parsed.file.project.objects.length, automatic: key.includes(":auto:") });
+      versions.push({
+        key,
+        projectId,
+        savedAt: parsed.file.savedAt,
+        name: parsed.file.project.name,
+        objectCount: parsed.file.project.objects.length,
+        automatic: key.includes(":auto:"),
+      });
     });
     return versions.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
   } catch {
@@ -309,10 +349,14 @@ export async function loadProjectVersion(key: string): Promise<LoadResult> {
   const db = await openDatabase();
   if (!db) return { status: "unavailable" };
   try {
-    const stored = await promisifyRequest(db.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).get(key));
+    const stored = await promisifyRequest(
+      db.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).get(key),
+    );
     if (stored === undefined) return { status: "empty" };
     const parsed = parseProjectFile(stored);
-    return parsed.ok ? { status: "loaded", file: parsed.file } : { status: "corrupt", error: parsed.error };
+    return parsed.ok
+      ? { status: "loaded", file: parsed.file }
+      : { status: "corrupt", error: parsed.error };
   } catch {
     return { status: "unavailable" };
   } finally {

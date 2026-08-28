@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { canRedo, canUndo, createHistory, pushHistory, redo, replacePresent, undo } from "./historyStack";
+import {
+  canRedo,
+  canUndo,
+  createHistory,
+  pushHistory,
+  redo,
+  replacePresent,
+  undo,
+} from "./historyStack";
 
 describe("createHistory", () => {
   it("starts with the given value as present and empty past/future", () => {

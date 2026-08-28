@@ -69,9 +69,7 @@ export function createRectangleObject(
   };
 }
 
-export function createCircleObject(
-  input: CommonObjectInput & { radiusM: number },
-): CircleObject {
+export function createCircleObject(input: CommonObjectInput & { radiusM: number }): CircleObject {
   return {
     id: createId("obj"),
     type: "circle",
@@ -87,9 +85,7 @@ export function createCircleObject(
   };
 }
 
-export function createLineObject(
-  input: CommonObjectInput & { pointsM: PointM[] },
-): LineObject {
+export function createLineObject(input: CommonObjectInput & { pointsM: PointM[] }): LineObject {
   return {
     id: createId("obj"),
     type: "line",
@@ -142,6 +138,30 @@ export function createTextObject(
   };
 }
 
-export function createImageObject(input: CommonObjectInput & { url: string; widthPx: number; heightPx: number; widthM: number; heightM: number }): ImageObject {
-  return { id: createId("obj"), type: "image", layerId: input.layerId, name: input.name, label: input.label, ...materialFields(input), xM: input.xM, yM: input.yM, rotationDeg: input.rotationDeg ?? 0, style: input.style, url: input.url, widthPx: input.widthPx, heightPx: input.heightPx, widthM: input.widthM, heightM: input.heightM };
+export function createImageObject(
+  input: CommonObjectInput & {
+    url: string;
+    widthPx: number;
+    heightPx: number;
+    widthM: number;
+    heightM: number;
+  },
+): ImageObject {
+  return {
+    id: createId("obj"),
+    type: "image",
+    layerId: input.layerId,
+    name: input.name,
+    label: input.label,
+    ...materialFields(input),
+    xM: input.xM,
+    yM: input.yM,
+    rotationDeg: input.rotationDeg ?? 0,
+    style: input.style,
+    url: input.url,
+    widthPx: input.widthPx,
+    heightPx: input.heightPx,
+    widthM: input.widthM,
+    heightM: input.heightM,
+  };
 }

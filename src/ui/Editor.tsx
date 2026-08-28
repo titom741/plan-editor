@@ -1,8 +1,30 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import { computeDefaultBackgroundPlacement, createBackgroundImage, cropRectFromMargins, getBackgroundCropMargins, worldDistanceToImagePixels } from "../domain/background";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import {
+  computeDefaultBackgroundPlacement,
+  createBackgroundImage,
+  cropRectFromMargins,
+  getBackgroundCropMargins,
+  worldDistanceToImagePixels,
+} from "../domain/background";
 import { boundsCenterM, getBackgroundBoundsM, unionBounds, type BoundsM } from "../domain/bounds";
 import { DEFAULT_LABEL_DISPLAY, type LabelDisplay } from "../domain/display";
-import { clearGroup, createNamedGroup, distributeObjects, transformObjectAroundPivot } from "../domain/grouping";
+import {
+  clearGroup,
+  createNamedGroup,
+  distributeObjects,
+  transformObjectAroundPivot,
+} from "../domain/grouping";
 import { subdivideRectangle, type SubdivisionOptions } from "../domain/subdivision";
 import type { CatalogItem } from "../domain/catalog";
 import { duplicateObjects } from "../domain/clipboard";
@@ -31,7 +53,14 @@ import {
   replaceBackground,
   moveBackground,
 } from "../domain/project";
-import type { BackgroundImage, ObjectStyle, PlanObjectPatch, PointM, Project, RectangleObject } from "../domain/types";
+import type {
+  BackgroundImage,
+  ObjectStyle,
+  PlanObjectPatch,
+  PointM,
+  Project,
+  RectangleObject,
+} from "../domain/types";
 import { DEFAULT_SCREEN_PIXELS_PER_METER, screenToWorld } from "../rendering/viewport";
 import { CalibrationDialog } from "./components/CalibrationDialog";
 import { DeleteLayerDialog, LayerStyleDialog } from "./components/LayerDialogs";
@@ -70,7 +99,12 @@ import {
 } from "./panelSections";
 import { CSS_PIXELS_PER_INCH, useSheetExport } from "./hooks/useSheetExport";
 import { useViewport } from "./hooks/useViewport";
-import { describeParseError, downloadProjectFile, readProjectFile, saveProjectFileAs } from "./projectFileActions";
+import {
+  describeParseError,
+  downloadProjectFile,
+  readProjectFile,
+  saveProjectFileAs,
+} from "./projectFileActions";
 import type { ToolId } from "./tools";
 import { downloadDiagnosticReport } from "./diagnosticActions";
 import { loadShortcuts, saveShortcuts, type ShortcutMap } from "./shortcuts";
@@ -81,13 +115,26 @@ import {
   togglePinnedCommand,
   type CommandId,
 } from "./commands";
-import { deleteComponentTemplate, loadComponentTemplates, saveComponentTemplate, type ComponentTemplate } from "../persistence/componentStorage";
+import {
+  deleteComponentTemplate,
+  loadComponentTemplates,
+  saveComponentTemplate,
+  type ComponentTemplate,
+} from "../persistence/componentStorage";
 import "./App.css";
 
-const LibraryDialog = lazy(() => import("./components/LibraryDialog").then((module) => ({ default: module.LibraryDialog })));
-const ProjectsDialog = lazy(() => import("./components/ProjectsDialog").then((module) => ({ default: module.ProjectsDialog })));
-const ScheduleDialog = lazy(() => import("./components/ScheduleDialog").then((module) => ({ default: module.ScheduleDialog })));
-const ExchangeDialog = lazy(() => import("./components/ExchangeDialog").then((module) => ({ default: module.ExchangeDialog })));
+const LibraryDialog = lazy(() =>
+  import("./components/LibraryDialog").then((module) => ({ default: module.LibraryDialog })),
+);
+const ProjectsDialog = lazy(() =>
+  import("./components/ProjectsDialog").then((module) => ({ default: module.ProjectsDialog })),
+);
+const ScheduleDialog = lazy(() =>
+  import("./components/ScheduleDialog").then((module) => ({ default: module.ScheduleDialog })),
+);
+const ExchangeDialog = lazy(() =>
+  import("./components/ExchangeDialog").then((module) => ({ default: module.ExchangeDialog })),
+);
 
 /**
  * Arrow-key presses closer together than this are folded into a single
@@ -128,7 +175,11 @@ function buildObjectFromSpec(project: Project, spec: NewObjectSpec, layerId: str
     case "line":
       return createLineObject({ ...common, pointsM: spec.pointsM, measurement: spec.measurement });
     case "polygon":
-      return createPolygonObject({ ...common, pointsM: spec.pointsM, measurement: spec.measurement });
+      return createPolygonObject({
+        ...common,
+        pointsM: spec.pointsM,
+        measurement: spec.measurement,
+      });
     case "text":
       return createTextObject({ ...common, text: "Texte" });
   }
@@ -177,7 +228,10 @@ export default function Editor({
 
   const [activeTool, setActiveTool] = useState<ToolId>("select");
   /** The layer new objects land on. KL-002 always used the first unlocked layer; KL-006 makes it the user's choice. */
-  const [calibrationPoints, setCalibrationPoints] = useState<{ pointA: PointM; pointB: PointM } | null>(null);
+  const [calibrationPoints, setCalibrationPoints] = useState<{
+    pointA: PointM;
+    pointB: PointM;
+  } | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   // One state rather than eight booleans: these are all modal, so "which
   // one is open" is a single fact. Eight independent flags could represent
@@ -189,8 +243,8 @@ export default function Editor({
   // One set for every foldable side panel. Each rail is an accordion and
   // both the folds and the rail sizes persist — see `panelSections.ts`,
   // which owns those rules so they can be tested without a DOM.
-  const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<PanelSectionId>>(
-    () => loadCollapsedSections(),
+  const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<PanelSectionId>>(() =>
+    loadCollapsedSections(),
   );
   const isCollapsed = useCallback(
     (id: PanelSectionId) => collapsedSections.has(id),
@@ -205,7 +259,13 @@ export default function Editor({
   const railSizesRef = useRef(railSizes);
   const inspectorRailRef = useRef<HTMLDivElement | null>(null);
   const railDragRef = useRef<
-    | { axis: "x"; key: "toolsWidthPx" | "propertiesWidthPx"; sign: 1 | -1; startPx: number; startValue: number }
+    | {
+        axis: "x";
+        key: "toolsWidthPx" | "propertiesWidthPx";
+        sign: 1 | -1;
+        startPx: number;
+        startValue: number;
+      }
     | { axis: "y"; startPx: number; startValue: number; railHeightPx: number }
     | null
   >(null);
@@ -218,8 +278,20 @@ export default function Editor({
       if (!drag) return;
       const next =
         drag.axis === "x"
-          ? { ...railSizesRef.current, [drag.key]: clampRailSize(drag.key, drag.startValue + (event.clientX - drag.startPx) * drag.sign) }
-          : { ...railSizesRef.current, propertiesPercent: clampRailSize("propertiesPercent", drag.startValue + ((event.clientY - drag.startPx) / drag.railHeightPx) * 100) };
+          ? {
+              ...railSizesRef.current,
+              [drag.key]: clampRailSize(
+                drag.key,
+                drag.startValue + (event.clientX - drag.startPx) * drag.sign,
+              ),
+            }
+          : {
+              ...railSizesRef.current,
+              propertiesPercent: clampRailSize(
+                "propertiesPercent",
+                drag.startValue + ((event.clientY - drag.startPx) / drag.railHeightPx) * 100,
+              ),
+            };
       railSizesRef.current = next;
       setRailSizes(next);
     };
@@ -239,7 +311,13 @@ export default function Editor({
   const startWidthDrag = useCallback(
     (key: "toolsWidthPx" | "propertiesWidthPx", event: ReactPointerEvent) => {
       event.preventDefault();
-      railDragRef.current = { axis: "x", key, sign: key === "toolsWidthPx" ? 1 : -1, startPx: event.clientX, startValue: railSizesRef.current[key] };
+      railDragRef.current = {
+        axis: "x",
+        key,
+        sign: key === "toolsWidthPx" ? 1 : -1,
+        startPx: event.clientX,
+        startValue: railSizesRef.current[key],
+      };
     },
     [],
   );
@@ -247,9 +325,16 @@ export default function Editor({
     const railHeightPx = inspectorRailRef.current?.clientHeight ?? 0;
     if (railHeightPx <= 0) return;
     event.preventDefault();
-    railDragRef.current = { axis: "y", startPx: event.clientY, startValue: railSizesRef.current.propertiesPercent, railHeightPx };
+    railDragRef.current = {
+      axis: "y",
+      startPx: event.clientY,
+      startValue: railSizesRef.current.propertiesPercent,
+      railHeightPx,
+    };
   }, []);
-  const [componentTemplates, setComponentTemplates] = useState<ComponentTemplate[]>(() => loadComponentTemplates());
+  const [componentTemplates, setComponentTemplates] = useState<ComponentTemplate[]>(() =>
+    loadComponentTemplates(),
+  );
   /** Snapping is on by default: a plan is drawn to fit together, and the people who don't want it find the switch faster than the people who need it find its absence. */
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [gridVisible, setGridVisible] = useState(true);
@@ -271,19 +356,16 @@ export default function Editor({
   // `DEFAULT_SCREEN_PIXELS_PER_METER`. Calibrating a background corrects
   // the background's real-world size, it doesn't change how big a meter is
   // drawn on screen.
-  const navigationBounds = useMemo(
-    () => {
-      // Framing follows the whole visible stack, not one image: with a
-      // survey plan and a satellite view over it, "fit the plan" has to
-      // show both.
-      const visible = project.backgrounds.filter((background) => background.visible);
-      return visible.reduce<BoundsM | null>(
-        (bounds, background) => unionBounds(bounds, getBackgroundBoundsM(background)),
-        null,
-      );
-    },
-    [project.backgrounds],
-  );
+  const navigationBounds = useMemo(() => {
+    // Framing follows the whole visible stack, not one image: with a
+    // survey plan and a satellite view over it, "fit the plan" has to
+    // show both.
+    const visible = project.backgrounds.filter((background) => background.visible);
+    return visible.reduce<BoundsM | null>(
+      (bounds, background) => unionBounds(bounds, getBackgroundBoundsM(background)),
+      null,
+    );
+  }, [project.backgrounds]);
   const { viewport, containerRef, stageSize, zoomAt, pan, fitBounds } = useViewport(
     DEFAULT_SCREEN_PIXELS_PER_METER,
     navigationBounds,
@@ -331,20 +413,27 @@ export default function Editor({
    */
   const handleLabelDisplayChange = useCallback(
     (nextDisplay: LabelDisplay) => {
-      commitChange((current) => ({ ...current, labelDisplay: nextDisplay, updatedAt: new Date().toISOString() }));
+      commitChange((current) => ({
+        ...current,
+        labelDisplay: nextDisplay,
+        updatedAt: new Date().toISOString(),
+      }));
     },
     [commitChange],
   );
 
   const objectCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const object of project.objects) counts.set(object.layerId, (counts.get(object.layerId) ?? 0) + 1);
+    for (const object of project.objects)
+      counts.set(object.layerId, (counts.get(object.layerId) ?? 0) + 1);
     return counts;
   }, [project.objects]);
 
   /** Objects in draw order: by their layer's `order`, then by creation order within a layer. */
   const orderedObjects = useMemo(() => {
-    const rank = new Map(sortLayersByOrder(project.layers).map((layer, index) => [layer.id, index]));
+    const rank = new Map(
+      sortLayersByOrder(project.layers).map((layer, index) => [layer.id, index]),
+    );
     return [...project.objects].sort(
       (a, b) => (rank.get(a.layerId) ?? 0) - (rank.get(b.layerId) ?? 0),
     );
@@ -426,10 +515,13 @@ export default function Editor({
     project.backgrounds.find((candidate) => candidate.id === selectedBackgroundId) ?? null;
   const isBackgroundLocked = selectedBackground?.locked === true;
 
-  const handleSelectTool = useCallback((toolId: ToolId) => {
-    setActiveTool(toolId);
-    if (toolId !== "select") deselectAll();
-  }, [deselectAll]);
+  const handleSelectTool = useCallback(
+    (toolId: ToolId) => {
+      setActiveTool(toolId);
+      if (toolId !== "select") deselectAll();
+    },
+    [deselectAll],
+  );
 
   // The object is built *before* the state update, not read back out of
   // its updater: React may defer an updater to the next render, and
@@ -537,7 +629,9 @@ export default function Editor({
   const handleBackgroundLiveUpdate = useCallback(
     (patch: Partial<BackgroundImage>) => {
       if (!selectedBackgroundId) return;
-      applyLiveEdit((currentProject) => patchBackground(currentProject, selectedBackgroundId, patch));
+      applyLiveEdit((currentProject) =>
+        patchBackground(currentProject, selectedBackgroundId, patch),
+      );
     },
     [applyLiveEdit, selectedBackgroundId],
   );
@@ -571,16 +665,19 @@ export default function Editor({
     setActiveTool("select");
   }, []);
 
-  const handleConfirmScaleCalibration = useCallback((scale: number, dpi: number) => {
-    if (!calibratedBackground) return;
-    const backgroundId = calibratedBackground.id;
-    commitChange((currentProject) =>
-      applyCalibration(currentProject, calibrationFromKnownScale(scale, dpi), backgroundId),
-    );
-    closeDialog();
-    setActiveTool("select");
-    selectBackground(backgroundId);
-  }, [commitChange, closeDialog, selectBackground, calibratedBackground]);
+  const handleConfirmScaleCalibration = useCallback(
+    (scale: number, dpi: number) => {
+      if (!calibratedBackground) return;
+      const backgroundId = calibratedBackground.id;
+      commitChange((currentProject) =>
+        applyCalibration(currentProject, calibrationFromKnownScale(scale, dpi), backgroundId),
+      );
+      closeDialog();
+      setActiveTool("select");
+      selectBackground(backgroundId);
+    },
+    [commitChange, closeDialog, selectBackground, calibratedBackground],
+  );
 
   // Turns the two clicked points (in the project's current, possibly
   // still-approximate scale) plus the real distance the user just typed
@@ -594,7 +691,9 @@ export default function Editor({
       const measuredDistanceM = Math.hypot(pointB.xM - pointA.xM, pointB.yM - pointA.yM);
       const pixelDistance = worldDistanceToImagePixels(calibratedBackground, measuredDistanceM);
       const calibration = calibrationFromKnownDistance(pixelDistance, realDistanceM);
-      commitChange((currentProject) => applyCalibration(currentProject, calibration, calibratedBackground.id));
+      commitChange((currentProject) =>
+        applyCalibration(currentProject, calibration, calibratedBackground.id),
+      );
       setCalibrationPoints(null);
       setActiveTool("select");
       selectBackground(calibratedBackground.id);
@@ -618,17 +717,27 @@ export default function Editor({
     if (deletable.length === 0) return;
     commitChange((currentProject) => removeObjects(currentProject, deletable));
     deselectAll();
-  }, [selectedBackgroundId, isBackgroundLocked, selectedObjects, lockedLayerIds, commitChange, deselectAll]);
+  }, [
+    selectedBackgroundId,
+    isBackgroundLocked,
+    selectedObjects,
+    lockedLayerIds,
+    commitChange,
+    deselectAll,
+  ]);
 
   const { copy, paste, duplicate } = useClipboard({
     project,
     selectedObjects,
     fallbackLayerId: effectiveLayerId,
     commitChange,
-    onPasted: useCallback((ids: readonly string[]) => {
-      selectOnly(ids);
-      setActiveTool("select");
-    }, [selectOnly]),
+    onPasted: useCallback(
+      (ids: readonly string[]) => {
+        selectOnly(ids);
+        setActiveTool("select");
+      },
+      [selectOnly],
+    ),
   });
 
   useEditorShortcuts({
@@ -657,11 +766,14 @@ export default function Editor({
   // happen to be selected — a half-dissolved group is not a state the user
   // asked for. Objects on a locked layer keep their membership.
   const handleUngroup = useCallback(() => {
-    const groupIds = new Set(editableSelection.map((object) => object.groupId).filter((id): id is string => Boolean(id)));
+    const groupIds = new Set(
+      editableSelection.map((object) => object.groupId).filter((id): id is string => Boolean(id)),
+    );
     if (groupIds.size === 0) return;
     commitChange((currentProject) => {
       const grouped = currentProject.objects.filter(
-        (object) => object.groupId && groupIds.has(object.groupId) && !lockedLayerIds.has(object.layerId),
+        (object) =>
+          object.groupId && groupIds.has(object.groupId) && !lockedLayerIds.has(object.layerId),
       );
       const patches = new Map(clearGroup(grouped).map((object) => [object.id, object]));
       return patchObjects(currentProject, patches);
@@ -671,38 +783,64 @@ export default function Editor({
   // The pivot is the *whole* selection's centre, not the editable part's:
   // scaling a group around a moving pivot would shift it sideways as soon
   // as one member happens to be locked.
-  const handleTransformSelection = useCallback((scale: number, rotationDeg: number) => {
-    if (!selectionBounds || selectedObjects.length < 2 || editableSelection.length === 0) return;
-    const pivot = boundsCenterM(selectionBounds);
-    const transformed = editableSelection.map((object) => transformObjectAroundPivot(object, pivot, scale, rotationDeg));
-    const patches = new Map(transformed.map((object) => [object.id, object]));
-    commitChange((currentProject) => patchObjects(currentProject, patches));
-  }, [selectionBounds, selectedObjects.length, editableSelection, commitChange]);
+  const handleTransformSelection = useCallback(
+    (scale: number, rotationDeg: number) => {
+      if (!selectionBounds || selectedObjects.length < 2 || editableSelection.length === 0) return;
+      const pivot = boundsCenterM(selectionBounds);
+      const transformed = editableSelection.map((object) =>
+        transformObjectAroundPivot(object, pivot, scale, rotationDeg),
+      );
+      const patches = new Map(transformed.map((object) => [object.id, object]));
+      commitChange((currentProject) => patchObjects(currentProject, patches));
+    },
+    [selectionBounds, selectedObjects.length, editableSelection, commitChange],
+  );
 
-  const handleDistributeSelection = useCallback((axis: "x" | "y") => {
-    if (editableSelection.length < 3) return;
-    const distributed = distributeObjects(editableSelection, axis);
-    commitChange((currentProject) => patchObjects(currentProject, new Map(distributed.map((object) => [object.id, object]))));
-  }, [editableSelection, commitChange]);
+  const handleDistributeSelection = useCallback(
+    (axis: "x" | "y") => {
+      if (editableSelection.length < 3) return;
+      const distributed = distributeObjects(editableSelection, axis);
+      commitChange((currentProject) =>
+        patchObjects(currentProject, new Map(distributed.map((object) => [object.id, object]))),
+      );
+    },
+    [editableSelection, commitChange],
+  );
 
   const handleSaveComponent = useCallback(() => {
     if (selectedObjects.length === 0 || !selectionBounds) return;
-    const name = window.prompt("Nom du modèle réutilisable", selectedObjects[0]?.groupName ?? "Composant")?.trim();
+    const name = window
+      .prompt("Nom du modèle réutilisable", selectedObjects[0]?.groupName ?? "Composant")
+      ?.trim();
     if (!name) return;
-    const normalized = selectedObjects.map((object) => ({ ...object, xM: object.xM - selectionBounds.minXM, yM: object.yM - selectionBounds.minYM }));
+    const normalized = selectedObjects.map((object) => ({
+      ...object,
+      xM: object.xM - selectionBounds.minXM,
+      yM: object.yM - selectionBounds.minYM,
+    }));
     const template = saveComponentTemplate(name, normalized);
     setComponentTemplates((current) => [...current, template]);
   }, [selectedObjects, selectionBounds]);
 
-  const handleInsertComponent = useCallback((template: ComponentTemplate) => {
-    if (!effectiveLayerId) return;
-    const center = screenToWorld({ x: stageSize.widthPx / 2, y: stageSize.heightPx / 2 }, viewport);
-    const copies = duplicateObjects(template.objects, { offsetM: center, existingLayerIds: new Set(project.layers.map((layer) => layer.id)), fallbackLayerId: effectiveLayerId });
-    const grouped = createNamedGroup(copies, template.name);
-    commitChange((currentProject) => addObjects(currentProject, grouped));
-    selectOnly(grouped.map((object) => object.id));
-    closeDialog();
-  }, [effectiveLayerId, stageSize, viewport, project.layers, commitChange, closeDialog, selectOnly]);
+  const handleInsertComponent = useCallback(
+    (template: ComponentTemplate) => {
+      if (!effectiveLayerId) return;
+      const center = screenToWorld(
+        { x: stageSize.widthPx / 2, y: stageSize.heightPx / 2 },
+        viewport,
+      );
+      const copies = duplicateObjects(template.objects, {
+        offsetM: center,
+        existingLayerIds: new Set(project.layers.map((layer) => layer.id)),
+        fallbackLayerId: effectiveLayerId,
+      });
+      const grouped = createNamedGroup(copies, template.name);
+      commitChange((currentProject) => addObjects(currentProject, grouped));
+      selectOnly(grouped.map((object) => object.id));
+      closeDialog();
+    },
+    [effectiveLayerId, stageSize, viewport, project.layers, commitChange, closeDialog, selectOnly],
+  );
 
   /**
    * Visibility and lock stay outside the undo stack, like a layer's: they
@@ -711,7 +849,9 @@ export default function Editor({
   const handleToggleBackgroundVisible = useCallback(
     (backgroundId: string) => {
       setProjectDirect((currentProject) => {
-        const background = currentProject.backgrounds.find((candidate) => candidate.id === backgroundId);
+        const background = currentProject.backgrounds.find(
+          (candidate) => candidate.id === backgroundId,
+        );
         return background
           ? patchBackground(currentProject, backgroundId, { visible: !background.visible })
           : currentProject;
@@ -723,7 +863,9 @@ export default function Editor({
   const handleToggleBackgroundLocked = useCallback(
     (backgroundId: string) => {
       setProjectDirect((currentProject) => {
-        const background = currentProject.backgrounds.find((candidate) => candidate.id === backgroundId);
+        const background = currentProject.backgrounds.find(
+          (candidate) => candidate.id === backgroundId,
+        );
         return background
           ? patchBackground(currentProject, backgroundId, { locked: !background.locked })
           : currentProject;
@@ -763,7 +905,10 @@ export default function Editor({
         if (!url) return;
         const img = new Image();
         img.onload = () => {
-          const centerWorld = screenToWorld({ x: stageSize.widthPx / 2, y: stageSize.heightPx / 2 }, viewport);
+          const centerWorld = screenToWorld(
+            { x: stageSize.widthPx / 2, y: stageSize.heightPx / 2 },
+            viewport,
+          );
           let importedId: string | null = null;
           commitChange((currentProject) => {
             const existing = replaceId
@@ -820,26 +965,45 @@ export default function Editor({
     [handleImportBackgroundFile],
   );
 
-  const handleObjectImageInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || !effectiveLayerId) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const url = typeof reader.result === "string" ? reader.result : null; if (!url) return;
-      const image = new Image();
-      image.onload = () => {
-        const widthM = 10; const heightM = widthM * image.naturalHeight / image.naturalWidth;
-        const center = screenToWorld({ x: stageSize.widthPx / 2, y: stageSize.heightPx / 2 }, viewport);
-        const object = createImageObject({ layerId: effectiveLayerId, name: file.name.replace(/\.[^.]+$/, "") || "Image", url, widthPx: image.naturalWidth, heightPx: image.naturalHeight, widthM, heightM, xM: center.xM - widthM / 2, yM: center.yM - heightM / 2, style: { opacity: 1 } });
-        commitChange((currentProject) => addObject(currentProject, object));
-        selectOnly([object.id]);
-        setActiveTool("select");
+  const handleObjectImageInputChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      if (!file || !effectiveLayerId) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const url = typeof reader.result === "string" ? reader.result : null;
+        if (!url) return;
+        const image = new Image();
+        image.onload = () => {
+          const widthM = 10;
+          const heightM = (widthM * image.naturalHeight) / image.naturalWidth;
+          const center = screenToWorld(
+            { x: stageSize.widthPx / 2, y: stageSize.heightPx / 2 },
+            viewport,
+          );
+          const object = createImageObject({
+            layerId: effectiveLayerId,
+            name: file.name.replace(/\.[^.]+$/, "") || "Image",
+            url,
+            widthPx: image.naturalWidth,
+            heightPx: image.naturalHeight,
+            widthM,
+            heightM,
+            xM: center.xM - widthM / 2,
+            yM: center.yM - heightM / 2,
+            style: { opacity: 1 },
+          });
+          commitChange((currentProject) => addObject(currentProject, object));
+          selectOnly([object.id]);
+          setActiveTool("select");
+        };
+        image.src = url;
       };
-      image.src = url;
-    };
-    reader.readAsDataURL(file);
-  }, [effectiveLayerId, stageSize, viewport, commitChange, selectOnly]);
+      reader.readAsDataURL(file);
+    },
+    [effectiveLayerId, stageSize, viewport, commitChange, selectOnly],
+  );
 
   // --- Project files -------------------------------------------------------
 
@@ -870,11 +1034,17 @@ export default function Editor({
    * next time, the suggested name is the one the user last chose.
    */
   const handleSaveToFileAs = useCallback(() => {
-    const name = window.prompt("Enregistrer sous — nom du projet et du fichier", project.name)?.trim();
+    const name = window
+      .prompt("Enregistrer sous — nom du projet et du fichier", project.name)
+      ?.trim();
     if (!name) return;
     const renamed = { ...project, name, updatedAt: new Date().toISOString() };
     commitChange(() => renamed);
-    void saveProjectFileAs(renamed).catch((error: unknown) => setFileError(`L'enregistrement a échoué : ${error instanceof Error ? error.message : String(error)}`));
+    void saveProjectFileAs(renamed).catch((error: unknown) =>
+      setFileError(
+        `L'enregistrement a échoué : ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
   }, [project, commitChange]);
 
   const handleRequestOpenProject = useCallback(() => {
@@ -911,11 +1081,14 @@ export default function Editor({
     replaceDocument(createEmptyProject({ name: "Nouveau projet" }));
   }, [replaceDocument]);
 
-  const handleRenameProject = useCallback((requestedName?: string) => {
-    const name = (requestedName ?? window.prompt("Nom du projet", project.name))?.trim();
-    if (!name || name === project.name) return;
-    commitChange((current) => ({ ...current, name, updatedAt: new Date().toISOString() }));
-  }, [project.name, commitChange]);
+  const handleRenameProject = useCallback(
+    (requestedName?: string) => {
+      const name = (requestedName ?? window.prompt("Nom du projet", project.name))?.trim();
+      if (!name || name === project.name) return;
+      commitChange((current) => ({ ...current, name, updatedAt: new Date().toISOString() }));
+    },
+    [project.name, commitChange],
+  );
 
   /**
    * Cutting a surface into stands. The object being subdivided is held in
@@ -956,20 +1129,34 @@ export default function Editor({
   const runCommand = useCallback(
     (id: CommandId) => {
       switch (id) {
-        case "newProject": return handleNewProject();
-        case "openProject": return handleRequestOpenProject();
-        case "recentProjects": return setOpenDialog("projects");
-        case "saveFile": return handleSaveToFile();
-        case "saveFileAs": return handleSaveToFileAs();
-        case "export": return setOpenDialog("export");
-        case "library": return setOpenDialog("library");
-        case "importObjectImage": return objectImageInputRef.current?.click();
-        case "schedule": return setOpenDialog("schedule");
-        case "exchange": return setOpenDialog("exchange");
-        case "comments": return setOpenDialog("comments");
-        case "shortcuts": return setOpenDialog("shortcuts");
-        case "customizeToolbar": return setOpenDialog("customizeToolbar");
-        case "diagnostic": return downloadDiagnosticReport(project);
+        case "newProject":
+          return handleNewProject();
+        case "openProject":
+          return handleRequestOpenProject();
+        case "recentProjects":
+          return setOpenDialog("projects");
+        case "saveFile":
+          return handleSaveToFile();
+        case "saveFileAs":
+          return handleSaveToFileAs();
+        case "export":
+          return setOpenDialog("export");
+        case "library":
+          return setOpenDialog("library");
+        case "importObjectImage":
+          return objectImageInputRef.current?.click();
+        case "schedule":
+          return setOpenDialog("schedule");
+        case "exchange":
+          return setOpenDialog("exchange");
+        case "comments":
+          return setOpenDialog("comments");
+        case "shortcuts":
+          return setOpenDialog("shortcuts");
+        case "customizeToolbar":
+          return setOpenDialog("customizeToolbar");
+        case "diagnostic":
+          return downloadDiagnosticReport(project);
       }
     },
     [project, handleNewProject, handleRequestOpenProject, handleSaveToFile, handleSaveToFileAs],
@@ -978,39 +1165,71 @@ export default function Editor({
   // --- Material library ----------------------------------------------------
 
   /** Drops a catalogue item at the centre of the current view, carrying its reference and unit so it shows up in the schedule. */
-  const handleInsertCatalogItem = useCallback((item: CatalogItem) => {
-    if (!effectiveLayerId) return;
-    const center = screenToWorld({ x: stageSize.widthPx / 2, y: stageSize.heightPx / 2 }, viewport);
-    const common = {
-      layerId: effectiveLayerId,
-      name: item.name,
-      // No `label`: that legacy field overrides the display settings
-      // wholesale, so a catalogue item carrying one would silently ignore
-      // the plan's label choices. The name is already `item.name`.
-      catalogId: item.id,
-      category: item.category,
-      reference: item.reference,
-      quantity: 1,
-      unit: item.unit,
-      xM: center.xM,
-      yM: center.yM,
-      style: item.style,
-    };
-    const object = item.shape === "circle"
-      ? createCircleObject({ ...common, radiusM: item.radiusM ?? 0.5 })
-      : item.shape === "line"
-        ? createLineObject({ ...common, pointsM: item.pointsM ?? [{ xM: 0, yM: 0 }, { xM: 1, yM: 0 }] })
-        : item.shape === "polygon"
-          ? createPolygonObject({ ...common, pointsM: item.pointsM ?? [{ xM: 0, yM: 0 }, { xM: 1, yM: 0 }, { xM: 0, yM: 1 }] })
-          : createRectangleObject({ ...common, widthM: item.widthM ?? 1, heightM: item.heightM ?? 1 });
-    commitChange((currentProject) => addObject(currentProject, object));
-    selectOnly([object.id]);
-    setActiveTool("select");
-    closeDialog();
-  }, [effectiveLayerId, stageSize, viewport, commitChange, closeDialog, selectOnly]);
+  const handleInsertCatalogItem = useCallback(
+    (item: CatalogItem) => {
+      if (!effectiveLayerId) return;
+      const center = screenToWorld(
+        { x: stageSize.widthPx / 2, y: stageSize.heightPx / 2 },
+        viewport,
+      );
+      const common = {
+        layerId: effectiveLayerId,
+        name: item.name,
+        // No `label`: that legacy field overrides the display settings
+        // wholesale, so a catalogue item carrying one would silently ignore
+        // the plan's label choices. The name is already `item.name`.
+        catalogId: item.id,
+        category: item.category,
+        reference: item.reference,
+        quantity: 1,
+        unit: item.unit,
+        xM: center.xM,
+        yM: center.yM,
+        style: item.style,
+      };
+      const object =
+        item.shape === "circle"
+          ? createCircleObject({ ...common, radiusM: item.radiusM ?? 0.5 })
+          : item.shape === "line"
+            ? createLineObject({
+                ...common,
+                pointsM: item.pointsM ?? [
+                  { xM: 0, yM: 0 },
+                  { xM: 1, yM: 0 },
+                ],
+              })
+            : item.shape === "polygon"
+              ? createPolygonObject({
+                  ...common,
+                  pointsM: item.pointsM ?? [
+                    { xM: 0, yM: 0 },
+                    { xM: 1, yM: 0 },
+                    { xM: 0, yM: 1 },
+                  ],
+                })
+              : createRectangleObject({
+                  ...common,
+                  widthM: item.widthM ?? 1,
+                  heightM: item.heightM ?? 1,
+                });
+      commitChange((currentProject) => addObject(currentProject, object));
+      selectOnly([object.id]);
+      setActiveTool("select");
+      closeDialog();
+    },
+    [effectiveLayerId, stageSize, viewport, commitChange, closeDialog, selectOnly],
+  );
 
   return (
-    <div className="app-layout" style={{ "--tools-width": `${railSizes.toolsWidthPx}px`, "--properties-width": `${railSizes.propertiesWidthPx}px` } as CSSProperties}>
+    <div
+      className="app-layout"
+      style={
+        {
+          "--tools-width": `${railSizes.toolsWidthPx}px`,
+          "--properties-width": `${railSizes.propertiesWidthPx}px`,
+        } as CSSProperties
+      }
+    >
       <input
         ref={fileInputRef}
         type="file"
@@ -1025,7 +1244,13 @@ export default function Editor({
         className="visually-hidden"
         onChange={handleProjectFileInputChange}
       />
-      <input ref={objectImageInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="visually-hidden" onChange={handleObjectImageInputChange} />
+      <input
+        ref={objectImageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="visually-hidden"
+        onChange={handleObjectImageInputChange}
+      />
       <Toolbar
         projectName={project.name}
         onRenameProject={handleRenameProject}
@@ -1054,36 +1279,42 @@ export default function Editor({
         </div>
       )}
       <div className="side-rail">
-      <ToolsPanel
-        activeToolId={activeTool}
-        onSelectTool={handleSelectTool}
-        snapEnabled={snapEnabled}
-        onSnapEnabledChange={setSnapEnabled}
-        gridVisible={gridVisible}
-        onGridVisibleChange={setGridVisible}
-        gridLimited={hasVisibleBackground ? true : gridLimited}
-        onGridLimitedChange={setGridLimited}
-        gridLimitForced={hasVisibleBackground}
-        labelDisplay={labelDisplay}
-        onLabelDisplayChange={handleLabelDisplayChange}
-        collapsed={isCollapsed("tools")}
-        onToggleCollapsed={() => toggleCollapsed("tools")}
-      />
-      <CommandMenu
-        group="file"
-        onRun={runCommand}
-        pinnedIds={pinnedCommands}
-        collapsed={isCollapsed("file")}
-        onToggleCollapsed={() => toggleCollapsed("file")}
-      />
-      <CommandMenu
-        group="project"
-        onRun={runCommand}
-        pinnedIds={pinnedCommands}
-        collapsed={isCollapsed("project")}
-        onToggleCollapsed={() => toggleCollapsed("project")}
-      />
-      <div className="rail-resizer rail-resizer--tools" role="separator" aria-orientation="vertical" aria-label="Largeur des menus" onPointerDown={(event) => startWidthDrag("toolsWidthPx", event)} />
+        <ToolsPanel
+          activeToolId={activeTool}
+          onSelectTool={handleSelectTool}
+          snapEnabled={snapEnabled}
+          onSnapEnabledChange={setSnapEnabled}
+          gridVisible={gridVisible}
+          onGridVisibleChange={setGridVisible}
+          gridLimited={hasVisibleBackground ? true : gridLimited}
+          onGridLimitedChange={setGridLimited}
+          gridLimitForced={hasVisibleBackground}
+          labelDisplay={labelDisplay}
+          onLabelDisplayChange={handleLabelDisplayChange}
+          collapsed={isCollapsed("tools")}
+          onToggleCollapsed={() => toggleCollapsed("tools")}
+        />
+        <CommandMenu
+          group="file"
+          onRun={runCommand}
+          pinnedIds={pinnedCommands}
+          collapsed={isCollapsed("file")}
+          onToggleCollapsed={() => toggleCollapsed("file")}
+        />
+        <CommandMenu
+          group="project"
+          onRun={runCommand}
+          pinnedIds={pinnedCommands}
+          collapsed={isCollapsed("project")}
+          onToggleCollapsed={() => toggleCollapsed("project")}
+        />
+        <div
+          className="rail-resizer rail-resizer--tools"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Largeur des menus"
+          onPointerDown={(event) => startWidthDrag("toolsWidthPx", event)}
+        />
       </div>
       <PlanCanvas
         containerRef={containerRef}
@@ -1116,50 +1347,70 @@ export default function Editor({
         onCalibrationMeasured={handleCalibrationMeasured}
         onCancelCalibration={handleCancelCalibration}
       />
-      <div className="inspector-rail" ref={inspectorRailRef} style={{ "--properties-percent": `${railSizes.propertiesPercent}%` } as CSSProperties}>
-      <div className="rail-resizer rail-resizer--properties" role="separator" aria-orientation="vertical" aria-label="Largeur de l'inspecteur" onPointerDown={(event) => startWidthDrag("propertiesWidthPx", event)} />
-      <PropertiesPanel
-        selected={selectedBackgroundId ? null : selectedObject}
-        selectionCount={selectedBackgroundId ? 0 : selectedObjects.length}
-        selectionBounds={selectionBounds}
-        layers={project.layers}
-        selectionLayerId={
-          selectedObjects.length > 0 &&
-          selectedObjects.every((object) => object.layerId === selectedObjects[0]?.layerId)
-            ? (selectedObjects[0]?.layerId ?? null)
-            : null
-        }
-        onAssignLayer={(layerId) => assignObjectsToLayerAction(selectedIds, layerId)}
-        selectedBackground={selectedBackground}
-        calibration={project.calibration}
-        isLocked={selectedBackgroundId ? isBackgroundLocked : isSelectedLocked}
-        labelDisplay={labelDisplay}
-        onBeginEdit={handleBeginObjectEdit}
-        onLiveUpdate={(patch) => selectedObject && handleObjectLiveUpdate(selectedObject.id, patch)}
-        onBackgroundLiveUpdate={handleBackgroundLiveUpdate}
-        onDelete={handleDeleteSelected}
-        onDuplicate={duplicate}
-        onRequestReplaceBackground={() => selectedBackgroundId && handleRequestBackgroundImport(selectedBackgroundId)}
-        onRequestCalibration={handleRequestCalibration}
-        onRequestScaleCalibration={() => setOpenDialog("scaleCalibration")}
-        onCreateGroup={handleCreateGroup}
-        onUngroup={handleUngroup}
-        onTransformSelection={handleTransformSelection}
-        onDistributeSelection={handleDistributeSelection}
-        onSaveComponent={handleSaveComponent}
-        onSubdivide={handleRequestSubdivide}
-        collapsed={isCollapsed("properties")}
-        onToggleCollapsed={() => toggleCollapsed("properties")}
-      />
-      <div className="inspector-resizer" role="separator" aria-orientation="horizontal" aria-label="Hauteur des propriétés" onPointerDown={startInspectorDrag} />
-      <ElementsPanel
-        layers={project.layers}
-        objects={orderedObjects}
-        selectedIds={selectedIds}
-        onSelectObject={selectObject}
-        collapsed={isCollapsed("elements")}
-        onToggleCollapsed={() => toggleCollapsed("elements")}
-      />
+      <div
+        className="inspector-rail"
+        ref={inspectorRailRef}
+        style={{ "--properties-percent": `${railSizes.propertiesPercent}%` } as CSSProperties}
+      >
+        <div
+          className="rail-resizer rail-resizer--properties"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Largeur de l'inspecteur"
+          onPointerDown={(event) => startWidthDrag("propertiesWidthPx", event)}
+        />
+        <PropertiesPanel
+          selected={selectedBackgroundId ? null : selectedObject}
+          selectionCount={selectedBackgroundId ? 0 : selectedObjects.length}
+          selectionBounds={selectionBounds}
+          layers={project.layers}
+          selectionLayerId={
+            selectedObjects.length > 0 &&
+            selectedObjects.every((object) => object.layerId === selectedObjects[0]?.layerId)
+              ? (selectedObjects[0]?.layerId ?? null)
+              : null
+          }
+          onAssignLayer={(layerId) => assignObjectsToLayerAction(selectedIds, layerId)}
+          selectedBackground={selectedBackground}
+          calibration={project.calibration}
+          isLocked={selectedBackgroundId ? isBackgroundLocked : isSelectedLocked}
+          labelDisplay={labelDisplay}
+          onBeginEdit={handleBeginObjectEdit}
+          onLiveUpdate={(patch) =>
+            selectedObject && handleObjectLiveUpdate(selectedObject.id, patch)
+          }
+          onBackgroundLiveUpdate={handleBackgroundLiveUpdate}
+          onDelete={handleDeleteSelected}
+          onDuplicate={duplicate}
+          onRequestReplaceBackground={() =>
+            selectedBackgroundId && handleRequestBackgroundImport(selectedBackgroundId)
+          }
+          onRequestCalibration={handleRequestCalibration}
+          onRequestScaleCalibration={() => setOpenDialog("scaleCalibration")}
+          onCreateGroup={handleCreateGroup}
+          onUngroup={handleUngroup}
+          onTransformSelection={handleTransformSelection}
+          onDistributeSelection={handleDistributeSelection}
+          onSaveComponent={handleSaveComponent}
+          onSubdivide={handleRequestSubdivide}
+          collapsed={isCollapsed("properties")}
+          onToggleCollapsed={() => toggleCollapsed("properties")}
+        />
+        <div
+          className="inspector-resizer"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Hauteur des propriétés"
+          onPointerDown={startInspectorDrag}
+        />
+        <ElementsPanel
+          layers={project.layers}
+          objects={orderedObjects}
+          selectedIds={selectedIds}
+          onSelectObject={selectObject}
+          collapsed={isCollapsed("elements")}
+          onToggleCollapsed={() => toggleCollapsed("elements")}
+        />
       </div>
       {calibrationPoints && (
         <CalibrationDialog
@@ -1220,7 +1471,10 @@ export default function Editor({
         onToggleBackgroundLocked={handleToggleBackgroundLocked}
         onMoveBackground={handleMoveBackground}
         onRequestImportBackground={() => handleRequestBackgroundImport()}
-        onAssignObjectToLayer={(objectId, layerId) => { assignObjectsToLayerAction([objectId], layerId); selectOnly([objectId]); }}
+        onAssignObjectToLayer={(objectId, layerId) => {
+          assignObjectsToLayerAction([objectId], layerId);
+          selectOnly([objectId]);
+        }}
         onSetLayerFolder={setLayerFolder}
         onSetLayerDefaultStyle={requestLayerStyle}
       />
@@ -1232,7 +1486,17 @@ export default function Editor({
           onAddSheet={addSheet}
           onDuplicateSheet={duplicateSheet}
           onDeleteSheet={deleteSheet}
-          preview={<SheetPreview project={project} sheet={sheet} layout={sheetLayout} objects={orderedObjects} layers={project.layers} backgrounds={project.backgrounds} showGrid={printGrid} />}
+          preview={
+            <SheetPreview
+              project={project}
+              sheet={sheet}
+              layout={sheetLayout}
+              objects={orderedObjects}
+              layers={project.layers}
+              backgrounds={project.backgrounds}
+              showGrid={printGrid}
+            />
+          }
           contentBounds={contentBounds}
           busy={pendingExport !== null}
           onChange={changeSheet}
@@ -1266,23 +1530,94 @@ export default function Editor({
           />
         )}
       >
-      <Suspense fallback={<div className="dialog-backdrop"><div className="dialog" role="status">Chargement…</div></div>}>
-        {openDialog === "library" && <LibraryDialog onInsert={handleInsertCatalogItem} templates={componentTemplates} onInsertTemplate={handleInsertComponent} onDeleteTemplate={(id) => setComponentTemplates(deleteComponentTemplate(id))} onClose={() => closeDialog()} />}
-        {openDialog === "schedule" && <ScheduleDialog project={project} objects={project.objects} onClose={() => closeDialog()} />}
-        {openDialog === "projects" && <ProjectsDialog currentProject={project} onOpen={(nextProject) => { replaceDocument(nextProject); closeDialog(); }} onClose={() => closeDialog()} />}
-        {openDialog === "exchange" && <ExchangeDialog project={project} objects={orderedObjects.filter((object) => visibleLayerIds.has(object.layerId))} selection={selectedObjects} targetLayerId={effectiveLayerId} onImportObjects={(objects) => { commitChange((current) => addObjects(current, objects)); selectOnly(objects.map((object) => object.id)); }} onSetGeoreference={(georeference) => commitChange((current) => ({ ...current, georeference, updatedAt: new Date().toISOString() }))} onClose={() => closeDialog()} />}
-      </Suspense>
+        <Suspense
+          fallback={
+            <div className="dialog-backdrop">
+              <div className="dialog" role="status">
+                Chargement…
+              </div>
+            </div>
+          }
+        >
+          {openDialog === "library" && (
+            <LibraryDialog
+              onInsert={handleInsertCatalogItem}
+              templates={componentTemplates}
+              onInsertTemplate={handleInsertComponent}
+              onDeleteTemplate={(id) => setComponentTemplates(deleteComponentTemplate(id))}
+              onClose={() => closeDialog()}
+            />
+          )}
+          {openDialog === "schedule" && (
+            <ScheduleDialog
+              project={project}
+              objects={project.objects}
+              onClose={() => closeDialog()}
+            />
+          )}
+          {openDialog === "projects" && (
+            <ProjectsDialog
+              currentProject={project}
+              onOpen={(nextProject) => {
+                replaceDocument(nextProject);
+                closeDialog();
+              }}
+              onClose={() => closeDialog()}
+            />
+          )}
+          {openDialog === "exchange" && (
+            <ExchangeDialog
+              project={project}
+              objects={orderedObjects.filter((object) => visibleLayerIds.has(object.layerId))}
+              selection={selectedObjects}
+              targetLayerId={effectiveLayerId}
+              onImportObjects={(objects) => {
+                commitChange((current) => addObjects(current, objects));
+                selectOnly(objects.map((object) => object.id));
+              }}
+              onSetGeoreference={(georeference) =>
+                commitChange((current) => ({
+                  ...current,
+                  georeference,
+                  updatedAt: new Date().toISOString(),
+                }))
+              }
+              onClose={() => closeDialog()}
+            />
+          )}
+        </Suspense>
       </ErrorBoundary>
       {openDialog === "customizeToolbar" && (
         <ToolbarCustomizeDialog
           pinnedIds={pinnedCommands}
-          onToggle={(id) => setPinnedCommands((current) => savePinnedCommands(togglePinnedCommand(current, id)))}
+          onToggle={(id) =>
+            setPinnedCommands((current) => savePinnedCommands(togglePinnedCommand(current, id)))
+          }
           onReset={() => setPinnedCommands(savePinnedCommands(DEFAULT_PINNED_COMMANDS))}
           onClose={closeDialog}
         />
       )}
-      {openDialog === "shortcuts" && <ShortcutsDialog shortcuts={shortcuts} onChange={(next) => setShortcuts(saveShortcuts(next))} onClose={() => closeDialog()} />}
-      {openDialog === "comments" && <CommentsDialog project={project} selectedObjectId={selectedIds.length === 1 ? selectedIds[0] : undefined} onChange={(comments) => commitChange((current) => ({ ...current, collaboration: { comments }, updatedAt: new Date().toISOString() }))} onClose={() => closeDialog()} />}
+      {openDialog === "shortcuts" && (
+        <ShortcutsDialog
+          shortcuts={shortcuts}
+          onChange={(next) => setShortcuts(saveShortcuts(next))}
+          onClose={() => closeDialog()}
+        />
+      )}
+      {openDialog === "comments" && (
+        <CommentsDialog
+          project={project}
+          selectedObjectId={selectedIds.length === 1 ? selectedIds[0] : undefined}
+          onChange={(comments) =>
+            commitChange((current) => ({
+              ...current,
+              collaboration: { comments },
+              updatedAt: new Date().toISOString(),
+            }))
+          }
+          onClose={() => closeDialog()}
+        />
+      )}
       {/*
         The print stage is mounted only for the instant it takes to
         rasterise, and kept out of the layout entirely — it is far larger

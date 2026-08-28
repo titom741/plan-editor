@@ -57,8 +57,9 @@ export function AppErrorFallback({ error, onRetry }: { error: Error; onRetry: ()
     <div className="app-error" role="alert">
       <h1>L’éditeur s’est arrêté</h1>
       <p>
-        Une erreur inattendue a interrompu l’application. Votre projet est enregistré automatiquement
-        dans ce navigateur : rouvrez la page pour reprendre à la dernière sauvegarde.
+        Une erreur inattendue a interrompu l’application. Votre projet est enregistré
+        automatiquement dans ce navigateur : rouvrez la page pour reprendre à la dernière
+        sauvegarde.
       </p>
       <p className="app-error__detail">{error.message}</p>
       <div className="app-error__actions">
@@ -85,7 +86,12 @@ export function DialogErrorFallback({
 }) {
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
-      <section className="dialog" role="alertdialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+      <section
+        className="dialog"
+        role="alertdialog"
+        aria-modal="true"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className="dialog__header">
           <h2>Cette fenêtre n’a pas pu s’ouvrir</h2>
           <button type="button" className="dialog__close" onClick={onClose} aria-label="Fermer">
@@ -93,8 +99,8 @@ export function DialogErrorFallback({
           </button>
         </div>
         <p>
-          Le plan reste ouvert et intact. Si l’application vient d’être mise à jour, rechargez la page
-          pour récupérer la version la plus récente.
+          Le plan reste ouvert et intact. Si l’application vient d’être mise à jour, rechargez la
+          page pour récupérer la version la plus récente.
         </p>
         <p className="app-error__detail">{error.message}</p>
         <div className="dialog__actions">

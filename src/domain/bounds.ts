@@ -85,12 +85,20 @@ export function getObjectBoundsM(object: PlanObject): BoundsM | null {
       // A conservative font-independent estimate (average Latin glyph ≈
       // 0.6 em) prevents selection/export framing from reducing text to a
       // point. Exact glyph metrics remain a renderer concern.
-      return boundsOfPoints([
-        { xM: 0, yM: 0 },
-        { xM: Math.max(object.fontSizeM * 0.6, object.text.length * object.fontSizeM * 0.6), yM: 0 },
-        { xM: Math.max(object.fontSizeM * 0.6, object.text.length * object.fontSizeM * 0.6), yM: object.fontSizeM * 1.2 },
-        { xM: 0, yM: object.fontSizeM * 1.2 },
-      ].map((point) => addVector(anchor, rotateVector(point, object.rotationDeg))));
+      return boundsOfPoints(
+        [
+          { xM: 0, yM: 0 },
+          {
+            xM: Math.max(object.fontSizeM * 0.6, object.text.length * object.fontSizeM * 0.6),
+            yM: 0,
+          },
+          {
+            xM: Math.max(object.fontSizeM * 0.6, object.text.length * object.fontSizeM * 0.6),
+            yM: object.fontSizeM * 1.2,
+          },
+          { xM: 0, yM: object.fontSizeM * 1.2 },
+        ].map((point) => addVector(anchor, rotateVector(point, object.rotationDeg))),
+      );
   }
 }
 
@@ -102,7 +110,14 @@ export function getBackgroundBoundsM(background: BackgroundImage): BoundsM {
     { xM: background.widthM, yM: background.heightM },
     { xM: 0, yM: background.heightM },
   ].map((corner) => addVector(anchor, rotateVector(corner, background.rotationDeg)));
-  return boundsOfPoints(corners) ?? { minXM: background.xM, minYM: background.yM, maxXM: background.xM, maxYM: background.yM };
+  return (
+    boundsOfPoints(corners) ?? {
+      minXM: background.xM,
+      minYM: background.yM,
+      maxXM: background.xM,
+      maxYM: background.yM,
+    }
+  );
 }
 
 /**

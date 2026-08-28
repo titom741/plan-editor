@@ -235,12 +235,7 @@ export interface ImageObject extends PlanObjectBase {
 }
 
 export type PlanObject =
-  | RectangleObject
-  | CircleObject
-  | LineObject
-  | PolygonObject
-  | TextObject
-  | ImageObject;
+  RectangleObject | CircleObject | LineObject | PolygonObject | TextObject | ImageObject;
 
 /**
  * A partial update to a `PlanObject`, distributed over the union so each

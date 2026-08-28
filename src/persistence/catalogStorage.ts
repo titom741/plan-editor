@@ -48,7 +48,8 @@ function readStyle(value: unknown): ObjectStyle {
   if (typeof record.strokeWidth === "number" && Number.isFinite(record.strokeWidth)) {
     style.strokeWidth = record.strokeWidth;
   }
-  if (typeof record.opacity === "number" && Number.isFinite(record.opacity)) style.opacity = record.opacity;
+  if (typeof record.opacity === "number" && Number.isFinite(record.opacity))
+    style.opacity = record.opacity;
   return style;
 }
 
@@ -63,11 +64,20 @@ function parseItem(value: unknown): CatalogItem | null {
     const raw = record[key];
     return typeof raw === "number" && Number.isFinite(raw) && raw > 0 ? raw : undefined;
   };
-  const points = Array.isArray(record.pointsM) ? record.pointsM.map((point) => {
-    if (typeof point !== "object" || point === null) return null;
-    const value = point as Record<string, unknown>;
-    return typeof value.xM === "number" && Number.isFinite(value.xM) && typeof value.yM === "number" && Number.isFinite(value.yM) ? { xM: value.xM, yM: value.yM } : null;
-  }).filter((point): point is { xM: number; yM: number } => point !== null) : undefined;
+  const points = Array.isArray(record.pointsM)
+    ? record.pointsM
+        .map((point) => {
+          if (typeof point !== "object" || point === null) return null;
+          const value = point as Record<string, unknown>;
+          return typeof value.xM === "number" &&
+            Number.isFinite(value.xM) &&
+            typeof value.yM === "number" &&
+            Number.isFinite(value.yM)
+            ? { xM: value.xM, yM: value.yM }
+            : null;
+        })
+        .filter((point): point is { xM: number; yM: number } => point !== null)
+    : undefined;
   return {
     id: record.id,
     name: record.name,
@@ -114,7 +124,9 @@ export function deleteCustomCatalogItem(id: string): CatalogItem[] {
 
 export function loadHiddenCatalogIds(): Set<string> {
   const raw = readJson(HIDDEN_KEY);
-  return new Set(Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : []);
+  return new Set(
+    Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : [],
+  );
 }
 
 export function toggleHiddenCatalogId(id: string): Set<string> {

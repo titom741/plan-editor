@@ -84,7 +84,13 @@ export default function App() {
     // that fails to load throws *from* Suspense, and a boundary inside it
     // would never see it.
     <ErrorBoundary fallback={(error, retry) => <AppErrorFallback error={error} onRetry={retry} />}>
-      <Suspense fallback={<div className="app-loading" role="status">Chargement de l’éditeur…</div>}>
+      <Suspense
+        fallback={
+          <div className="app-loading" role="status">
+            Chargement de l’éditeur…
+          </div>
+        }
+      >
         <Editor
           initialProject={restored.project}
           autosaveEnabled

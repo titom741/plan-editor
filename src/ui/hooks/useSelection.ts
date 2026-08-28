@@ -1,5 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
-import { editableObjects, getSelectionBoundsM, isSelectionLocked, toggleSelection } from "../../domain/selection";
+import {
+  editableObjects,
+  getSelectionBoundsM,
+  isSelectionLocked,
+  toggleSelection,
+} from "../../domain/selection";
 import type { BoundsM } from "../../domain/bounds";
 import type { Project } from "../../domain/types";
 
@@ -64,7 +69,9 @@ export function useSelection({ project, visibleLayerIds, lockedLayerIds }: UseSe
     (id: string, additive: boolean) => {
       const object = project.objects.find((candidate) => candidate.id === id);
       const groupedIds = object?.groupId
-        ? project.objects.filter((candidate) => candidate.groupId === object.groupId).map((candidate) => candidate.id)
+        ? project.objects
+            .filter((candidate) => candidate.groupId === object.groupId)
+            .map((candidate) => candidate.id)
         : [id];
       setSelectedIds((current) => (additive ? toggleSelection(current, id) : groupedIds));
       setSelectedBackgroundId(null);
@@ -85,7 +92,9 @@ export function useSelection({ project, visibleLayerIds, lockedLayerIds }: UseSe
     // Objects on a hidden layer aren't on screen; sweeping them into the
     // selection would mean the next Delete removes things the user can't see.
     setSelectedIds(
-      project.objects.filter((object) => visibleLayerIds.has(object.layerId)).map((object) => object.id),
+      project.objects
+        .filter((object) => visibleLayerIds.has(object.layerId))
+        .map((object) => object.id),
     );
     setSelectedBackgroundId(null);
   }, [project.objects, visibleLayerIds]);

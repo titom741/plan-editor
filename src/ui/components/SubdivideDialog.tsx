@@ -49,36 +49,69 @@ export function SubdivideDialog({ object, onConfirm, onCancel }: SubdivideDialog
       <form className="calibration-dialog" onSubmit={handleSubmit}>
         <h2 className="calibration-dialog__title">Subdiviser « {object.name} »</h2>
         <p className="calibration-dialog__text">
-          Crée un objet par case — nommé, sélectionnable et compté dans la nomenclature.
-          L’objet d’origine est conservé.
+          Crée un objet par case — nommé, sélectionnable et compté dans la nomenclature. L’objet
+          d’origine est conservé.
         </p>
 
         <div className="properties-panel__style-grid">
           <label className="calibration-dialog__field">
             <span>Colonnes</span>
-            <input type="number" min="1" step="1" autoFocus value={columns} onChange={(event) => setColumns(event.target.value)} />
+            <input
+              type="number"
+              min="1"
+              step="1"
+              autoFocus
+              value={columns}
+              onChange={(event) => setColumns(event.target.value)}
+            />
           </label>
           <label className="calibration-dialog__field">
             <span>Rangées</span>
-            <input type="number" min="1" step="1" value={rows} onChange={(event) => setRows(event.target.value)} />
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={rows}
+              onChange={(event) => setRows(event.target.value)}
+            />
           </label>
         </div>
         <div className="properties-panel__style-grid">
           <label className="calibration-dialog__field">
             <span>Allée entre cases (m)</span>
-            <input type="number" min="0" step="0.1" value={gapM} onChange={(event) => setGapM(event.target.value)} />
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              value={gapM}
+              onChange={(event) => setGapM(event.target.value)}
+            />
           </label>
           <label className="calibration-dialog__field">
             <span>Retrait au pourtour (m)</span>
-            <input type="number" min="0" step="0.1" value={marginM} onChange={(event) => setMarginM(event.target.value)} />
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              value={marginM}
+              onChange={(event) => setMarginM(event.target.value)}
+            />
           </label>
         </div>
         <label className="calibration-dialog__field">
           <span>Préfixe des noms</span>
-          <input type="text" value={namePrefix} onChange={(event) => setNamePrefix(event.target.value)} />
+          <input
+            type="text"
+            value={namePrefix}
+            onChange={(event) => setNamePrefix(event.target.value)}
+          />
         </label>
         <label className="tools-panel__toggle">
-          <input type="checkbox" checked={inheritStyle} onChange={(event) => setInheritStyle(event.target.checked)} />
+          <input
+            type="checkbox"
+            checked={inheritStyle}
+            onChange={(event) => setInheritStyle(event.target.checked)}
+          />
           <span>Reprendre les couleurs de l’objet d’origine</span>
         </label>
 
@@ -88,11 +121,13 @@ export function SubdivideDialog({ object, onConfirm, onCancel }: SubdivideDialog
             <strong>
               {formatMeters(size.cellWidthM)} × {formatMeters(size.cellHeightM)} m
             </strong>{" "}
-            — nommées {namePrefix.trim() ? `${namePrefix.trim()} A1` : "A1"}, {namePrefix.trim() ? `${namePrefix.trim()} A2` : "A2"}…
+            — nommées {namePrefix.trim() ? `${namePrefix.trim()} A1` : "A1"},{" "}
+            {namePrefix.trim() ? `${namePrefix.trim()} A2` : "A2"}…
           </p>
         ) : (
           <p className="export-dialog__warning">
-            Ce découpage ne tient pas dans l’objet. Réduisez le nombre de cases, l’allée ou le retrait.
+            Ce découpage ne tient pas dans l’objet. Réduisez le nombre de cases, l’allée ou le
+            retrait.
           </p>
         )}
 

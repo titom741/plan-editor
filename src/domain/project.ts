@@ -1,9 +1,23 @@
 import { createDefaultCalibration } from "./calibration";
 import { resizeBackgroundToCalibration } from "./background";
 import { createId } from "./ids";
-import { createDefaultLayers, createLayer, getLayerAfterRemoval, moveLayerInOrder, normalizeLayerOrder, sortLayersByOrder } from "./layers";
+import {
+  createDefaultLayers,
+  createLayer,
+  getLayerAfterRemoval,
+  moveLayerInOrder,
+  normalizeLayerOrder,
+  sortLayersByOrder,
+} from "./layers";
 import { createRectangleObject } from "./objects";
-import type { BackgroundImage, Calibration, Layer, PlanObject, PlanObjectPatch, Project } from "./types";
+import type {
+  BackgroundImage,
+  Calibration,
+  Layer,
+  PlanObject,
+  PlanObjectPatch,
+  Project,
+} from "./types";
 
 export interface CreateProjectInput {
   name: string;
@@ -91,7 +105,11 @@ export function patchObject(project: Project, id: string, patch: PlanObjectPatch
 /** Returns a new project with several objects appended at once — one undo step for a paste of many. */
 export function addObjects(project: Project, objects: readonly PlanObject[]): Project {
   if (objects.length === 0) return project;
-  return { ...project, objects: [...project.objects, ...objects], updatedAt: new Date().toISOString() };
+  return {
+    ...project,
+    objects: [...project.objects, ...objects],
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 /** Returns a new project with every object in `ids` removed. A no-op if none of them are present. */
@@ -114,7 +132,10 @@ export function removeObjects(project: Project, ids: readonly string[]): Project
  * Same soundness argument as `patchObject`: the caller builds each patch
  * from the object's own already-narrowed type.
  */
-export function patchObjects(project: Project, patches: ReadonlyMap<string, PlanObjectPatch>): Project {
+export function patchObjects(
+  project: Project,
+  patches: ReadonlyMap<string, PlanObjectPatch>,
+): Project {
   if (patches.size === 0) return project;
   let changed = false;
   const objects = project.objects.map((object) => {
@@ -149,12 +170,18 @@ export function renameLayer(project: Project, layerId: string, name: string): Pr
   if (!trimmed) return project;
   if (!project.layers.some((layer) => layer.id === layerId)) return project;
   return touched(project, {
-    layers: project.layers.map((layer) => (layer.id === layerId ? { ...layer, name: trimmed } : layer)),
+    layers: project.layers.map((layer) =>
+      layer.id === layerId ? { ...layer, name: trimmed } : layer,
+    ),
   });
 }
 
 /** Sets a layer's `visible` / `locked` flags. */
-export function patchLayer(project: Project, layerId: string, patch: Partial<Pick<Layer, "visible" | "locked" | "folder" | "defaultStyle">>): Project {
+export function patchLayer(
+  project: Project,
+  layerId: string,
+  patch: Partial<Pick<Layer, "visible" | "locked" | "folder" | "defaultStyle">>,
+): Project {
   if (!project.layers.some((layer) => layer.id === layerId)) return project;
   return touched(project, {
     layers: project.layers.map((layer) => (layer.id === layerId ? { ...layer, ...patch } : layer)),
@@ -180,27 +207,44 @@ export function moveLayer(project: Project, layerId: string, direction: -1 | 1):
  * and an empty `layers` array would leave the next created object
  * nowhere to go.
  */
-export function removeLayer(project: Project, layerId: string, options: { destinationLayerId?: string; deleteObjects?: boolean } = {}): Project {
+export function removeLayer(
+  project: Project,
+  layerId: string,
+  options: { destinationLayerId?: string; deleteObjects?: boolean } = {},
+): Project {
   if (project.layers.length <= 1) return project;
   const destination = options.destinationLayerId
-    ? project.layers.find((layer) => layer.id === options.destinationLayerId && layer.id !== layerId)
+    ? project.layers.find(
+        (layer) => layer.id === options.destinationLayerId && layer.id !== layerId,
+      )
     : getLayerAfterRemoval(project.layers, layerId);
   if (!destination) return project;
   return touched(project, {
-    layers: normalizeLayerOrder(sortLayersByOrder(project.layers).filter((layer) => layer.id !== layerId)),
+    layers: normalizeLayerOrder(
+      sortLayersByOrder(project.layers).filter((layer) => layer.id !== layerId),
+    ),
     objects: options.deleteObjects
       ? project.objects.filter((object) => object.layerId !== layerId)
-      : project.objects.map((object) => object.layerId === layerId ? { ...object, layerId: destination.id } : object),
+      : project.objects.map((object) =>
+          object.layerId === layerId ? { ...object, layerId: destination.id } : object,
+        ),
   });
 }
 
 /** Moves objects onto `layerId`. A no-op if the layer doesn't exist or nothing would change. */
-export function assignObjectsToLayer(project: Project, ids: readonly string[], layerId: string): Project {
+export function assignObjectsToLayer(
+  project: Project,
+  ids: readonly string[],
+  layerId: string,
+): Project {
   if (!project.layers.some((layer) => layer.id === layerId)) return project;
   const moving = new Set(ids);
-  if (!project.objects.some((object) => moving.has(object.id) && object.layerId !== layerId)) return project;
+  if (!project.objects.some((object) => moving.has(object.id) && object.layerId !== layerId))
+    return project;
   return touched(project, {
-    objects: project.objects.map((object) => (moving.has(object.id) ? { ...object, layerId } : object)),
+    objects: project.objects.map((object) =>
+      moving.has(object.id) ? { ...object, layerId } : object,
+    ),
   });
 }
 
@@ -210,10 +254,16 @@ export function addBackground(project: Project, background: BackgroundImage): Pr
 }
 
 /** Replaces one background wholesale, keeping its place in the stack. Used when re-importing an image over an existing entry. */
-export function replaceBackground(project: Project, id: string, background: BackgroundImage): Project {
+export function replaceBackground(
+  project: Project,
+  id: string,
+  background: BackgroundImage,
+): Project {
   if (!project.backgrounds.some((candidate) => candidate.id === id)) return project;
   return touched(project, {
-    backgrounds: project.backgrounds.map((candidate) => (candidate.id === id ? background : candidate)),
+    backgrounds: project.backgrounds.map((candidate) =>
+      candidate.id === id ? background : candidate,
+    ),
   });
 }
 
@@ -235,11 +285,17 @@ export function moveBackground(project: Project, id: string, direction: -1 | 1):
 /** Returns a new project with one background removed. A no-op if the id isn't in the stack. */
 export function removeBackground(project: Project, id: string): Project {
   if (!project.backgrounds.some((candidate) => candidate.id === id)) return project;
-  return touched(project, { backgrounds: project.backgrounds.filter((candidate) => candidate.id !== id) });
+  return touched(project, {
+    backgrounds: project.backgrounds.filter((candidate) => candidate.id !== id),
+  });
 }
 
 /** Returns a new project with one background patched. A no-op if the id isn't in the stack. */
-export function patchBackground(project: Project, id: string, patch: Partial<BackgroundImage>): Project {
+export function patchBackground(
+  project: Project,
+  id: string,
+  patch: Partial<BackgroundImage>,
+): Project {
   if (!project.backgrounds.some((candidate) => candidate.id === id)) return project;
   return touched(project, {
     backgrounds: project.backgrounds.map((candidate) =>
@@ -258,7 +314,11 @@ export function patchBackground(project: Project, id: string, patch: Partial<Bac
  * isn't one — the calibration itself is still recorded either way, ready
  * for the next background that's imported.
  */
-export function applyCalibration(project: Project, calibration: Calibration, backgroundId?: string): Project {
+export function applyCalibration(
+  project: Project,
+  calibration: Calibration,
+  backgroundId?: string,
+): Project {
   const withCalibration: Project = { ...project, calibration, updatedAt: new Date().toISOString() };
   // Calibration is a property of the *plan*'s scale, not of one image, so
   // it is stored once. Resizing, though, applies to the background it was
@@ -269,5 +329,9 @@ export function applyCalibration(project: Project, calibration: Calibration, bac
     ? project.backgrounds.find((candidate) => candidate.id === backgroundId)
     : project.backgrounds.at(-1);
   if (!target) return withCalibration;
-  return patchBackground(withCalibration, target.id, resizeBackgroundToCalibration(target, calibration));
+  return patchBackground(
+    withCalibration,
+    target.id,
+    resizeBackgroundToCalibration(target, calibration),
+  );
 }

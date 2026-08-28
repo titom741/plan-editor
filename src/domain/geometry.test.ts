@@ -75,7 +75,6 @@ describe("addVector / subtractPoints", () => {
     const moved = addVector(point, vector);
     expect(subtractPoints(moved, point)).toEqual(vector);
   });
-
 });
 
 describe("resizeRectangleFromCorner", () => {
@@ -88,7 +87,10 @@ describe("resizeRectangleFromCorner", () => {
   });
 
   it("matches the mission's example: 10x5 resized to 12.4x6.1", () => {
-    const result = resizeRectangleFromCorner({ xM: 10, yM: 10, rotationDeg: 0 }, { xM: 22.4, yM: 16.1 });
+    const result = resizeRectangleFromCorner(
+      { xM: 10, yM: 10, rotationDeg: 0 },
+      { xM: 22.4, yM: 16.1 },
+    );
     expect(result.widthM).toBeCloseTo(12.4, 6);
     expect(result.heightM).toBeCloseTo(6.1, 6);
   });

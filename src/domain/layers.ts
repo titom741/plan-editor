@@ -71,7 +71,11 @@ export function createLayer(layers: readonly Layer[], name?: string): Layer {
  * down (drawn earlier, so further back), +1 brings it up. A no-op — same
  * array contents, renormalised — when the layer is already at that end.
  */
-export function moveLayerInOrder(layers: readonly Layer[], layerId: string, direction: -1 | 1): Layer[] {
+export function moveLayerInOrder(
+  layers: readonly Layer[],
+  layerId: string,
+  direction: -1 | 1,
+): Layer[] {
   const ordered = sortLayersByOrder(layers);
   const index = ordered.findIndex((layer) => layer.id === layerId);
   const target = index + direction;
@@ -90,7 +94,10 @@ export function moveLayerInOrder(layers: readonly Layer[], layerId: string, dire
  * Returns `undefined` when nothing would remain — the caller must then
  * refuse the deletion rather than strand the objects.
  */
-export function getLayerAfterRemoval(layers: readonly Layer[], removedId: string): Layer | undefined {
+export function getLayerAfterRemoval(
+  layers: readonly Layer[],
+  removedId: string,
+): Layer | undefined {
   const ordered = sortLayersByOrder(layers);
   const index = ordered.findIndex((layer) => layer.id === removedId);
   if (index === -1) return undefined;

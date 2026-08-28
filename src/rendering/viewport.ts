@@ -171,7 +171,11 @@ export function fitViewportToBounds(
   const availableWidthPx = Math.max(1, size.widthPx - paddingPx * 2);
   const availableHeightPx = Math.max(1, size.heightPx - paddingPx * 2);
   const effectiveScale = Math.min(availableWidthPx / widthM, availableHeightPx / heightM);
-  const zoom = clamp(effectiveScale / viewport.basePixelsPerMeter, DEFAULT_MIN_ZOOM, DEFAULT_MAX_ZOOM);
+  const zoom = clamp(
+    effectiveScale / viewport.basePixelsPerMeter,
+    DEFAULT_MIN_ZOOM,
+    DEFAULT_MAX_ZOOM,
+  );
   const fitted = { ...viewport, zoom };
   const scale = getEffectivePixelsPerMeter(fitted);
   return {

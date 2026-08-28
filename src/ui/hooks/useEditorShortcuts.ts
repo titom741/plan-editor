@@ -58,11 +58,21 @@ export function useEditorShortcuts({
 
       const signature = keyboardEventSignature(event);
       const configured: [keyof ShortcutMap, () => void][] = [
-        ["undo", onUndo], ["redo", onRedo], ["selectAll", onSelectAll], ["copy", onCopy],
-        ["paste", onPaste], ["duplicate", onDuplicate], ["delete", onDelete], ["deselect", onDeselect],
+        ["undo", onUndo],
+        ["redo", onRedo],
+        ["selectAll", onSelectAll],
+        ["copy", onCopy],
+        ["paste", onPaste],
+        ["duplicate", onDuplicate],
+        ["delete", onDelete],
+        ["deselect", onDeselect],
       ];
       const match = configured.find(([action]) => shortcuts[action] === signature);
-      if (match) { event.preventDefault(); match[1](); return; }
+      if (match) {
+        event.preventDefault();
+        match[1]();
+        return;
+      }
 
       const isModifier = event.metaKey || event.ctrlKey;
       if (isModifier) {
@@ -79,10 +89,20 @@ export function useEditorShortcuts({
         onNudge(direction.x * step, direction.y * step);
         return;
       }
-
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [shortcuts, onUndo, onRedo, onDelete, onDeselect, onSelectAll, onNudge, onCopy, onPaste, onDuplicate]);
+  }, [
+    shortcuts,
+    onUndo,
+    onRedo,
+    onDelete,
+    onDeselect,
+    onSelectAll,
+    onNudge,
+    onCopy,
+    onPaste,
+    onDuplicate,
+  ]);
 }

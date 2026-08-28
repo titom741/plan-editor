@@ -14,12 +14,21 @@ import {
 
 describe("getPaperSizeMm", () => {
   it("returns ISO 216 dimensions in portrait", () => {
-    expect(getPaperSizeMm({ paperSize: "A4", orientation: "portrait" })).toEqual({ widthMm: 210, heightMm: 297 });
-    expect(getPaperSizeMm({ paperSize: "A0", orientation: "portrait" })).toEqual({ widthMm: 841, heightMm: 1189 });
+    expect(getPaperSizeMm({ paperSize: "A4", orientation: "portrait" })).toEqual({
+      widthMm: 210,
+      heightMm: 297,
+    });
+    expect(getPaperSizeMm({ paperSize: "A0", orientation: "portrait" })).toEqual({
+      widthMm: 841,
+      heightMm: 1189,
+    });
   });
 
   it("swaps the axes in landscape", () => {
-    expect(getPaperSizeMm({ paperSize: "A3", orientation: "landscape" })).toEqual({ widthMm: 420, heightMm: 297 });
+    expect(getPaperSizeMm({ paperSize: "A3", orientation: "landscape" })).toEqual({
+      widthMm: 420,
+      heightMm: 297,
+    });
   });
 
   it("keeps each size double the area of the next one down, as ISO 216 requires", () => {
@@ -109,7 +118,9 @@ describe("fitScaleDenominator", () => {
   });
 
   it("keeps the most detailed scale for an empty plan", () => {
-    expect(fitScaleDenominator({ widthM: 0, heightM: 0 }, a3Landscape)).toBe(STANDARD_SCALE_DENOMINATORS[0]);
+    expect(fitScaleDenominator({ widthM: 0, heightM: 0 }, a3Landscape)).toBe(
+      STANDARD_SCALE_DENOMINATORS[0],
+    );
   });
 
   it("falls back to the largest scale rather than failing when nothing fits", () => {
@@ -120,7 +131,11 @@ describe("fitScaleDenominator", () => {
   it("needs a smaller scale on a smaller sheet for the same content", () => {
     const content = { widthM: 70, heightM: 40 };
     const onA3 = fitScaleDenominator(content, a3Landscape);
-    const onA4 = fitScaleDenominator(content, { paperSize: "A4", orientation: "landscape", marginMm: 10 });
+    const onA4 = fitScaleDenominator(content, {
+      paperSize: "A4",
+      orientation: "landscape",
+      marginMm: 10,
+    });
     expect(onA4).toBeGreaterThan(onA3);
   });
 });

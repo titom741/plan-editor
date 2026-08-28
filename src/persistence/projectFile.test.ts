@@ -4,7 +4,13 @@ import { calibrationFromKnownDistance } from "../domain/calibration";
 import { getDefaultTargetLayer } from "../domain/layers";
 import { createSheet } from "../domain/sheets";
 import { createCircleObject, createRectangleObject, createTextObject } from "../domain/objects";
-import { addObject, applyCalibration, createDemoProject, createEmptyProject, addBackground } from "../domain/project";
+import {
+  addObject,
+  applyCalibration,
+  createDemoProject,
+  createEmptyProject,
+  addBackground,
+} from "../domain/project";
 import type { Project } from "../domain/types";
 import {
   FILE_KIND,
@@ -17,7 +23,11 @@ import {
 
 /** A project exercising every feature the app can produce: all object types, a background, a real calibration. */
 function richProject(): Project {
-  let project = createEmptyProject({ name: "Festival", description: "Édition 2026", location: "Nantes" });
+  let project = createEmptyProject({
+    name: "Festival",
+    description: "Édition 2026",
+    location: "Nantes",
+  });
   const layer = getDefaultTargetLayer(project.layers);
   if (!layer) throw new Error("no default layer");
 
@@ -30,7 +40,15 @@ function richProject(): Project {
       yM: -2.25,
       widthM: 10,
       heightM: 5,
-      style: { fill: "#cfe3ff", stroke: "#2f6fed", strokeWidth: 2, opacity: 0.8, dash: "dashed", arrowStart: false, arrowEnd: true },
+      style: {
+        fill: "#cfe3ff",
+        stroke: "#2f6fed",
+        strokeWidth: 2,
+        opacity: 0.8,
+        dash: "dashed",
+        arrowStart: false,
+        arrowEnd: true,
+      },
       catalogId: "tent-5x5",
       category: "Structures",
       reference: "CHP",
@@ -44,7 +62,13 @@ function richProject(): Project {
   );
   project = addObject(
     project,
-    createTextObject({ layerId: layer.id, name: "Étiquette", xM: 4, yM: 4, text: "Entrée — accès pompiers" }),
+    createTextObject({
+      layerId: layer.id,
+      name: "Étiquette",
+      xM: 4,
+      yM: 4,
+      text: "Entrée — accès pompiers",
+    }),
   );
   project = addBackground(
     project,
@@ -61,7 +85,18 @@ function richProject(): Project {
   );
   project = {
     ...project,
-    sheets: [createSheet({ name: "Plan sécurité", titleBlock: { client: "Ville", author: "Léa", revision: "B", planNumber: "SEC-01", comments: "Accès pompiers" } })],
+    sheets: [
+      createSheet({
+        name: "Plan sécurité",
+        titleBlock: {
+          client: "Ville",
+          author: "Léa",
+          revision: "B",
+          planNumber: "SEC-01",
+          comments: "Accès pompiers",
+        },
+      }),
+    ],
   };
   return applyCalibration(project, calibrationFromKnownDistance(500, 5));
 }
@@ -87,7 +122,12 @@ describe("serializeProject / deserializeProject", () => {
     delete file.project.backgrounds[0].grayscale;
     const result = parseProjectFile(file);
     if (!result.ok) throw new Error(`fichier refusé : ${JSON.stringify(result.error)}`);
-    expect(result.file.project.backgrounds[0]).toMatchObject({ rotationDeg: 0, brightness: 0, contrast: 0, grayscale: false });
+    expect(result.file.project.backgrounds[0]).toMatchObject({
+      rotationDeg: 0,
+      brightness: 0,
+      contrast: 0,
+      grayscale: false,
+    });
   });
 
   it("round-trips the demo project unchanged", () => {
@@ -119,7 +159,10 @@ describe("serializeProject / deserializeProject", () => {
 
 describe("parseProjectFile — rejecting what isn't ours", () => {
   it("rejects text that isn't JSON at all", () => {
-    expect(deserializeProject("<html>nope</html>")).toEqual({ ok: false, error: { code: "notJson" } });
+    expect(deserializeProject("<html>nope</html>")).toEqual({
+      ok: false,
+      error: { code: "notJson" },
+    });
   });
 
   it("rejects JSON that isn't an object", () => {
@@ -128,8 +171,15 @@ describe("parseProjectFile — rejecting what isn't ours", () => {
   });
 
   it("rejects an unrelated JSON file with 'unknownFormat', not a field complaint", () => {
-    const somebodyElsesFile = JSON.stringify({ name: "package", version: "1.0.0", dependencies: {} });
-    expect(deserializeProject(somebodyElsesFile)).toEqual({ ok: false, error: { code: "unknownFormat" } });
+    const somebodyElsesFile = JSON.stringify({
+      name: "package",
+      version: "1.0.0",
+      dependencies: {},
+    });
+    expect(deserializeProject(somebodyElsesFile)).toEqual({
+      ok: false,
+      error: { code: "unknownFormat" },
+    });
   });
 
   it("refuses a file written by a newer version of the app", () => {
@@ -142,7 +192,10 @@ describe("parseProjectFile — rejecting what isn't ours", () => {
 
   it("rejects a non-integer schema version", () => {
     const file = { ...toProjectFile(createDemoProject()), schemaVersion: "1" };
-    expect(parseProjectFile(file)).toEqual({ ok: false, error: { code: "invalidField", path: "schemaVersion" } });
+    expect(parseProjectFile(file)).toEqual({
+      ok: false,
+      error: { code: "invalidField", path: "schemaVersion" },
+    });
   });
 });
 
@@ -170,7 +223,10 @@ describe("parseProjectFile — field validation", () => {
   });
 
   it("rejects a missing required field", () => {
-    expect(errorAfter((f) => delete f.project.name)).toEqual({ code: "invalidField", path: "project.name" });
+    expect(errorAfter((f) => delete f.project.name)).toEqual({
+      code: "invalidField",
+      path: "project.name",
+    });
   });
 
   it("rejects an unknown object type instead of loading a half-understood project", () => {
@@ -188,7 +244,10 @@ describe("parseProjectFile — field validation", () => {
   });
 
   it("rejects units other than meters", () => {
-    expect(errorAfter((f) => (f.project.units = "ft"))).toEqual({ code: "invalidField", path: "project.units" });
+    expect(errorAfter((f) => (f.project.units = "ft"))).toEqual({
+      code: "invalidField",
+      path: "project.units",
+    });
   });
 
   it("rejects NaN and Infinity, which JSON turns into null", () => {
@@ -242,7 +301,10 @@ describe("parseProjectFile — field validation", () => {
   });
 
   it("rejects layers that aren't an array", () => {
-    expect(errorAfter((f) => (f.project.layers = {}))).toEqual({ code: "invalidField", path: "project.layers" });
+    expect(errorAfter((f) => (f.project.layers = {}))).toEqual({
+      code: "invalidField",
+      path: "project.layers",
+    });
   });
 
   it("rejects a malformed point inside a line", () => {
@@ -261,7 +323,10 @@ describe("parseProjectFile — field validation", () => {
     const result = parseProjectFile(file);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toEqual({ code: "invalidField", path: "project.objects[3].pointsM[1].yM" });
+      expect(result.error).toEqual({
+        code: "invalidField",
+        path: "project.objects[3].pointsM[1].yM",
+      });
     }
   });
 });
@@ -313,7 +378,8 @@ describe("parseProjectFile — tolerance", () => {
   });
 
   it("keeps a background's data: URL byte-for-byte", () => {
-    const url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const url =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
     const project = addBackground(
       createEmptyProject({ name: "Fond" }),
       createBackgroundImage({ url, widthPx: 1, heightPx: 1, xM: 0, yM: 0, widthM: 1, heightM: 1 }),

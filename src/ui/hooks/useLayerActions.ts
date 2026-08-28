@@ -34,20 +34,27 @@ export type LayerPrompt =
  * in an effect, so opening another document or deleting the active layer
  * can never leave new objects pointing at a layer that no longer exists.
  */
-export function useLayerActions({ project, commitChange, setProjectDirect }: UseLayerActionsOptions) {
+export function useLayerActions({
+  project,
+  commitChange,
+  setProjectDirect,
+}: UseLayerActionsOptions) {
   const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<LayerPrompt | null>(null);
 
   // Adjusted during render rather than in an effect — the same pattern
   // `NumberField` and `PlanCanvas` already use for "derive state from
   // changed props".
-  const activeLayerIsValid = activeLayerId !== null && project.layers.some((layer) => layer.id === activeLayerId);
+  const activeLayerIsValid =
+    activeLayerId !== null && project.layers.some((layer) => layer.id === activeLayerId);
   if (!activeLayerIsValid) {
     const fallback = getDefaultTargetLayer(project.layers);
     if (fallback && fallback.id !== activeLayerId) setActiveLayerId(fallback.id);
   }
   /** The layer new objects go on. Never points at a layer that isn't in the project. */
-  const effectiveLayerId = activeLayerIsValid ? activeLayerId : (getDefaultTargetLayer(project.layers)?.id ?? null);
+  const effectiveLayerId = activeLayerIsValid
+    ? activeLayerId
+    : (getDefaultTargetLayer(project.layers)?.id ?? null);
 
   const toggleVisible = useCallback(
     (layerId: string) => {
@@ -76,12 +83,14 @@ export function useLayerActions({ project, commitChange, setProjectDirect }: Use
   }, [project, commitChange]);
 
   const rename = useCallback(
-    (layerId: string, name: string) => commitChange((current) => renameLayer(current, layerId, name)),
+    (layerId: string, name: string) =>
+      commitChange((current) => renameLayer(current, layerId, name)),
     [commitChange],
   );
 
   const move = useCallback(
-    (layerId: string, direction: -1 | 1) => commitChange((current) => moveLayer(current, layerId, direction)),
+    (layerId: string, direction: -1 | 1) =>
+      commitChange((current) => moveLayer(current, layerId, direction)),
     [commitChange],
   );
 
@@ -140,9 +149,13 @@ export function useLayerActions({ project, commitChange, setProjectDirect }: Use
     (layerId: string) => {
       const layer = project.layers.find((candidate) => candidate.id === layerId);
       if (!layer) return;
-      const folder = window.prompt("Nom du dossier de calques (vide pour retirer)", layer.folder ?? "") ?? layer.folder;
+      const folder =
+        window.prompt("Nom du dossier de calques (vide pour retirer)", layer.folder ?? "") ??
+        layer.folder;
       if (folder === layer.folder) return;
-      commitChange((current) => patchLayer(current, layerId, { folder: folder?.trim() || undefined }));
+      commitChange((current) =>
+        patchLayer(current, layerId, { folder: folder?.trim() || undefined }),
+      );
     },
     [project.layers, commitChange],
   );

@@ -48,7 +48,10 @@ interface SaveFilePicker {
     suggestedName: string;
     types: { description: string; accept: Record<string, string[]> }[];
   }): Promise<{
-    createWritable: () => Promise<{ write: (data: string) => Promise<void>; close: () => Promise<void> }>;
+    createWritable: () => Promise<{
+      write: (data: string) => Promise<void>;
+      close: () => Promise<void>;
+    }>;
   }>;
 }
 

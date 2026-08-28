@@ -21,7 +21,15 @@ import type { ResizeHandleId, VertexGeometry } from "./geometry";
 import type { PointM } from "./types";
 
 /** A rectangle, unrotated unless a test says otherwise. */
-function rect(overrides: Partial<{ xM: number; yM: number; widthM: number; heightM: number; rotationDeg: number }> = {}) {
+function rect(
+  overrides: Partial<{
+    xM: number;
+    yM: number;
+    widthM: number;
+    heightM: number;
+    rotationDeg: number;
+  }> = {},
+) {
   return { xM: 10, yM: 20, widthM: 8, heightM: 4, rotationDeg: 0, ...overrides };
 }
 
@@ -163,13 +171,23 @@ describe("resizeRectangleFromHandle", () => {
   it("preserves the aspect ratio exactly when asked, on every handle", () => {
     const object = rect(); // 8 x 4, ratio 2
     for (const handle of RESIZE_HANDLE_IDS) {
-      const resized = resizeRectangleFromHandle(object, handle, { xM: 31, yM: 41 }, { keepAspectRatio: true });
+      const resized = resizeRectangleFromHandle(
+        object,
+        handle,
+        { xM: 31, yM: 41 },
+        { keepAspectRatio: true },
+      );
       expect(resized.widthM / resized.heightM).toBeCloseTo(2, 9);
     }
   });
 
   it("preserves the aspect ratio even when the drag is clamped to the minimum size", () => {
-    const resized = resizeRectangleFromHandle(rect(), "se", { xM: -100, yM: -100 }, { keepAspectRatio: true });
+    const resized = resizeRectangleFromHandle(
+      rect(),
+      "se",
+      { xM: -100, yM: -100 },
+      { keepAspectRatio: true },
+    );
     expect(resized.widthM / resized.heightM).toBeCloseTo(2, 9);
     expect(Math.min(resized.widthM, resized.heightM)).toBeCloseTo(MIN_SIZE_M, 9);
   });

@@ -79,7 +79,12 @@ describe("rotateObjectToDeg (KL-027)", () => {
       name: "Zone",
       xM: 2,
       yM: 2,
-      pointsM: [{ xM: 0, yM: 0 }, { xM: 6, yM: 0 }, { xM: 6, yM: 3 }, { xM: 0, yM: 3 }],
+      pointsM: [
+        { xM: 0, yM: 0 },
+        { xM: 6, yM: 0 },
+        { xM: 6, yM: 3 },
+        { xM: 0, yM: 3 },
+      ],
     });
     const before = boundsCenterM(getObjectBoundsM(polygon)!);
     const rotated = { ...polygon, ...rotateObjectToDeg(polygon, 90) };

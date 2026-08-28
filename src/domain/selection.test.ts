@@ -13,8 +13,18 @@ import {
 import { createCircleObject, createPolygonObject, createRectangleObject } from "./objects";
 import type { PlanObject } from "./types";
 
-function makeRect(id: string, xM: number, yM: number, widthM = 2, heightM = 2, rotationDeg = 0): PlanObject {
-  return { ...createRectangleObject({ layerId: "l1", name: id, xM, yM, widthM, heightM, rotationDeg }), id };
+function makeRect(
+  id: string,
+  xM: number,
+  yM: number,
+  widthM = 2,
+  heightM = 2,
+  rotationDeg = 0,
+): PlanObject {
+  return {
+    ...createRectangleObject({ layerId: "l1", name: id, xM, yM, widthM, heightM, rotationDeg }),
+    id,
+  };
 }
 
 describe("toggleSelection", () => {
@@ -80,7 +90,10 @@ describe("objectIdsWithinBounds", () => {
 
   it("skips objects the caller rules out", () => {
     const marquee = boundsFromCorners({ xM: -1, yM: -1 }, { xM: 30, yM: 30 });
-    expect(objectIdsWithinBounds(objects, marquee, { isEligible: (o) => o.name !== "b" })).toEqual(["a", "c"]);
+    expect(objectIdsWithinBounds(objects, marquee, { isEligible: (o) => o.name !== "b" })).toEqual([
+      "a",
+      "c",
+    ]);
   });
 
   it("hit-tests a rotated rectangle against its rotated bounding box", () => {
@@ -112,7 +125,12 @@ describe("getSelectionBoundsM", () => {
         { xM: 4, yM: 2 },
       ],
     });
-    expect(getSelectionBoundsM([circle, polygon])).toEqual({ minXM: -3, minYM: -3, maxXM: 14, maxYM: 12 });
+    expect(getSelectionBoundsM([circle, polygon])).toEqual({
+      minXM: -3,
+      minYM: -3,
+      maxXM: 14,
+      maxYM: 12,
+    });
   });
 });
 

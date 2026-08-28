@@ -96,7 +96,8 @@ export function ExportDialog({
   const covered = getCoveredAreaM(sheet);
   const contentSize = contentBounds ? boundsSizeM(contentBounds) : null;
   const fits =
-    contentSize === null || (contentSize.widthM <= covered.widthM && contentSize.heightM <= covered.heightM);
+    contentSize === null ||
+    (contentSize.widthM <= covered.widthM && contentSize.heightM <= covered.heightM);
   const suggested = contentSize ? fitScaleDenominator(contentSize, sheet) : null;
 
   return (
@@ -110,51 +111,122 @@ export function ExportDialog({
           <label className="calibration-dialog__field">
             <span>Feuille</span>
             <select value={sheet.id} onChange={(event) => onSelectSheet(event.target.value)}>
-              {sheets.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+              {sheets.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.name}
+                </option>
+              ))}
             </select>
           </label>
           <div className="export-dialog__sheet-actions">
-            <button type="button" onClick={onAddSheet}>＋</button>
-            <button type="button" onClick={onDuplicateSheet}>⧉</button>
-            <button type="button" onClick={onDeleteSheet} disabled={sheets.length <= 1}>🗑</button>
+            <button type="button" onClick={onAddSheet}>
+              ＋
+            </button>
+            <button type="button" onClick={onDuplicateSheet}>
+              ⧉
+            </button>
+            <button type="button" onClick={onDeleteSheet} disabled={sheets.length <= 1}>
+              🗑
+            </button>
           </div>
         </div>
 
         <label className="calibration-dialog__field">
           <span>Nom de la feuille</span>
-          <input type="text" value={sheet.name} onChange={(event) => onChange({ name: event.target.value })} />
+          <input
+            type="text"
+            value={sheet.name}
+            onChange={(event) => onChange({ name: event.target.value })}
+          />
         </label>
 
         <details className="export-dialog__title-fields">
           <summary>Cartouche</summary>
           <div className="export-dialog__title-grid">
-            {([
-              ["client", "Client"],
-              ["author", "Auteur"],
-              ["revision", "Indice de révision"],
-              ["planNumber", "Numéro de plan"],
-              ["comments", "Commentaires"],
-            ] as const).map(([key, label]) => (
+            {(
+              [
+                ["client", "Client"],
+                ["author", "Auteur"],
+                ["revision", "Indice de révision"],
+                ["planNumber", "Numéro de plan"],
+                ["comments", "Commentaires"],
+              ] as const
+            ).map(([key, label]) => (
               <label key={key} className="calibration-dialog__field">
                 <span>{label}</span>
-                <input value={sheet.titleBlock?.[key] ?? ""} onChange={(event) => onChange({ titleBlock: { ...sheet.titleBlock, [key]: event.target.value || undefined } })} />
+                <input
+                  value={sheet.titleBlock?.[key] ?? ""}
+                  onChange={(event) =>
+                    onChange({
+                      titleBlock: { ...sheet.titleBlock, [key]: event.target.value || undefined },
+                    })
+                  }
+                />
               </label>
             ))}
             <label className="calibration-dialog__field">
               <span>Logo</span>
-              <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void fileToJpegDataUrl(file).then((logoDataUrl) => onChange({ titleBlock: { ...sheet.titleBlock, logoDataUrl } })); }} />
-              {sheet.titleBlock?.logoDataUrl && <button type="button" onClick={() => onChange({ titleBlock: { ...sheet.titleBlock, logoDataUrl: undefined } })}>Retirer le logo</button>}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file)
+                    void fileToJpegDataUrl(file).then((logoDataUrl) =>
+                      onChange({ titleBlock: { ...sheet.titleBlock, logoDataUrl } }),
+                    );
+                }}
+              />
+              {sheet.titleBlock?.logoDataUrl && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onChange({ titleBlock: { ...sheet.titleBlock, logoDataUrl: undefined } })
+                  }
+                >
+                  Retirer le logo
+                </button>
+              )}
             </label>
             <label className="calibration-dialog__field">
               <span>Champs personnalisés (un par ligne : Libellé=Valeur)</span>
-              <textarea value={(sheet.titleBlock?.customFields ?? []).map((field) => `${field.label}=${field.value}`).join("\n")} onChange={(event) => onChange({ titleBlock: { ...sheet.titleBlock, customFields: event.target.value.split("\n").map((line) => { const separator = line.indexOf("="); return separator > 0 ? { label: line.slice(0, separator).trim(), value: line.slice(separator + 1).trim() } : null; }).filter((field): field is { label: string; value: string } => field !== null && field.label.length > 0 && field.value.length > 0) } })} />
+              <textarea
+                value={(sheet.titleBlock?.customFields ?? [])
+                  .map((field) => `${field.label}=${field.value}`)
+                  .join("\n")}
+                onChange={(event) =>
+                  onChange({
+                    titleBlock: {
+                      ...sheet.titleBlock,
+                      customFields: event.target.value
+                        .split("\n")
+                        .map((line) => {
+                          const separator = line.indexOf("=");
+                          return separator > 0
+                            ? {
+                                label: line.slice(0, separator).trim(),
+                                value: line.slice(separator + 1).trim(),
+                              }
+                            : null;
+                        })
+                        .filter(
+                          (field): field is { label: string; value: string } =>
+                            field !== null && field.label.length > 0 && field.value.length > 0,
+                        ),
+                    },
+                  })
+                }
+              />
             </label>
           </div>
         </details>
 
         <label className="calibration-dialog__field">
           <span>Format de papier</span>
-          <select value={sheet.paperSize} onChange={(e) => onChange({ paperSize: e.target.value as PaperSize })}>
+          <select
+            value={sheet.paperSize}
+            onChange={(e) => onChange({ paperSize: e.target.value as PaperSize })}
+          >
             {PAPER_SIZE_ORDER.map((size) => (
               <option key={size} value={size}>
                 {size}
@@ -192,10 +264,21 @@ export function ExportDialog({
         </label>
 
         <label className="export-dialog__check">
-          <input type="checkbox" checked={showGrid} onChange={(e) => onShowGridChange(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={showGrid}
+            onChange={(e) => onShowGridChange(e.target.checked)}
+          />
           <span>Imprimer la grille métrique</span>
         </label>
-        <label className="export-dialog__check"><input type="checkbox" checked={transparentPng} onChange={(event) => onTransparentPngChange(event.target.checked)} /><span>PNG avec zones vides transparentes</span></label>
+        <label className="export-dialog__check">
+          <input
+            type="checkbox"
+            checked={transparentPng}
+            onChange={(event) => onTransparentPngChange(event.target.checked)}
+          />
+          <span>PNG avec zones vides transparentes</span>
+        </label>
 
         <div className="export-dialog__summary">
           <div className="properties-panel__static">
@@ -219,7 +302,11 @@ export function ExportDialog({
               {suggested !== null && suggested !== sheet.scaleDenominator && (
                 <>
                   {" "}
-                  <button type="button" className="export-dialog__link" onClick={() => onChange({ scaleDenominator: suggested })}>
+                  <button
+                    type="button"
+                    className="export-dialog__link"
+                    onClick={() => onChange({ scaleDenominator: suggested })}
+                  >
                     Ajuster à {formatScale(suggested)}
                   </button>
                 </>
@@ -228,23 +315,45 @@ export function ExportDialog({
           )}
           {contentSize && fits && (
             <p className="properties-panel__hint">
-              Le plan tient sur la feuille. Une fois imprimé sans mise à l'échelle, 1 m au sol mesure{" "}
-              {(1000 / sheet.scaleDenominator).toFixed(1).replace(/\.0$/, "")} mm sur le papier.
+              Le plan tient sur la feuille. Une fois imprimé sans mise à l'échelle, 1 m au sol
+              mesure {(1000 / sheet.scaleDenominator).toFixed(1).replace(/\.0$/, "")} mm sur le
+              papier.
             </p>
           )}
         </div>
 
         <div className="calibration-dialog__actions">
-          <button type="button" className="properties-panel__button" onClick={onClose} disabled={busy}>
+          <button
+            type="button"
+            className="properties-panel__button"
+            onClick={onClose}
+            disabled={busy}
+          >
             Fermer
           </button>
-          <button type="button" className="properties-panel__button" onClick={onExportPng} disabled={busy}>
+          <button
+            type="button"
+            className="properties-panel__button"
+            onClick={onExportPng}
+            disabled={busy}
+          >
             PNG
           </button>
-          <button type="button" className="properties-panel__button" onClick={onExportMultiPage} disabled={busy || contentBounds === null} title="Découper automatiquement avec 10 mm de recouvrement">
+          <button
+            type="button"
+            className="properties-panel__button"
+            onClick={onExportMultiPage}
+            disabled={busy || contentBounds === null}
+            title="Découper automatiquement avec 10 mm de recouvrement"
+          >
             PDF multi-feuilles
           </button>
-          <button type="button" className="calibration-dialog__confirm" onClick={onExportPdf} disabled={busy}>
+          <button
+            type="button"
+            className="calibration-dialog__confirm"
+            onClick={onExportPdf}
+            disabled={busy}
+          >
             {busy ? "Export…" : "Exporter en PDF"}
           </button>
         </div>

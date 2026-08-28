@@ -197,7 +197,9 @@ function buildContentStream(page: PdfPage): string {
     const { xPt, yPt, widthPt, heightPt } = image;
     // PDF draws an XObject into the unit square, so the CTM carries the
     // size and position: [w 0 0 h x y].
-    parts.push(`q ${num(widthPt)} 0 0 ${num(heightPt)} ${num(xPt)} ${num(yPt)} cm /Im${index} Do Q`);
+    parts.push(
+      `q ${num(widthPt)} 0 0 ${num(heightPt)} ${num(xPt)} ${num(yPt)} cm /Im${index} Do Q`,
+    );
   }
 
   for (const path of page.paths ?? []) {
@@ -205,7 +207,9 @@ function buildContentStream(page: PdfPage): string {
     const fill = path.fillRgb;
     const dash = path.dashPt?.length ? `[${path.dashPt.map(num).join(" ")}] 0 d ` : "";
     const colors = `${stroke.map(num).join(" ")} RG ${fill ? `${fill.map(num).join(" ")} rg ` : ""}`;
-    parts.push(`q ${colors}${num(path.widthPt ?? 0.8)} w ${dash}${path.commands} ${fill ? "B" : "S"} Q`);
+    parts.push(
+      `q ${colors}${num(path.widthPt ?? 0.8)} w ${dash}${path.commands} ${fill ? "B" : "S"} Q`,
+    );
   }
 
   for (const line of page.lines ?? []) {
@@ -219,7 +223,9 @@ function buildContentStream(page: PdfPage): string {
     const angle = ((item.rotationDeg ?? 0) * Math.PI) / 180;
     const cos = num(Math.cos(angle));
     const sin = num(Math.sin(angle));
-    parts.push(`BT 0 g /F1 ${num(item.sizePt)} Tf ${cos} ${sin} ${num(-Math.sin(angle))} ${cos} ${num(item.xPt)} ${num(item.yPt)} Tm (${pdfString(item.text)}) Tj ET`);
+    parts.push(
+      `BT 0 g /F1 ${num(item.sizePt)} Tf ${cos} ${sin} ${num(-Math.sin(angle))} ${cos} ${num(item.xPt)} ${num(item.yPt)} Tm (${pdfString(item.text)}) Tj ET`,
+    );
   }
 
   return parts.join("\n");
@@ -295,10 +301,14 @@ export function buildMultiPagePdf(pages: readonly PdfPage[], metadata: PdfMetada
   push("<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
 
   startObject(2);
-  push(`<< /Type /Pages /Kids [${pageObjects.map(({ pageObject }) => `${pageObject} 0 R`).join(" ")}] /Count ${pages.length} >>\nendobj\n`);
+  push(
+    `<< /Type /Pages /Kids [${pageObjects.map(({ pageObject }) => `${pageObject} 0 R`).join(" ")}] /Count ${pages.length} >>\nendobj\n`,
+  );
 
   startObject(3);
-  push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n");
+  push(
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n",
+  );
 
   for (const descriptor of pageObjects) {
     const { page, pageObject, contentObject, imageObjects } = descriptor;

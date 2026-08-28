@@ -106,7 +106,10 @@ describe("zoomViewportAt", () => {
 
   it("clamps zoom to the configured min/max", () => {
     const viewport = createViewport(20);
-    const zoomedOut = zoomViewportAt(viewport, { x: 0, y: 0 }, 0.0001, { minZoom: 0.1, maxZoom: 10 });
+    const zoomedOut = zoomViewportAt(viewport, { x: 0, y: 0 }, 0.0001, {
+      minZoom: 0.1,
+      maxZoom: 10,
+    });
     expect(zoomedOut.zoom).toBeGreaterThanOrEqual(0.1 - EPSILON);
 
     const zoomedIn = zoomViewportAt(viewport, { x: 0, y: 0 }, 10000, { minZoom: 0.1, maxZoom: 10 });

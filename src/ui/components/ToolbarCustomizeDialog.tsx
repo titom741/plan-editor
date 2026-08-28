@@ -1,4 +1,10 @@
-import { COMMANDS, COMMAND_GROUP_LABELS, DEFAULT_PINNED_COMMANDS, type CommandGroup, type CommandId } from "../commands";
+import {
+  COMMANDS,
+  COMMAND_GROUP_LABELS,
+  DEFAULT_PINNED_COMMANDS,
+  type CommandGroup,
+  type CommandId,
+} from "../commands";
 
 interface ToolbarCustomizeDialogProps {
   pinnedIds: readonly CommandId[];
@@ -10,7 +16,12 @@ interface ToolbarCustomizeDialogProps {
 const GROUP_ORDER: CommandGroup[] = ["file", "project"];
 
 /** Which actions get a button in the top bar. Everything stays reachable from the left-hand menus either way. */
-export function ToolbarCustomizeDialog({ pinnedIds, onToggle, onReset, onClose }: ToolbarCustomizeDialogProps) {
+export function ToolbarCustomizeDialog({
+  pinnedIds,
+  onToggle,
+  onReset,
+  onClose,
+}: ToolbarCustomizeDialogProps) {
   const pinned = new Set(pinnedIds);
 
   return (

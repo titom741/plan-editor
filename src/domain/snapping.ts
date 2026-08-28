@@ -10,7 +10,16 @@ import type { PlanObject, PointM } from "./types";
  * in. Nothing here knows what a pixel is.
  */
 
-export type SnapKind = "grid" | "vertex" | "center" | "midpoint" | "intersection" | "tangent" | "alignment-x" | "alignment-y" | "alignment-xy";
+export type SnapKind =
+  | "grid"
+  | "vertex"
+  | "center"
+  | "midpoint"
+  | "intersection"
+  | "tangent"
+  | "alignment-x"
+  | "alignment-y"
+  | "alignment-xy";
 
 export interface SnapTarget {
   pointM: PointM;
@@ -35,7 +44,8 @@ export function snapToGridM(point: PointM, stepM: number): PointM {
  */
 export function getObjectSnapTargets(object: PlanObject): SnapTarget[] {
   const targets: SnapTarget[] = [];
-  const push = (pointM: PointM, kind: SnapKind) => targets.push({ pointM, kind, objectId: object.id });
+  const push = (pointM: PointM, kind: SnapKind) =>
+    targets.push({ pointM, kind, objectId: object.id });
 
   switch (object.type) {
     case "rectangle":
@@ -50,7 +60,11 @@ export function getObjectSnapTargets(object: PlanObject): SnapTarget[] {
       for (let i = 0; i < corners.length; i += 1) {
         const a = corners[i];
         const b = corners[(i + 1) % corners.length];
-        if (a && b) push(objectLocalToWorld(object, { xM: (a.xM + b.xM) / 2, yM: (a.yM + b.yM) / 2 }), "midpoint");
+        if (a && b)
+          push(
+            objectLocalToWorld(object, { xM: (a.xM + b.xM) / 2, yM: (a.yM + b.yM) / 2 }),
+            "midpoint",
+          );
       }
       push(objectLocalToWorld(object, { xM: object.widthM / 2, yM: object.heightM / 2 }), "center");
       break;
@@ -71,7 +85,11 @@ export function getObjectSnapTargets(object: PlanObject): SnapTarget[] {
       for (let i = 0; i < segmentCount; i += 1) {
         const a = points[i];
         const b = points[(i + 1) % points.length];
-        if (a && b) push(objectLocalToWorld(object, { xM: (a.xM + b.xM) / 2, yM: (a.yM + b.yM) / 2 }), "midpoint");
+        if (a && b)
+          push(
+            objectLocalToWorld(object, { xM: (a.xM + b.xM) / 2, yM: (a.yM + b.yM) / 2 }),
+            "midpoint",
+          );
       }
       break;
     }
@@ -99,26 +117,55 @@ export function collectSnapTargets(
   }
   const segments: { a: PointM; b: PointM; objectId: string }[] = [];
   for (const object of objects) {
-    if (options.excludeIds?.has(object.id) || (options.isEligible && !options.isEligible(object))) continue;
-    const local = object.type === "rectangle" || object.type === "image" ? [{ xM: 0, yM: 0 }, { xM: object.widthM, yM: 0 }, { xM: object.widthM, yM: object.heightM }, { xM: 0, yM: object.heightM }] : object.type === "line" || object.type === "polygon" ? object.pointsM : [];
-    const closed = object.type === "rectangle" || object.type === "image" || object.type === "polygon";
+    if (options.excludeIds?.has(object.id) || (options.isEligible && !options.isEligible(object)))
+      continue;
+    const local =
+      object.type === "rectangle" || object.type === "image"
+        ? [
+            { xM: 0, yM: 0 },
+            { xM: object.widthM, yM: 0 },
+            { xM: object.widthM, yM: object.heightM },
+            { xM: 0, yM: object.heightM },
+          ]
+        : object.type === "line" || object.type === "polygon"
+          ? object.pointsM
+          : [];
+    const closed =
+      object.type === "rectangle" || object.type === "image" || object.type === "polygon";
     const count = closed ? local.length : local.length - 1;
     for (let index = 0; index < count; index += 1) {
-      const a = local[index]; const b = local[(index + 1) % local.length];
-      if (a && b) segments.push({ a: objectLocalToWorld(object, a), b: objectLocalToWorld(object, b), objectId: object.id });
+      const a = local[index];
+      const b = local[(index + 1) % local.length];
+      if (a && b)
+        segments.push({
+          a: objectLocalToWorld(object, a),
+          b: objectLocalToWorld(object, b),
+          objectId: object.id,
+        });
     }
   }
   // Prevent a malicious/huge project from turning snapping into quadratic work.
   if (segments.length <= 2_000) {
-    for (let first = 0; first < segments.length; first += 1) for (let second = first + 1; second < segments.length; second += 1) {
-      const a = segments[first]!; const b = segments[second]!;
-      if (a.objectId === b.objectId) continue;
-      const denominator = (a.a.xM - a.b.xM) * (b.a.yM - b.b.yM) - (a.a.yM - a.b.yM) * (b.a.xM - b.b.xM);
-      if (Math.abs(denominator) < 1e-9) continue;
-      const t = ((a.a.xM - b.a.xM) * (b.a.yM - b.b.yM) - (a.a.yM - b.a.yM) * (b.a.xM - b.b.xM)) / denominator;
-      const u = -((a.a.xM - a.b.xM) * (a.a.yM - b.a.yM) - (a.a.yM - a.b.yM) * (a.a.xM - b.a.xM)) / denominator;
-      if (t > -1 && t < 2 && u > -1 && u < 2) targets.push({ pointM: { xM: a.a.xM + t * (a.b.xM - a.a.xM), yM: a.a.yM + t * (a.b.yM - a.a.yM) }, kind: "intersection" });
-    }
+    for (let first = 0; first < segments.length; first += 1)
+      for (let second = first + 1; second < segments.length; second += 1) {
+        const a = segments[first]!;
+        const b = segments[second]!;
+        if (a.objectId === b.objectId) continue;
+        const denominator =
+          (a.a.xM - a.b.xM) * (b.a.yM - b.b.yM) - (a.a.yM - a.b.yM) * (b.a.xM - b.b.xM);
+        if (Math.abs(denominator) < 1e-9) continue;
+        const t =
+          ((a.a.xM - b.a.xM) * (b.a.yM - b.b.yM) - (a.a.yM - b.a.yM) * (b.a.xM - b.b.xM)) /
+          denominator;
+        const u =
+          -((a.a.xM - a.b.xM) * (a.a.yM - b.a.yM) - (a.a.yM - a.b.yM) * (a.a.xM - b.a.xM)) /
+          denominator;
+        if (t > -1 && t < 2 && u > -1 && u < 2)
+          targets.push({
+            pointM: { xM: a.a.xM + t * (a.b.xM - a.a.xM), yM: a.a.yM + t * (a.b.yM - a.a.yM) },
+            kind: "intersection",
+          });
+      }
   }
   return targets;
 }
@@ -167,13 +214,23 @@ export function snapPointM(point: PointM, options: SnapOptions): SnapResult {
   for (const target of options.targets ?? []) {
     const candidateDx = Math.abs(target.pointM.xM - point.xM);
     const candidateDy = Math.abs(target.pointM.yM - point.yM);
-    if (candidateDx <= dx) { dx = candidateDx; nearestX = target; }
-    if (candidateDy <= dy) { dy = candidateDy; nearestY = target; }
+    if (candidateDx <= dx) {
+      dx = candidateDx;
+      nearestX = target;
+    }
+    if (candidateDy <= dy) {
+      dy = candidateDy;
+      nearestY = target;
+    }
   }
   if (nearestX || nearestY) {
     const aligned = { xM: nearestX?.pointM.xM ?? point.xM, yM: nearestY?.pointM.yM ?? point.yM };
-    const kind: SnapKind = nearestX && nearestY ? "alignment-xy" : nearestX ? "alignment-x" : "alignment-y";
-    return { pointM: aligned, target: { pointM: aligned, kind, objectId: nearestX?.objectId ?? nearestY?.objectId } };
+    const kind: SnapKind =
+      nearestX && nearestY ? "alignment-xy" : nearestX ? "alignment-x" : "alignment-y";
+    return {
+      pointM: aligned,
+      target: { pointM: aligned, kind, objectId: nearestX?.objectId ?? nearestY?.objectId },
+    };
   }
 
   const gridStepM = options.gridStepM ?? 0;

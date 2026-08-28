@@ -58,8 +58,14 @@ describe("subdivideRectangle", () => {
     const cells = subdivideRectangle(tent, base);
     expect(cells).toHaveLength(8);
     expect(cells.map((cell) => cell.name)).toEqual([
-      "Stand A1", "Stand A2", "Stand A3", "Stand A4",
-      "Stand B1", "Stand B2", "Stand B3", "Stand B4",
+      "Stand A1",
+      "Stand A2",
+      "Stand A3",
+      "Stand A4",
+      "Stand B1",
+      "Stand B2",
+      "Stand B3",
+      "Stand B4",
     ]);
     // Each carries its reference, so the schedule can group by it.
     expect(cells[5]?.reference).toBe("B2");

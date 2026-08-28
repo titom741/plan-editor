@@ -89,7 +89,10 @@ export function gridReference(rowIndex: number, columnIndex: number): string {
  * already been told by `measureSubdivision`.
  */
 export function subdivideRectangle(
-  object: Pick<RectangleObject, "xM" | "yM" | "widthM" | "heightM" | "rotationDeg" | "layerId" | "name">,
+  object: Pick<
+    RectangleObject,
+    "xM" | "yM" | "widthM" | "heightM" | "rotationDeg" | "layerId" | "name"
+  >,
   options: SubdivisionOptions,
 ): RectangleObject[] {
   const size = measureSubdivision(object, options);

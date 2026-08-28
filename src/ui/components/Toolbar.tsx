@@ -32,14 +32,26 @@ function formatTime(iso: string): string {
  * title attribute spells that out, and the failure states point at the
  * one action that actually protects the project — exporting a file.
  */
-function describeSaveStatus(status: SaveStatus): { label: string; title: string; modifier: string } {
+function describeSaveStatus(status: SaveStatus): {
+  label: string;
+  title: string;
+  modifier: string;
+} {
   switch (status.state) {
     case "idle":
       return { label: "", title: "", modifier: "idle" };
     case "dirty":
-      return { label: "Modifications en cours…", title: "Modifications non encore enregistrées.", modifier: "dirty" };
+      return {
+        label: "Modifications en cours…",
+        title: "Modifications non encore enregistrées.",
+        modifier: "dirty",
+      };
     case "saving":
-      return { label: "Enregistrement…", title: "Enregistrement local en cours.", modifier: "saving" };
+      return {
+        label: "Enregistrement…",
+        title: "Enregistrement local en cours.",
+        modifier: "saving",
+      };
     case "saved":
       return {
         label: `Enregistré ${formatTime(status.savedAt)}`,
@@ -127,7 +139,11 @@ export function Toolbar({
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter") event.currentTarget.blur();
-            if (event.key === "Escape") { setDraftName(projectName); setEditingName(false); event.currentTarget.blur(); }
+            if (event.key === "Escape") {
+              setDraftName(projectName);
+              setEditingName(false);
+              event.currentTarget.blur();
+            }
           }}
         />
         {save.label && (
@@ -159,15 +175,33 @@ export function Toolbar({
         </button>
       </div>
       <div className="toolbar__history">
-        <button type="button" className="toolbar__button" onClick={onUndo} disabled={!canUndo} title="Annuler (Ctrl+Z)">
+        <button
+          type="button"
+          className="toolbar__button"
+          onClick={onUndo}
+          disabled={!canUndo}
+          title="Annuler (Ctrl+Z)"
+        >
           ↶ Annuler
         </button>
-        <button type="button" className="toolbar__button" onClick={onRedo} disabled={!canRedo} title="Rétablir (Ctrl+Maj+Z)">
+        <button
+          type="button"
+          className="toolbar__button"
+          onClick={onRedo}
+          disabled={!canRedo}
+          title="Rétablir (Ctrl+Maj+Z)"
+        >
           ↷ Rétablir
         </button>
       </div>
       <div className="toolbar__zoom" data-testid="zoom-indicator">
-        <button type="button" className="toolbar__button" onClick={onFitPlan} disabled={!canFitPlan} title="Recentrer et afficher tout le fond de plan">
+        <button
+          type="button"
+          className="toolbar__button"
+          onClick={onFitPlan}
+          disabled={!canFitPlan}
+          title="Recentrer et afficher tout le fond de plan"
+        >
           Cadrer le plan
         </button>
         Zoom&nbsp;: {Math.round(zoom * 100)}&nbsp;%
