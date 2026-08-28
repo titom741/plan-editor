@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { sortLayersByOrder } from "../../domain/layers";
-import type { Background, Layer, PlanObject } from "../../domain/types";
+import type { BackgroundImage, Layer, PlanObject } from "../../domain/types";
 
 interface LayersPanelProps {
-  background: Background;
-  isBackgroundSelected: boolean;
+  /** The backdrop stack, bottom first — listed in reverse so the topmost reads first, like the layers below. */
+  backgrounds: readonly BackgroundImage[];
+  selectedBackgroundId: string | null;
   layers: Layer[];
   objects: PlanObject[];
   /** How many objects sit on each layer, keyed by layer id — shown on the row and used to warn before a delete. */
@@ -19,9 +20,10 @@ interface LayersPanelProps {
   onMoveLayer: (layerId: string, direction: -1 | 1) => void;
   onDeleteLayer: (layerId: string) => void;
   onAddLayer: () => void;
-  onSelectBackground: () => void;
-  onToggleBackgroundVisible: () => void;
-  onToggleBackgroundLocked: () => void;
+  onSelectBackground: (backgroundId: string) => void;
+  onToggleBackgroundVisible: (backgroundId: string) => void;
+  onToggleBackgroundLocked: (backgroundId: string) => void;
+  onMoveBackground: (backgroundId: string, direction: -1 | 1) => void;
   onRequestImportBackground: () => void;
   onAssignObjectToLayer: (objectId: string, layerId: string) => void;
   onSetLayerFolder: (layerId: string) => void;
@@ -40,8 +42,8 @@ interface LayersPanelProps {
  * first because it is always behind everything.
  */
 export function LayersPanel({
-  background,
-  isBackgroundSelected,
+  backgrounds,
+  selectedBackgroundId,
   layers,
   objects,
   objectCounts,
@@ -57,6 +59,7 @@ export function LayersPanel({
   onSelectBackground,
   onToggleBackgroundVisible,
   onToggleBackgroundLocked,
+  onMoveBackground,
   onRequestImportBackground,
   onAssignObjectToLayer,
   onSetLayerFolder,
@@ -77,37 +80,65 @@ export function LayersPanel({
     <section className="layers-panel">
       <h2 className="panel__title">Calques</h2>
       <ul className="layers-panel__list">
-        {background ? (
-          <li
-            className={`layers-panel__row layers-panel__row--background${isBackgroundSelected ? " is-selected" : ""}`}
-          >
-            <button
-              type="button"
-              className="layers-panel__icon-button"
-              onClick={onToggleBackgroundVisible}
-              title={background.visible ? "Masquer le fond de plan" : "Afficher le fond de plan"}
+        {[...backgrounds].reverse().map((background, reverseIndex) => {
+          // Reversed for display: the last backdrop in the stack is drawn
+          // on top, and a list that reads top-down should say so.
+          const index = backgrounds.length - 1 - reverseIndex;
+          return (
+            <li
+              key={background.id}
+              className={`layers-panel__row layers-panel__row--background${background.id === selectedBackgroundId ? " is-selected" : ""}`}
             >
-              {background.visible ? "👁" : "🚫"}
-            </button>
-            <button
-              type="button"
-              className="layers-panel__icon-button"
-              onClick={onToggleBackgroundLocked}
-              title={background.locked ? "Déverrouiller le fond de plan" : "Verrouiller le fond de plan"}
-            >
-              {background.locked ? "🔒" : "🔓"}
-            </button>
-            <button type="button" className="layers-panel__name layers-panel__name-button" onClick={onSelectBackground}>
-              🖼 Fond de plan
-            </button>
-          </li>
-        ) : (
-          <li className="layers-panel__row layers-panel__row--background">
-            <button type="button" className="layers-panel__name layers-panel__name-button" onClick={onRequestImportBackground}>
-              🖼 Importer un fond de plan…
-            </button>
-          </li>
-        )}
+              <button
+                type="button"
+                className="layers-panel__icon-button"
+                onClick={() => onToggleBackgroundVisible(background.id)}
+                title={background.visible ? "Masquer ce fond" : "Afficher ce fond"}
+              >
+                {background.visible ? "👁" : "🚫"}
+              </button>
+              <button
+                type="button"
+                className="layers-panel__icon-button"
+                onClick={() => onToggleBackgroundLocked(background.id)}
+                title={background.locked ? "Déverrouiller ce fond" : "Verrouiller ce fond"}
+              >
+                {background.locked ? "🔒" : "🔓"}
+              </button>
+              <button
+                type="button"
+                className="layers-panel__name layers-panel__name-button"
+                onClick={() => onSelectBackground(background.id)}
+                title={background.name}
+              >
+                🖼 {background.name}
+              </button>
+              <button
+                type="button"
+                className="layers-panel__icon-button"
+                onClick={() => onMoveBackground(background.id, -1)}
+                disabled={index === 0}
+                title="Descendre d’un rang (dessiné plus tôt)"
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                className="layers-panel__icon-button"
+                onClick={() => onMoveBackground(background.id, 1)}
+                disabled={index === backgrounds.length - 1}
+                title="Monter d’un rang (dessiné plus tard, donc couvrant)"
+              >
+                ▶
+              </button>
+            </li>
+          );
+        })}
+        <li className="layers-panel__row layers-panel__row--background">
+          <button type="button" className="layers-panel__name layers-panel__name-button" onClick={onRequestImportBackground}>
+            🖼 {backgrounds.length === 0 ? "Importer un fond de plan…" : "Ajouter un fond…"}
+          </button>
+        </li>
         {folders.map((folder) => {
           const members = orderedLayers.filter((layer) => layer.folder === folder);
           const allVisible = members.every((layer) => layer.visible);

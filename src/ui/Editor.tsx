@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { computeDefaultBackgroundPlacement, createBackgroundImage, cropRectFromMargins, getBackgroundCropMargins, worldDistanceToImagePixels } from "../domain/background";
-import { boundsCenterM, getBackgroundBoundsM } from "../domain/bounds";
+import { boundsCenterM, getBackgroundBoundsM, unionBounds, type BoundsM } from "../domain/bounds";
 import { DEFAULT_LABEL_DISPLAY, type LabelDisplay } from "../domain/display";
 import { clearGroup, createNamedGroup, distributeObjects, transformObjectAroundPivot } from "../domain/grouping";
 import type { CatalogItem } from "../domain/catalog";
@@ -26,7 +26,9 @@ import {
   patchObjects,
   removeBackground,
   removeObjects,
-  setBackground,
+  addBackground,
+  replaceBackground,
+  moveBackground,
 } from "../domain/project";
 import type { BackgroundImage, ObjectStyle, PlanObjectPatch, PointM, Project } from "../domain/types";
 import { DEFAULT_SCREEN_PIXELS_PER_METER, screenToWorld } from "../rendering/viewport";
@@ -219,24 +221,57 @@ export default function Editor({
   // the background's real-world size, it doesn't change how big a meter is
   // drawn on screen.
   const navigationBounds = useMemo(
-    () => (project.background?.visible ? getBackgroundBoundsM(project.background) : null),
-    [project.background],
+    () => {
+      // Framing follows the whole visible stack, not one image: with a
+      // survey plan and a satellite view over it, "fit the plan" has to
+      // show both.
+      const visible = project.backgrounds.filter((background) => background.visible);
+      return visible.reduce<BoundsM | null>(
+        (bounds, background) => unionBounds(bounds, getBackgroundBoundsM(background)),
+        null,
+      );
+    },
+    [project.backgrounds],
   );
   const { viewport, containerRef, stageSize, zoomAt, pan, fitBounds } = useViewport(
     DEFAULT_SCREEN_PIXELS_PER_METER,
     navigationBounds,
   );
-  const lastAutoFittedBackgroundIdRef = useRef<string | null>(null);
+  /**
+   * Backdrop ids the view has already accounted for.
+   *
+   * Two rules, and the set is what tells them apart. Opening a document
+   * (the set is still empty) frames whatever it contains. After that, a
+   * newly imported backdrop frames the view only if it is the *only* one
+   * — adding a second over a plan the user has already framed must leave
+   * the camera where they put it.
+   *
+   * Keyed per id rather than on "whichever is first", because reordering
+   * the stack changes who is first, and that was re-framing the view and
+   * yanking the user away from what they were looking at.
+   */
+  const autoFittedBackgroundIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const background = project.background;
-    if (!background?.visible || stageSize.widthPx <= 0 || stageSize.heightPx <= 0) return;
-    if (lastAutoFittedBackgroundIdRef.current === background.id) return;
-    lastAutoFittedBackgroundIdRef.current = background.id;
-    fitBounds(getBackgroundBoundsM(background));
-  }, [project.background, stageSize, fitBounds]);
+    if (stageSize.widthPx <= 0 || stageSize.heightPx <= 0) return;
+    const seen = autoFittedBackgroundIdsRef.current;
+    const unseen = project.backgrounds.filter((background) => !seen.has(background.id));
+    if (unseen.length === 0) return;
+
+    const isOpeningDocument = seen.size === 0;
+    for (const background of unseen) seen.add(background.id);
+
+    if (isOpeningDocument) {
+      if (navigationBounds) fitBounds(navigationBounds);
+      return;
+    }
+    const onlyOne = project.backgrounds.length === 1 ? project.backgrounds[0] : undefined;
+    if (onlyOne?.visible) fitBounds(getBackgroundBoundsM(onlyOne));
+  }, [project.backgrounds, navigationBounds, stageSize, fitBounds]);
 
   /** What labels show across this plan; an object may still override it for itself. */
   const labelDisplay = project.labelDisplay ?? DEFAULT_LABEL_DISPLAY;
+  /** True once anything is imported: the grid is then bounded to the plan rather than running to the horizon. */
+  const hasVisibleBackground = project.backgrounds.some((background) => background.visible);
 
   /**
    * A plan-wide label change is a change to the *document* — it decides
@@ -292,7 +327,7 @@ export default function Editor({
 
   const {
     selectedIds,
-    isBackgroundSelected,
+    selectedBackgroundId,
     selectedObjects,
     selectedObject,
     selectionBounds,
@@ -335,7 +370,10 @@ export default function Editor({
     onError: setFileError,
   });
 
-  const isBackgroundLocked = project.background?.locked === true;
+  /** The backdrop the properties panel is editing, resolved fresh so a removed one drops out of the selection. */
+  const selectedBackground =
+    project.backgrounds.find((candidate) => candidate.id === selectedBackgroundId) ?? null;
+  const isBackgroundLocked = selectedBackground?.locked === true;
 
   const handleSelectTool = useCallback((toolId: ToolId) => {
     setActiveTool(toolId);
@@ -447,9 +485,10 @@ export default function Editor({
 
   const handleBackgroundLiveUpdate = useCallback(
     (patch: Partial<BackgroundImage>) => {
-      applyLiveEdit((currentProject) => patchBackground(currentProject, patch));
+      if (!selectedBackgroundId) return;
+      applyLiveEdit((currentProject) => patchBackground(currentProject, selectedBackgroundId, patch));
     },
-    [applyLiveEdit],
+    [applyLiveEdit, selectedBackgroundId],
   );
 
   const handleBackgroundMoveLive = useCallback(
@@ -462,12 +501,15 @@ export default function Editor({
     [handleBackgroundLiveUpdate],
   );
 
+  /** Calibration measures on the selected backdrop; with none selected it falls back to the topmost one. */
+  const calibratedBackground = selectedBackground ?? project.backgrounds.at(-1) ?? null;
+
   const handleRequestCalibration = useCallback(() => {
-    if (!project.background || isBackgroundLocked) return;
+    if (!selectedBackground || isBackgroundLocked) return;
     deselectAll();
     setCalibrationPoints(null);
     setActiveTool("calibrate");
-  }, [project.background, isBackgroundLocked, deselectAll]);
+  }, [selectedBackground, isBackgroundLocked, deselectAll]);
 
   const handleCalibrationMeasured = useCallback((pointA: PointM, pointB: PointM) => {
     setCalibrationPoints({ pointA, pointB });
@@ -479,11 +521,15 @@ export default function Editor({
   }, []);
 
   const handleConfirmScaleCalibration = useCallback((scale: number, dpi: number) => {
-    commitChange((currentProject) => applyCalibration(currentProject, calibrationFromKnownScale(scale, dpi)));
+    if (!calibratedBackground) return;
+    const backgroundId = calibratedBackground.id;
+    commitChange((currentProject) =>
+      applyCalibration(currentProject, calibrationFromKnownScale(scale, dpi), backgroundId),
+    );
     closeDialog();
     setActiveTool("select");
-    selectBackground();
-  }, [commitChange, closeDialog, selectBackground]);
+    selectBackground(backgroundId);
+  }, [commitChange, closeDialog, selectBackground, calibratedBackground]);
 
   // Turns the two clicked points (in the project's current, possibly
   // still-approximate scale) plus the real distance the user just typed
@@ -492,23 +538,23 @@ export default function Editor({
   // they're derived together (see `domain/project.ts`'s `applyCalibration`).
   const handleConfirmCalibration = useCallback(
     (realDistanceM: number) => {
-      if (!calibrationPoints || !project.background) return;
+      if (!calibrationPoints || !calibratedBackground) return;
       const { pointA, pointB } = calibrationPoints;
       const measuredDistanceM = Math.hypot(pointB.xM - pointA.xM, pointB.yM - pointA.yM);
-      const pixelDistance = worldDistanceToImagePixels(project.background, measuredDistanceM);
+      const pixelDistance = worldDistanceToImagePixels(calibratedBackground, measuredDistanceM);
       const calibration = calibrationFromKnownDistance(pixelDistance, realDistanceM);
-      commitChange((currentProject) => applyCalibration(currentProject, calibration));
+      commitChange((currentProject) => applyCalibration(currentProject, calibration, calibratedBackground.id));
       setCalibrationPoints(null);
       setActiveTool("select");
-      selectBackground();
+      selectBackground(calibratedBackground.id);
     },
-    [calibrationPoints, project.background, commitChange, selectBackground],
+    [calibrationPoints, calibratedBackground, commitChange, selectBackground],
   );
 
   const handleDeleteSelected = useCallback(() => {
-    if (isBackgroundSelected) {
+    if (selectedBackgroundId) {
       if (isBackgroundLocked) return;
-      commitChange((currentProject) => removeBackground(currentProject));
+      commitChange((currentProject) => removeBackground(currentProject, selectedBackgroundId));
       deselectAll();
       return;
     }
@@ -521,7 +567,7 @@ export default function Editor({
     if (deletable.length === 0) return;
     commitChange((currentProject) => removeObjects(currentProject, deletable));
     deselectAll();
-  }, [isBackgroundSelected, isBackgroundLocked, selectedObjects, lockedLayerIds, commitChange, deselectAll]);
+  }, [selectedBackgroundId, isBackgroundLocked, selectedObjects, lockedLayerIds, commitChange, deselectAll]);
 
   const { copy, paste, duplicate } = useClipboard({
     project,
@@ -607,36 +653,59 @@ export default function Editor({
     closeDialog();
   }, [effectiveLayerId, stageSize, viewport, project.layers, commitChange, closeDialog, selectOnly]);
 
-  const handleToggleBackgroundVisible = useCallback(() => {
-    setProjectDirect((currentProject) =>
-      currentProject.background
-        ? {
-            ...currentProject,
-            background: { ...currentProject.background, visible: !currentProject.background.visible },
-            updatedAt: new Date().toISOString(),
-          }
-        : currentProject,
-    );
-  }, [setProjectDirect]);
+  /**
+   * Visibility and lock stay outside the undo stack, like a layer's: they
+   * are a way of looking at the plan, not a change to it.
+   */
+  const handleToggleBackgroundVisible = useCallback(
+    (backgroundId: string) => {
+      setProjectDirect((currentProject) => {
+        const background = currentProject.backgrounds.find((candidate) => candidate.id === backgroundId);
+        return background
+          ? patchBackground(currentProject, backgroundId, { visible: !background.visible })
+          : currentProject;
+      });
+    },
+    [setProjectDirect],
+  );
 
-  const handleToggleBackgroundLocked = useCallback(() => {
-    setProjectDirect((currentProject) =>
-      currentProject.background
-        ? {
-            ...currentProject,
-            background: { ...currentProject.background, locked: !currentProject.background.locked },
-            updatedAt: new Date().toISOString(),
-          }
-        : currentProject,
-    );
-  }, [setProjectDirect]);
+  const handleToggleBackgroundLocked = useCallback(
+    (backgroundId: string) => {
+      setProjectDirect((currentProject) => {
+        const background = currentProject.backgrounds.find((candidate) => candidate.id === backgroundId);
+        return background
+          ? patchBackground(currentProject, backgroundId, { locked: !background.locked })
+          : currentProject;
+      });
+    },
+    [setProjectDirect],
+  );
 
-  const handleRequestBackgroundImport = useCallback(() => {
+  const handleMoveBackground = useCallback(
+    (backgroundId: string, direction: -1 | 1) => {
+      commitChange((currentProject) => moveBackground(currentProject, backgroundId, direction));
+    },
+    [commitChange],
+  );
+
+  /**
+   * Which entry the next import lands on: `null` adds a new backdrop on
+   * top, an id replaces that one's image in place (keeping its placement,
+   * opacity and corrections). Carried in a ref because the file dialog is
+   * a round trip through the DOM — the intent has to survive it, and it
+   * must not cause a render.
+   */
+  const backgroundImportTargetRef = useRef<string | null>(null);
+
+  const handleRequestBackgroundImport = useCallback((replaceId?: string) => {
+    backgroundImportTargetRef.current = replaceId ?? null;
     fileInputRef.current?.click();
   }, []);
 
   const handleImportBackgroundFile = useCallback(
     (file: File) => {
+      const replaceId = backgroundImportTargetRef.current;
+      backgroundImportTargetRef.current = null;
       const reader = new FileReader();
       reader.onload = () => {
         const url = typeof reader.result === "string" ? reader.result : null;
@@ -644,11 +713,20 @@ export default function Editor({
         const img = new Image();
         img.onload = () => {
           const centerWorld = screenToWorld({ x: stageSize.widthPx / 2, y: stageSize.heightPx / 2 }, viewport);
+          let importedId: string | null = null;
           commitChange((currentProject) => {
-            if (currentProject.background) {
-              const margins = getBackgroundCropMargins(currentProject.background);
-              return setBackground(currentProject, {
-                ...currentProject.background,
+            const existing = replaceId
+              ? currentProject.backgrounds.find((candidate) => candidate.id === replaceId)
+              : undefined;
+            if (existing) {
+              // Replacing keeps where the old image sat and how it was
+              // corrected — the point of "replace" is a newer revision of
+              // the same plan, already positioned.
+              importedId = existing.id;
+              const margins = getBackgroundCropMargins(existing);
+              return replaceBackground(currentProject, existing.id, {
+                ...existing,
+                name: file.name || existing.name,
                 url,
                 widthPx: img.naturalWidth,
                 heightPx: img.naturalHeight,
@@ -662,14 +740,16 @@ export default function Editor({
               centerWorld,
             );
             const background = createBackgroundImage({
+              name: file.name,
               url,
               widthPx: img.naturalWidth,
               heightPx: img.naturalHeight,
               ...placement,
             });
-            return setBackground(currentProject, background);
+            importedId = background.id;
+            return addBackground(currentProject, background);
           });
-          selectBackground();
+          if (importedId) selectBackground(importedId);
           setActiveTool("select");
         };
         img.src = url;
@@ -904,9 +984,9 @@ export default function Editor({
         onSnapEnabledChange={setSnapEnabled}
         gridVisible={gridVisible}
         onGridVisibleChange={setGridVisible}
-        gridLimited={project.background?.visible ? true : gridLimited}
+        gridLimited={hasVisibleBackground ? true : gridLimited}
         onGridLimitedChange={setGridLimited}
-        gridLimitForced={project.background?.visible === true}
+        gridLimitForced={hasVisibleBackground}
         labelDisplay={labelDisplay}
         onLabelDisplayChange={handleLabelDisplayChange}
         collapsed={isCollapsed("tools")}
@@ -935,14 +1015,14 @@ export default function Editor({
         onPan={pan}
         objects={orderedObjects}
         layers={project.layers}
-        background={project.background}
+        backgrounds={project.backgrounds}
         activeTool={activeTool}
         snapEnabled={snapEnabled}
         labelDisplay={labelDisplay}
         gridVisible={gridVisible}
-        gridLimited={project.background?.visible ? true : gridLimited}
+        gridLimited={hasVisibleBackground ? true : gridLimited}
         selectedIds={selectedIds}
-        isBackgroundSelected={isBackgroundSelected}
+        selectedBackgroundId={selectedBackgroundId}
         onSelectObject={selectObject}
         onSelectMany={selectMany}
         onSelectBackground={selectBackground}
@@ -962,8 +1042,8 @@ export default function Editor({
       />
       <div className="inspector-rail">
       <PropertiesPanel
-        selected={isBackgroundSelected ? null : selectedObject}
-        selectionCount={isBackgroundSelected ? 0 : selectedObjects.length}
+        selected={selectedBackgroundId ? null : selectedObject}
+        selectionCount={selectedBackgroundId ? 0 : selectedObjects.length}
         selectionBounds={selectionBounds}
         layers={project.layers}
         selectionLayerId={
@@ -973,16 +1053,16 @@ export default function Editor({
             : null
         }
         onAssignLayer={(layerId) => assignObjectsToLayerAction(selectedIds, layerId)}
-        selectedBackground={isBackgroundSelected ? project.background : null}
+        selectedBackground={selectedBackground}
         calibration={project.calibration}
-        isLocked={isBackgroundSelected ? isBackgroundLocked : isSelectedLocked}
+        isLocked={selectedBackgroundId ? isBackgroundLocked : isSelectedLocked}
         labelDisplay={labelDisplay}
         onBeginEdit={handleBeginObjectEdit}
         onLiveUpdate={(patch) => selectedObject && handleObjectLiveUpdate(selectedObject.id, patch)}
         onBackgroundLiveUpdate={handleBackgroundLiveUpdate}
         onDelete={handleDeleteSelected}
         onDuplicate={duplicate}
-        onRequestReplaceBackground={handleRequestBackgroundImport}
+        onRequestReplaceBackground={() => selectedBackgroundId && handleRequestBackgroundImport(selectedBackgroundId)}
         onRequestCalibration={handleRequestCalibration}
         onRequestScaleCalibration={() => setOpenDialog("scaleCalibration")}
         onCreateGroup={handleCreateGroup}
@@ -1035,8 +1115,8 @@ export default function Editor({
         />
       )}
       <LayersPanel
-        background={project.background}
-        isBackgroundSelected={isBackgroundSelected}
+        backgrounds={project.backgrounds}
+        selectedBackgroundId={selectedBackgroundId}
         layers={project.layers}
         objects={project.objects}
         objectCounts={objectCounts}
@@ -1052,7 +1132,8 @@ export default function Editor({
         onSelectBackground={selectBackground}
         onToggleBackgroundVisible={handleToggleBackgroundVisible}
         onToggleBackgroundLocked={handleToggleBackgroundLocked}
-        onRequestImportBackground={handleRequestBackgroundImport}
+        onMoveBackground={handleMoveBackground}
+        onRequestImportBackground={() => handleRequestBackgroundImport()}
         onAssignObjectToLayer={(objectId, layerId) => { assignObjectsToLayerAction([objectId], layerId); selectOnly([objectId]); }}
         onSetLayerFolder={setLayerFolder}
         onSetLayerDefaultStyle={requestLayerStyle}
@@ -1065,7 +1146,7 @@ export default function Editor({
           onAddSheet={addSheet}
           onDuplicateSheet={duplicateSheet}
           onDeleteSheet={deleteSheet}
-          preview={<SheetPreview project={project} sheet={sheet} layout={sheetLayout} objects={orderedObjects} layers={project.layers} background={project.background} showGrid={printGrid} />}
+          preview={<SheetPreview project={project} sheet={sheet} layout={sheetLayout} objects={orderedObjects} layers={project.layers} backgrounds={project.backgrounds} showGrid={printGrid} />}
           contentBounds={contentBounds}
           busy={pendingExport !== null}
           onChange={changeSheet}
@@ -1131,7 +1212,7 @@ export default function Editor({
             viewport={printRaster.viewport}
             objects={rasterObjects}
             layers={project.layers}
-            background={project.background}
+            backgrounds={project.backgrounds}
             showGrid={printGrid}
             labelDisplay={labelDisplay}
             renderScale={printRaster.effectiveDpi / CSS_PIXELS_PER_INCH}

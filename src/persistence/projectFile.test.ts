@@ -4,7 +4,7 @@ import { calibrationFromKnownDistance } from "../domain/calibration";
 import { getDefaultTargetLayer } from "../domain/layers";
 import { createSheet } from "../domain/sheets";
 import { createCircleObject, createRectangleObject, createTextObject } from "../domain/objects";
-import { addObject, applyCalibration, createDemoProject, createEmptyProject, setBackground } from "../domain/project";
+import { addObject, applyCalibration, createDemoProject, createEmptyProject, addBackground } from "../domain/project";
 import type { Project } from "../domain/types";
 import {
   FILE_KIND,
@@ -46,7 +46,7 @@ function richProject(): Project {
     project,
     createTextObject({ layerId: layer.id, name: "Étiquette", xM: 4, yM: 4, text: "Entrée — accès pompiers" }),
   );
-  project = setBackground(
+  project = addBackground(
     project,
     createBackgroundImage({
       url: "data:image/png;base64,iVBORw0KGgo=",
@@ -81,13 +81,13 @@ describe("serializeProject / deserializeProject", () => {
 
   it("charge les anciens fonds sans rotation ni correction d'image", () => {
     const file: any = JSON.parse(serializeProject(richProject()));
-    delete file.project.background.rotationDeg;
-    delete file.project.background.brightness;
-    delete file.project.background.contrast;
-    delete file.project.background.grayscale;
+    delete file.project.backgrounds[0].rotationDeg;
+    delete file.project.backgrounds[0].brightness;
+    delete file.project.backgrounds[0].contrast;
+    delete file.project.backgrounds[0].grayscale;
     const result = parseProjectFile(file);
     if (!result.ok) throw new Error(`fichier refusé : ${JSON.stringify(result.error)}`);
-    expect(result.file.project.background).toMatchObject({ rotationDeg: 0, brightness: 0, contrast: 0, grayscale: false });
+    expect(result.file.project.backgrounds[0]).toMatchObject({ rotationDeg: 0, brightness: 0, contrast: 0, grayscale: false });
   });
 
   it("round-trips the demo project unchanged", () => {
@@ -105,7 +105,7 @@ describe("serializeProject / deserializeProject", () => {
   it("preserves a project with no background and no objects", () => {
     const project = createEmptyProject({ name: "Vide" });
     const restored = roundTrip(project);
-    expect(restored.background).toBeNull();
+    expect(restored.backgrounds).toEqual([]);
     expect(restored.objects).toEqual([]);
   });
 
@@ -210,27 +210,27 @@ describe("parseProjectFile — field validation", () => {
   });
 
   it("rejects an out-of-range background opacity", () => {
-    expect(errorAfter((f) => (f.project.background.opacity = 1.5))).toEqual({
+    expect(errorAfter((f) => (f.project.backgrounds[0].opacity = 1.5))).toEqual({
       code: "invalidField",
-      path: "project.background.opacity",
+      path: "project.backgrounds[0].opacity",
     });
   });
 
   it("rejects out-of-range background image corrections", () => {
-    expect(errorAfter((f) => (f.project.background.brightness = 2))).toEqual({
+    expect(errorAfter((f) => (f.project.backgrounds[0].brightness = 2))).toEqual({
       code: "invalidField",
-      path: "project.background.brightness",
+      path: "project.backgrounds[0].brightness",
     });
-    expect(errorAfter((f) => (f.project.background.contrast = -101))).toEqual({
+    expect(errorAfter((f) => (f.project.backgrounds[0].contrast = -101))).toEqual({
       code: "invalidField",
-      path: "project.background.contrast",
+      path: "project.backgrounds[0].contrast",
     });
   });
 
   it("rejects a zero-sized background", () => {
-    expect(errorAfter((f) => (f.project.background.widthM = 0))).toEqual({
+    expect(errorAfter((f) => (f.project.backgrounds[0].widthM = 0))).toEqual({
       code: "invalidField",
-      path: "project.background.widthM",
+      path: "project.backgrounds[0].widthM",
     });
   });
 
@@ -314,10 +314,80 @@ describe("parseProjectFile — tolerance", () => {
 
   it("keeps a background's data: URL byte-for-byte", () => {
     const url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-    const project = setBackground(
+    const project = addBackground(
       createEmptyProject({ name: "Fond" }),
       createBackgroundImage({ url, widthPx: 1, heightPx: 1, xM: 0, yM: 0, widthM: 1, heightM: 1 }),
     );
-    expect(roundTrip(project).background?.url).toBe(url);
+    expect(roundTrip(project).backgrounds[0]?.url).toBe(url);
+  });
+});
+
+describe("schema version 1 → 2 migration (KL-029)", () => {
+  /** A project file exactly as builds up to KL-028 wrote it: one `background`, no `backgrounds`. */
+  function version1File() {
+    const project = addBackground(
+      createEmptyProject({ name: "Ancien plan" }),
+      createBackgroundImage({
+        name: "Plan cadastral",
+        url: "data:image/png;base64,legacy",
+        widthPx: 800,
+        heightPx: 600,
+        xM: 1,
+        yM: 2,
+        widthM: 80,
+        heightM: 60,
+      }),
+    );
+    const [background] = project.backgrounds;
+    const file = JSON.parse(serializeProject(project)) as {
+      schemaVersion: number;
+      project: Record<string, unknown>;
+    };
+    file.schemaVersion = 1;
+    file.project.background = background;
+    delete file.project.backgrounds;
+    return file;
+  }
+
+  it("reads an old single background into a one-element stack", () => {
+    const result = parseProjectFile(version1File());
+    if (!result.ok) throw new Error(`fichier refusé : ${JSON.stringify(result.error)}`);
+    expect(result.file.project.backgrounds).toHaveLength(1);
+    expect(result.file.project.backgrounds[0]).toMatchObject({
+      name: "Plan cadastral",
+      widthM: 80,
+      heightM: 60,
+      xM: 1,
+      yM: 2,
+    });
+  });
+
+  it("reads an old file that had no background at all as an empty stack", () => {
+    const file = version1File();
+    file.project.background = null;
+    const result = parseProjectFile(file);
+    if (!result.ok) throw new Error(`fichier refusé : ${JSON.stringify(result.error)}`);
+    expect(result.file.project.backgrounds).toEqual([]);
+  });
+
+  it("refuses a file from a *newer* schema rather than silently dropping what it doesn't understand", () => {
+    const file = version1File();
+    file.schemaVersion = SCHEMA_VERSION + 1;
+    const result = parseProjectFile(file);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({
+      code: "unsupportedVersion",
+      found: SCHEMA_VERSION + 1,
+      supported: SCHEMA_VERSION,
+    });
+  });
+
+  it("names a background that never had a name, rather than leaving a blank row", () => {
+    const file = version1File();
+    delete (file.project.background as Record<string, unknown>).name;
+    const result = parseProjectFile(file);
+    if (!result.ok) throw new Error(`fichier refusé : ${JSON.stringify(result.error)}`);
+    expect(result.file.project.backgrounds[0]?.name).toBe("Fond de plan");
   });
 });

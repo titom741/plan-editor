@@ -19,13 +19,19 @@ interface UseSelectionOptions {
  * whatever they held. Resolving them against the live project each render
  * also makes a deleted object drop out of the selection for free.
  *
- * The background is selected separately rather than being id number zero,
- * because it isn't a `PlanObject` — it has no layer, no type, and its own
- * property panel.
+ * A background is tracked separately rather than as one more id, because
+ * it isn't a `PlanObject` — it has no layer, no type, and its own
+ * property panel. Selecting one clears the object selection and vice
+ * versa: the properties panel shows one thing at a time.
  */
 export function useSelection({ project, visibleLayerIds, lockedLayerIds }: UseSelectionOptions) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [isBackgroundSelected, setIsBackgroundSelected] = useState(false);
+  /**
+   * Which backdrop is selected, if any. An id rather than a flag since
+   * KL-029: a plan can carry several, and "the background" stopped being
+   * a single thing.
+   */
+  const [selectedBackgroundId, setSelectedBackgroundId] = useState<string | null>(null);
 
   const selectedObjects = useMemo(() => {
     const wanted = new Set(selectedIds);
@@ -61,7 +67,7 @@ export function useSelection({ project, visibleLayerIds, lockedLayerIds }: UseSe
         ? project.objects.filter((candidate) => candidate.groupId === object.groupId).map((candidate) => candidate.id)
         : [id];
       setSelectedIds((current) => (additive ? toggleSelection(current, id) : groupedIds));
-      setIsBackgroundSelected(false);
+      setSelectedBackgroundId(null);
     },
     [project.objects],
   );
@@ -72,7 +78,7 @@ export function useSelection({ project, visibleLayerIds, lockedLayerIds }: UseSe
     } else if (ids.length > 0) {
       setSelectedIds((current) => [...current, ...ids.filter((id) => !current.includes(id))]);
     }
-    if (ids.length > 0) setIsBackgroundSelected(false);
+    if (ids.length > 0) setSelectedBackgroundId(null);
   }, []);
 
   const selectAll = useCallback(() => {
@@ -81,28 +87,28 @@ export function useSelection({ project, visibleLayerIds, lockedLayerIds }: UseSe
     setSelectedIds(
       project.objects.filter((object) => visibleLayerIds.has(object.layerId)).map((object) => object.id),
     );
-    setIsBackgroundSelected(false);
+    setSelectedBackgroundId(null);
   }, [project.objects, visibleLayerIds]);
 
-  const selectBackground = useCallback(() => {
-    setIsBackgroundSelected(true);
+  const selectBackground = useCallback((backgroundId: string) => {
+    setSelectedBackgroundId(backgroundId);
     setSelectedIds([]);
   }, []);
 
   /** Replaces the selection wholesale — what a paste, an import or a fresh shape wants. */
   const selectOnly = useCallback((ids: readonly string[]) => {
     setSelectedIds([...ids]);
-    setIsBackgroundSelected(false);
+    setSelectedBackgroundId(null);
   }, []);
 
   const deselectAll = useCallback(() => {
     setSelectedIds([]);
-    setIsBackgroundSelected(false);
+    setSelectedBackgroundId(null);
   }, []);
 
   return {
     selectedIds,
-    isBackgroundSelected,
+    selectedBackgroundId,
     selectedObjects,
     selectedObject,
     selectionBounds,

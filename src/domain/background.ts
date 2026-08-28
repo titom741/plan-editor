@@ -3,6 +3,8 @@ import { createId } from "./ids";
 import type { BackgroundImage, Calibration, PointM } from "./types";
 
 export interface CreateBackgroundImageInput {
+  /** Usually the imported file's name — what the layers bar will call it. */
+  name?: string;
   url: string;
   widthPx: number;
   heightPx: number;
@@ -17,6 +19,7 @@ export function createBackgroundImage(input: CreateBackgroundImageInput): Backgr
   return {
     id: createId("background"),
     kind: "image",
+    name: input.name?.trim() || "Fond de plan",
     url: input.url,
     widthPx: input.widthPx,
     heightPx: input.heightPx,

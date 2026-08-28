@@ -31,7 +31,7 @@ interface UseClipboardOptions {
  * nothing.
  *
  * What lands on the system clipboard is a real project file (minus the
- * background, which would carry a whole base64 image), so pasting it into
+ * backdrops, which would carry whole base64 images), so pasting it into
  * an editor gives something the app can also open.
  */
 export function useClipboard({
@@ -74,7 +74,7 @@ export function useClipboard({
     clipboardRef.current = selectedObjects.map((object) => ({ ...object }));
     pasteCountRef.current = 0;
     if (navigator.clipboard?.writeText) {
-      const payload = serializeProject({ ...project, background: null, objects: clipboardRef.current });
+      const payload = serializeProject({ ...project, backgrounds: [], objects: clipboardRef.current });
       void navigator.clipboard.writeText(payload).catch(() => undefined);
     }
   }, [selectedObjects, project]);

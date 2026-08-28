@@ -185,7 +185,7 @@
 .library-dialog__filters { display: grid; grid-template-columns: 1fr 14rem; gap: .75rem; margin-bottom: 1rem; }
 .library-dialog__filters input, .library-dialog__filters select { padding: .5rem .65rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: inherit; font: inherit; }
 .library-dialog__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: .65rem; }
-.library-card { display: flex; flex-direction: column; align-items: flex-start; gap: .3rem; padding: .7rem; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: inherit; cursor: pointer; text-align: left; }
+.library-card { display: flex; flex-direction: column; align-items: flex-start; gap: .3rem; padding: .7rem; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: inherit; text-align: left; }
 .library-card:hover { border-color: var(--accent-border); background: var(--accent-bg); }
 .library-card__preview { width: 2rem; height: 2rem; border: 2px solid; border-radius: 4px; }
 .library-card span, .library-card small { color: var(--text); }
@@ -1115,4 +1115,38 @@
 
 .app-layout.tools-collapsed .side-rail .panel__title-text {
   display: none;
+}
+
+/* A catalogue card is a big insert button plus, in manage mode, a small row of controls. */
+.library-card__insert {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .3rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.library-card__actions {
+  display: flex;
+  gap: .3rem;
+  margin-top: .4rem;
+}
+
+.library-card__actions button {
+  padding: .15rem .4rem;
+  font-size: .8rem;
+  line-height: 1.4;
+}
+
+/* A hidden material is only visible while managing — say so rather than showing it as ordinary. */
+.library-card.is-hidden-item {
+  opacity: .55;
+  border-style: dashed;
 }

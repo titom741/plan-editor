@@ -4,7 +4,7 @@ import type Konva from "konva";
 import { computeGridLines } from "../../rendering/grid";
 import { getEffectivePixelsPerMeter, metersToPixels, screenToWorld, worldToScreen } from "../../rendering/viewport";
 import type { ScreenPoint, Viewport } from "../../rendering/viewport";
-import type { Background, Layer, PlanObject, PlanObjectPatch, PointM } from "../../domain/types";
+import type { BackgroundImage, Layer, PlanObject, PlanObjectPatch, PointM } from "../../domain/types";
 import { boundsAreaM2, boundsFromCorners, getSelectionBoundsM, objectIdsWithinBounds } from "../../domain/selection";
 import { formatAngleDeg, formatAreaM2, formatLengthM, polygonAreaM2, polylineLengthM, segmentLengthsM } from "../../domain/measure";
 import { collectSnapTargets, snapPointM } from "../../domain/snapping";
@@ -36,7 +36,8 @@ interface PlanCanvasProps {
   onPan: (deltaXPx: number, deltaYPx: number) => void;
   objects: PlanObject[];
   layers: Layer[];
-  background: Background;
+  /** The backdrop stack, bottom first — drawn in order, so the last one covers. */
+  backgrounds: readonly BackgroundImage[];
   activeTool: ToolId;
   /** Whether the pointer is pulled onto grid intersections and object corners (KL-007). Hold Alt to bypass it for one gesture. */
   snapEnabled: boolean;
@@ -45,12 +46,12 @@ interface PlanCanvasProps {
   gridVisible: boolean;
   gridLimited: boolean;
   selectedIds: readonly string[];
-  isBackgroundSelected: boolean;
+  selectedBackgroundId: string | null;
   /** `additive` (Shift/Ctrl/Cmd) toggles the object in the selection instead of replacing it. */
   onSelectObject: (id: string, additive: boolean) => void;
   /** Result of a marquee: the ids it caught, to add to the selection (`additive`) or to become it. */
   onSelectMany: (ids: string[], additive: boolean) => void;
-  onSelectBackground: () => void;
+  onSelectBackground: (backgroundId: string) => void;
   onDeselectAll: () => void;
   onCreateObject: (spec: NewObjectSpec) => void;
   onBeginObjectEdit: () => void;
@@ -122,14 +123,14 @@ export function PlanCanvas({
   onPan,
   objects,
   layers,
-  background,
+  backgrounds,
   activeTool,
   snapEnabled,
   labelDisplay,
   gridVisible,
   gridLimited,
   selectedIds,
-  isBackgroundSelected,
+  selectedBackgroundId,
   onSelectObject,
   onSelectMany,
   onSelectBackground,
@@ -203,13 +204,17 @@ export function PlanCanvas({
   }
 
   const grid = computeGridLines(viewport, stageSize.widthPx || 1, stageSize.heightPx || 1);
-  const gridClipPoints = gridLimited && background?.visible
+  // The grid and its snapping are bounded by the *bottom* visible
+  // backdrop — the surveyed plan the site is set out against, not
+  // whatever image happens to be laid over it.
+  const boundingBackground = backgrounds.find((candidate) => candidate.visible) ?? null;
+  const gridClipPoints = gridLimited && boundingBackground?.visible
     ? [
         { xM: 0, yM: 0 },
-        { xM: background.widthM, yM: 0 },
-        { xM: background.widthM, yM: background.heightM },
-        { xM: 0, yM: background.heightM },
-      ].map((point) => worldToScreen(objectLocalToWorld(background, point), viewport))
+        { xM: boundingBackground.widthM, yM: 0 },
+        { xM: boundingBackground.widthM, yM: boundingBackground.heightM },
+        { xM: 0, yM: boundingBackground.heightM },
+      ].map((point) => worldToScreen(objectLocalToWorld(boundingBackground, point), viewport))
     : null;
   const layersById = useMemo(() => new Map(layers.map((layer) => [layer.id, layer])), [layers]);
   // Memoised because the marquee's mouse-up handler closes over it: a set
@@ -266,15 +271,15 @@ export function PlanCanvas({
       const ordinaryTargets = excludeIds ? nearbyTargets.filter((target) => !target.objectId || !excludeIds.has(target.objectId)) : nearbyTargets;
       const tangentTargets: SnapTarget[] = draft?.tool === "line" ? objects.flatMap((object) => object.type === "circle" && visibleLayerIds.has(object.layerId) ? tangentPointsToCircleM(draft.startWorld, object, object.radiusM).map((pointM) => ({ pointM, kind: "tangent" as const, objectId: object.id })) : []) : [];
       const targets = [...ordinaryTargets, ...tangentTargets];
-      const backgroundLocal = background?.visible ? worldToObjectLocal(background, pointM) : null;
+      const backgroundLocal = boundingBackground ? worldToObjectLocal(boundingBackground, pointM) : null;
       const insideGridBounds =
         !gridLimited ||
-        !background?.visible ||
+        !boundingBackground ||
         (backgroundLocal !== null &&
           backgroundLocal.xM >= 0 &&
-          backgroundLocal.xM <= background.widthM &&
+          backgroundLocal.xM <= boundingBackground.widthM &&
           backgroundLocal.yM >= 0 &&
-          backgroundLocal.yM <= background.heightM);
+          backgroundLocal.yM <= boundingBackground.heightM);
       const result = snapPointM(pointM, {
         targets,
         gridStepM: gridVisible && insideGridBounds ? grid.spacingM : 0,
@@ -287,7 +292,7 @@ export function PlanCanvas({
       );
       return result.pointM;
     },
-    [snapEnabled, snapIndex, grid.spacingM, gridVisible, gridLimited, background, viewport, draft, objects, visibleLayerIds],
+    [snapEnabled, snapIndex, grid.spacingM, gridVisible, gridLimited, boundingBackground, viewport, draft, objects, visibleLayerIds],
   );
 
   const getPointerWorld = useCallback(
@@ -742,19 +747,22 @@ export function PlanCanvas({
           onTouchEnd={handleTouchEnd}
         >
           <KonvaLayer>
-            {background?.visible && (
-              <BackgroundImageShape
-                background={background}
-                viewport={viewport}
-                selected={isBackgroundSelected}
-                draggable={activeTool === "select" && !background.locked}
-                selectable={activeTool === "select"}
-                onSelect={onSelectBackground}
-                onBeginEdit={onBeginObjectEdit}
-                onMoveLive={onBackgroundMoveLive}
-                onResizeLive={onBackgroundResizeLive}
-              />
-            )}
+            {backgrounds
+              .filter((background) => background.visible)
+              .map((background) => (
+                <BackgroundImageShape
+                  key={background.id}
+                  background={background}
+                  viewport={viewport}
+                  selected={background.id === selectedBackgroundId}
+                  draggable={activeTool === "select" && !background.locked}
+                  selectable={activeTool === "select"}
+                  onSelect={() => onSelectBackground(background.id)}
+                  onBeginEdit={onBeginObjectEdit}
+                  onMoveLive={onBackgroundMoveLive}
+                  onResizeLive={onBackgroundResizeLive}
+                />
+              ))}
           </KonvaLayer>
           <KonvaLayer listening={false}>
             {gridVisible && (

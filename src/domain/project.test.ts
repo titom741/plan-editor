@@ -15,7 +15,8 @@ import {
   patchObjects,
   removeBackground,
   removeObjects,
-  setBackground,
+  addBackground,
+  moveBackground,
 } from "./project";
 
 describe("createEmptyProject", () => {
@@ -23,7 +24,7 @@ describe("createEmptyProject", () => {
     const project = createEmptyProject({ name: "Test" });
     expect(project.layers.map((l) => l.name)).toEqual([...DEFAULT_LAYER_NAMES]);
     expect(project.objects).toEqual([]);
-    expect(project.background).toBeNull();
+    expect(project.backgrounds).toEqual([]);
     expect(project.units).toBe("m");
   });
 
@@ -215,32 +216,44 @@ describe("setBackground / removeBackground / patchBackground", () => {
     heightM: 20,
   });
 
-  it("setBackground replaces any existing background without mutating the original project", () => {
+  it("addBackground stacks on top without mutating the original project", () => {
     const project = createEmptyProject({ name: "Test" });
-    const next = setBackground(project, sampleBackground);
-    expect(project.background).toBeNull(); // original untouched
-    expect(next.background).toBe(sampleBackground);
+    const next = addBackground(project, sampleBackground);
+    expect(project.backgrounds).toEqual([]); // original untouched
+    expect(next.backgrounds).toEqual([sampleBackground]);
   });
 
-  it("removeBackground clears it and is a no-op when there isn't one", () => {
-    const withBackground = setBackground(createEmptyProject({ name: "Test" }), sampleBackground);
-    const removed = removeBackground(withBackground);
-    expect(removed.background).toBeNull();
-
-    const alreadyEmpty = createEmptyProject({ name: "Test" });
-    expect(removeBackground(alreadyEmpty)).toBe(alreadyEmpty);
+  it("stacks a second background above the first, in import order", () => {
+    const second = createBackgroundImage({ url: "data:image/png;base64,second", widthPx: 10, heightPx: 10, xM: 0, yM: 0, widthM: 1, heightM: 1 });
+    const next = addBackground(addBackground(createEmptyProject({ name: "Test" }), sampleBackground), second);
+    expect(next.backgrounds.map((background) => background.id)).toEqual([sampleBackground.id, second.id]);
   });
 
-  it("patchBackground merges fields and is a no-op when there isn't one", () => {
-    const withBackground = setBackground(createEmptyProject({ name: "Test" }), sampleBackground);
-    const patched = patchBackground(withBackground, { xM: 5, yM: 5, opacity: 0.5 });
-    expect(patched.background?.xM).toBe(5);
-    expect(patched.background?.yM).toBe(5);
-    expect(patched.background?.opacity).toBe(0.5);
-    expect(patched.background?.widthM).toBe(40); // untouched fields survive the merge
+  it("removeBackground drops the matching one and is a no-op for an unknown id", () => {
+    const withBackground = addBackground(createEmptyProject({ name: "Test" }), sampleBackground);
+    expect(removeBackground(withBackground, sampleBackground.id).backgrounds).toEqual([]);
+    expect(removeBackground(withBackground, "nope")).toBe(withBackground);
+  });
 
-    const empty = createEmptyProject({ name: "Test" });
-    expect(patchBackground(empty, { xM: 1 })).toBe(empty);
+  it("patchBackground merges fields into the matching background only", () => {
+    const withBackground = addBackground(createEmptyProject({ name: "Test" }), sampleBackground);
+    const patched = patchBackground(withBackground, sampleBackground.id, { xM: 5, yM: 5, opacity: 0.5 });
+    expect(patched.backgrounds[0]?.xM).toBe(5);
+    expect(patched.backgrounds[0]?.yM).toBe(5);
+    expect(patched.backgrounds[0]?.opacity).toBe(0.5);
+    expect(patched.backgrounds[0]?.widthM).toBe(40); // untouched fields survive the merge
+
+    expect(patchBackground(withBackground, "nope", { xM: 1 })).toBe(withBackground);
+  });
+
+  it("moveBackground reorders the stack and stops at either end rather than wrapping", () => {
+    const second = createBackgroundImage({ url: "data:image/png;base64,second", widthPx: 10, heightPx: 10, xM: 0, yM: 0, widthM: 1, heightM: 1 });
+    const stacked = addBackground(addBackground(createEmptyProject({ name: "Test" }), sampleBackground), second);
+    const raised = moveBackground(stacked, sampleBackground.id, 1);
+    expect(raised.backgrounds.map((background) => background.id)).toEqual([second.id, sampleBackground.id]);
+    // Already at the bottom: nothing to do, and the same object comes back.
+    expect(moveBackground(stacked, sampleBackground.id, -1)).toBe(stacked);
+    expect(moveBackground(stacked, second.id, 1)).toBe(stacked);
   });
 });
 
@@ -256,15 +269,15 @@ describe("applyCalibration", () => {
   });
 
   it("sets the calibration and recomputes the background's size from it", () => {
-    const project = setBackground(createEmptyProject({ name: "Test" }), sampleBackground);
+    const project = addBackground(createEmptyProject({ name: "Test" }), sampleBackground);
     const calibration = calibrationFromKnownDistance(500, 5); // 100 image px / m
-    const next = applyCalibration(project, calibration);
+    const next = applyCalibration(project, calibration, sampleBackground.id);
 
     expect(next.calibration).toEqual(calibration);
-    expect(next.background?.widthM).toBeCloseTo(20, 9); // 2000px / 100 px-per-m
-    expect(next.background?.heightM).toBeCloseTo(10, 9); // 1000px / 100 px-per-m
-    expect(next.background?.xM).toBe(3); // anchor untouched
-    expect(next.background?.yM).toBe(4);
+    expect(next.backgrounds[0]?.widthM).toBeCloseTo(20, 9); // 2000px / 100 px-per-m
+    expect(next.backgrounds[0]?.heightM).toBeCloseTo(10, 9); // 1000px / 100 px-per-m
+    expect(next.backgrounds[0]?.xM).toBe(3); // anchor untouched
+    expect(next.backgrounds[0]?.yM).toBe(4);
   });
 
   it("still records the calibration when there is no background", () => {
@@ -272,17 +285,17 @@ describe("applyCalibration", () => {
     const calibration = calibrationFromKnownDistance(500, 5);
     const next = applyCalibration(project, calibration);
     expect(next.calibration).toEqual(calibration);
-    expect(next.background).toBeNull();
+    expect(next.backgrounds).toEqual([]);
   });
 
   it("does not mutate the original project", () => {
-    const project = setBackground(createEmptyProject({ name: "Test" }), sampleBackground);
-    applyCalibration(project, calibrationFromKnownDistance(500, 5));
-    expect(project.background?.widthM).toBe(40);
+    const project = addBackground(createEmptyProject({ name: "Test" }), sampleBackground);
+    applyCalibration(project, calibrationFromKnownDistance(500, 5), sampleBackground.id);
+    expect(project.backgrounds[0]?.widthM).toBe(40);
   });
 
   it("leaves plan objects untouched — calibration corrects the background, not the plan", () => {
-    const project = setBackground(createEmptyProject({ name: "Test" }), sampleBackground);
+    const project = addBackground(createEmptyProject({ name: "Test" }), sampleBackground);
     const layer = getDefaultTargetLayer(project.layers);
     if (!layer) throw new Error("no default layer");
     const chapiteau = createRectangleObject({
@@ -299,9 +312,9 @@ describe("applyCalibration", () => {
   });
 
   it("keeps the background's aspect ratio, whatever the measured distance", () => {
-    const project = setBackground(createEmptyProject({ name: "Test" }), sampleBackground);
-    const next = applyCalibration(project, calibrationFromKnownDistance(137, 3.7));
-    const bg = next.background;
+    const project = addBackground(createEmptyProject({ name: "Test" }), sampleBackground);
+    const next = applyCalibration(project, calibrationFromKnownDistance(137, 3.7), sampleBackground.id);
+    const bg = next.backgrounds[0];
     if (!bg) throw new Error("background missing");
     expect(bg.widthM / bg.heightM).toBeCloseTo(bg.widthPx / bg.heightPx, 9);
   });
@@ -312,19 +325,19 @@ describe("applyCalibration", () => {
     // corrected background and giving the same real distance must land
     // back on the same pixelsPerMeter — otherwise recalibrating would
     // drift the plan a little further every time.
-    const project = setBackground(createEmptyProject({ name: "Test" }), sampleBackground);
-    const first = applyCalibration(project, calibrationFromKnownDistance(500, 5));
-    const bg = first.background;
+    const project = addBackground(createEmptyProject({ name: "Test" }), sampleBackground);
+    const first = applyCalibration(project, calibrationFromKnownDistance(500, 5), sampleBackground.id);
+    const bg = first.backgrounds[0];
     if (!bg) throw new Error("background missing");
 
     // The same 500 image px, re-measured in world meters on the corrected
     // background, then fed back through the same conversion the UI uses.
     const worldSpanM = 500 / (bg.widthPx / bg.widthM);
     const pixelDistance = worldDistanceToImagePixels(bg, worldSpanM);
-    const second = applyCalibration(first, calibrationFromKnownDistance(pixelDistance, 5));
+    const second = applyCalibration(first, calibrationFromKnownDistance(pixelDistance, 5), bg.id);
 
     expect(second.calibration.pixelsPerMeter).toBeCloseTo(first.calibration.pixelsPerMeter, 9);
-    expect(second.background?.widthM).toBeCloseTo(bg.widthM, 9);
+    expect(second.backgrounds[0]?.widthM).toBeCloseTo(bg.widthM, 9);
   });
 });
 

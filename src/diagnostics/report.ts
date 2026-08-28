@@ -24,8 +24,8 @@ export interface DiagnosticReport {
     visibleLayerCount: number;
     lockedLayerCount: number;
     sheetCount: number;
-    hasBackground: boolean;
-    backgroundResolutionPx: { width: number; height: number } | null;
+    backgroundCount: number;
+    backgroundResolutionsPx: { width: number; height: number }[];
     calibrationSource: Project["calibration"]["source"]["type"];
   };
 }
@@ -48,8 +48,11 @@ export function buildDiagnosticReport(project: Project, environment: DiagnosticE
       visibleLayerCount: project.layers.filter((layer) => layer.visible).length,
       lockedLayerCount: project.layers.filter((layer) => layer.locked).length,
       sheetCount: project.sheets.length,
-      hasBackground: project.background !== null,
-      backgroundResolutionPx: project.background ? { width: project.background.widthPx, height: project.background.heightPx } : null,
+      backgroundCount: project.backgrounds.length,
+      backgroundResolutionsPx: project.backgrounds.map((background) => ({
+        width: background.widthPx,
+        height: background.heightPx,
+      })),
       calibrationSource: project.calibration.source.type,
     },
   };

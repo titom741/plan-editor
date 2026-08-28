@@ -122,8 +122,8 @@ export function getProjectBoundsM(project: Project): BoundsM | null {
     if (!visibleLayerIds.has(object.layerId)) continue;
     bounds = unionBounds(bounds, getObjectBoundsM(object));
   }
-  if (project.background?.visible) {
-    bounds = unionBounds(bounds, getBackgroundBoundsM(project.background));
+  for (const background of project.backgrounds) {
+    if (background.visible) bounds = unionBounds(bounds, getBackgroundBoundsM(background));
   }
   return bounds;
 }

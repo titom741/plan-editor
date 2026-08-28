@@ -104,6 +104,8 @@ export interface BackgroundImage {
   heightM: Meters;
   rotationDeg: Degrees;
   opacity: number;
+  /** Shown in the layers panel and the background list; defaults to the imported file's name. */
+  name: string;
   /** Non-destructive image corrections; the original data URL is preserved. */
   brightness: number;
   contrast: number;
@@ -116,6 +118,11 @@ export interface BackgroundImage {
   locked: boolean;
 }
 
+/**
+ * Kept as an alias so the many places that hold "one background, or none"
+ * — a selection, a shape being rendered — still read clearly now that a
+ * project holds a stack of them.
+ */
 export type Background = BackgroundImage | null;
 
 // ---------------------------------------------------------------------------
@@ -316,7 +323,16 @@ export interface Project {
     /** Clockwise angle from local +X to geographic east. */
     rotationDeg: Degrees;
   };
-  background: Background;
+  /**
+   * The imported plan backdrops, bottom first. A site is routinely read
+   * against more than one — a surveyed plan with a satellite view over
+   * it, a previous year's layout underneath this one — so this is a
+   * stack, each with its own placement, opacity and corrections.
+   *
+   * Files written before KL-029 carried a single `background`; the parser
+   * migrates it into a one-element stack.
+   */
+  backgrounds: BackgroundImage[];
   layers: Layer[];
   objects: PlanObject[];
   sheets: Sheet[];

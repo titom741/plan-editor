@@ -3,7 +3,7 @@ import { boundsCenterM, boundsSizeM, getBackgroundBoundsM, getObjectBoundsM, get
 import { createBackgroundImage } from "./background";
 import { getDefaultTargetLayer } from "./layers";
 import { createCircleObject, createLineObject, createRectangleObject, createTextObject } from "./objects";
-import { addObject, createEmptyProject, setBackground } from "./project";
+import { addBackground, addObject, createEmptyProject } from "./project";
 import type { Project } from "./types";
 
 describe("getObjectBoundsM — rectangles", () => {
@@ -141,7 +141,7 @@ describe("getProjectBoundsM", () => {
       project,
       createRectangleObject({ layerId, name: "R", xM: 0, yM: 0, widthM: 5, heightM: 5 }),
     );
-    const withBackground = setBackground(
+    const withBackground = addBackground(
       withObject,
       createBackgroundImage({
         url: "data:,",
@@ -171,7 +171,7 @@ describe("getProjectBoundsM", () => {
 
   it("ignores a hidden background", () => {
     const { project } = projectWithLayer();
-    const withBackground = setBackground(
+    const withBackground = addBackground(
       project,
       createBackgroundImage({
         url: "data:,",
@@ -185,7 +185,7 @@ describe("getProjectBoundsM", () => {
     );
     const hidden: Project = {
       ...withBackground,
-      background: withBackground.background ? { ...withBackground.background, visible: false } : null,
+      backgrounds: withBackground.backgrounds.map((background) => ({ ...background, visible: false })),
     };
     expect(getProjectBoundsM(hidden)).toBeNull();
   });

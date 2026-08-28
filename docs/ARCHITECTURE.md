@@ -1133,3 +1133,75 @@ folded; folding one section of three has to leave room for the two still
 open. Panel titles carry both an icon and a name, and CSS drops the name
 only at that icon width — a folded menu in a full-width rail still has to
 say what it is.
+
+## A stack of backdrops, not one (KL-029)
+
+A site is routinely read against more than one image — a surveyed plan
+with a satellite view over it, last year's layout underneath this one — so
+`Project.background: BackgroundImage | null` became
+`Project.backgrounds: BackgroundImage[]`, bottom first, each with its own
+name, placement, opacity and corrections.
+
+This is the first change to need a **schema bump**: `SCHEMA_VERSION` is 2.
+Version-1 files are migrated as they are read — `readBackgrounds` takes
+the old single `background` and returns a one-element stack — and an older
+build meeting a version-2 file refuses it, which is correct: it would
+otherwise keep one backdrop and silently drop the rest on the next save.
+Four tests cover that migration, including the file that had no background
+at all and the one whose backdrop predates having a name.
+
+Three decisions worth stating:
+
+- **Calibration stays a property of the plan, not of an image.** There is
+  one `Project.calibration`, because it expresses the plan's scale. What
+  is *resized* by it, though, is the backdrop it was measured on:
+  `applyCalibration(project, calibration, backgroundId)`. Nothing says a
+  satellite view and a surveyed plan were imported at the same
+  resolution, so correcting all of them together would be wrong.
+- **The grid is bounded by the bottom visible backdrop** — the surveyed
+  plan the site is set out against, not whatever image is laid over it.
+- **Importing adds; replacing is explicit.** The layers bar's "Ajouter un
+  fond…" stacks a new one; the properties panel's "Remplacer" swaps the
+  image of the selected entry *in place*, keeping its placement and
+  corrections, because the point of replace is a newer revision of a plan
+  that is already positioned.
+
+### The camera must not move when the stack is reordered
+
+The auto-fit was keyed on "the first visible background", so reordering
+the stack — which changes who is first — re-framed the view and threw the
+user away from what they were looking at. It now tracks the ids it has
+already accounted for: opening a document frames whatever it contains,
+and after that a newly imported backdrop frames the view only when it is
+the *only* one. Adding a second over a plan already framed leaves the
+camera alone.
+
+### `PrintCanvas` grew a child component
+
+Konva's filters are per node and are applied through `cache()` in a
+layout effect, so a backdrop cannot be drawn in a loop from the parent.
+Each is a `PrintBackground` of its own, reporting back when its image has
+decoded; the stage is rasterised only once every one of them is in —
+otherwise an export would silently come out with blank backdrops.
+
+## A library of one's own (KL-029)
+
+The built-in catalogue covers what most event plans need, but every firm
+has its own kit. `persistence/catalogStorage.ts` keeps user-defined
+materials (`kl-implantation/catalog-items/v1`) and a set of hidden
+built-in ids (`.../catalog-hidden/v1`) — per installation, like the
+reusable components and the toolbar pins, because they belong to the user
+and not to one project. Stored items are validated on read and a
+malformed one is skipped, never "repaired".
+
+Creation and editing are a *mode of the library dialog* rather than a
+separate one: the moment you want a material of your own is the moment
+you have just failed to find it in that list. The form offers rectangles
+and circles only — a line or polygon item needs a point list, which is
+drawn on the plan and saved as a component, and offering the shape with
+no way to give it a geometry would be a dead end.
+
+Hiding is offered alongside deleting because a firm that never handles
+heavy goods vehicles should not scroll past one forever, and hiding a
+built-in is reversible in a way that editing the built-in list would not
+be.

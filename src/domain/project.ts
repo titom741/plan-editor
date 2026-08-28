@@ -23,7 +23,7 @@ export function createEmptyProject(input: CreateProjectInput): Project {
     updatedAt: now,
     units: "m",
     calibration: createDefaultCalibration(),
-    background: null,
+    backgrounds: [],
     layers: createDefaultLayers(),
     objects: [],
     sheets: [],
@@ -204,25 +204,48 @@ export function assignObjectsToLayer(project: Project, ids: readonly string[], l
   });
 }
 
-/** Returns a new project with `background` set, replacing any existing one. */
-export function setBackground(project: Project, background: BackgroundImage): Project {
-  return { ...project, background, updatedAt: new Date().toISOString() };
+/** Adds a background on top of the stack — the newest import covers the ones already there. */
+export function addBackground(project: Project, background: BackgroundImage): Project {
+  return touched(project, { backgrounds: [...project.backgrounds, background] });
 }
 
-/** Returns a new project with the background removed. A no-op if there wasn't one. */
-export function removeBackground(project: Project): Project {
-  if (!project.background) return project;
-  return { ...project, background: null, updatedAt: new Date().toISOString() };
+/** Replaces one background wholesale, keeping its place in the stack. Used when re-importing an image over an existing entry. */
+export function replaceBackground(project: Project, id: string, background: BackgroundImage): Project {
+  if (!project.backgrounds.some((candidate) => candidate.id === id)) return project;
+  return touched(project, {
+    backgrounds: project.backgrounds.map((candidate) => (candidate.id === id ? background : candidate)),
+  });
 }
 
-/** Returns a new project with the background patched. A no-op if there isn't one. */
-export function patchBackground(project: Project, patch: Partial<BackgroundImage>): Project {
-  if (!project.background) return project;
-  return {
-    ...project,
-    background: { ...project.background, ...patch },
-    updatedAt: new Date().toISOString(),
-  };
+/**
+ * Moves a background one place up or down the stack. `direction` is +1
+ * toward the front (drawn later, so covering) and -1 toward the back.
+ * A no-op at either end rather than wrapping around.
+ */
+export function moveBackground(project: Project, id: string, direction: -1 | 1): Project {
+  const index = project.backgrounds.findIndex((candidate) => candidate.id === id);
+  const target = index + direction;
+  if (index === -1 || target < 0 || target >= project.backgrounds.length) return project;
+  const backgrounds = [...project.backgrounds];
+  const [moved] = backgrounds.splice(index, 1);
+  backgrounds.splice(target, 0, moved!);
+  return touched(project, { backgrounds });
+}
+
+/** Returns a new project with one background removed. A no-op if the id isn't in the stack. */
+export function removeBackground(project: Project, id: string): Project {
+  if (!project.backgrounds.some((candidate) => candidate.id === id)) return project;
+  return touched(project, { backgrounds: project.backgrounds.filter((candidate) => candidate.id !== id) });
+}
+
+/** Returns a new project with one background patched. A no-op if the id isn't in the stack. */
+export function patchBackground(project: Project, id: string, patch: Partial<BackgroundImage>): Project {
+  if (!project.backgrounds.some((candidate) => candidate.id === id)) return project;
+  return touched(project, {
+    backgrounds: project.backgrounds.map((candidate) =>
+      candidate.id === id ? { ...candidate, ...patch } : candidate,
+    ),
+  });
 }
 
 /**
@@ -235,8 +258,16 @@ export function patchBackground(project: Project, patch: Partial<BackgroundImage
  * isn't one — the calibration itself is still recorded either way, ready
  * for the next background that's imported.
  */
-export function applyCalibration(project: Project, calibration: Calibration): Project {
+export function applyCalibration(project: Project, calibration: Calibration, backgroundId?: string): Project {
   const withCalibration: Project = { ...project, calibration, updatedAt: new Date().toISOString() };
-  if (!project.background) return withCalibration;
-  return patchBackground(withCalibration, resizeBackgroundToCalibration(project.background, calibration));
+  // Calibration is a property of the *plan*'s scale, not of one image, so
+  // it is stored once. Resizing, though, applies to the background it was
+  // measured on: the others keep the size they were placed at, since
+  // nothing says a satellite view and a surveyed plan were imported at the
+  // same resolution.
+  const target = backgroundId
+    ? project.backgrounds.find((candidate) => candidate.id === backgroundId)
+    : project.backgrounds.at(-1);
+  if (!target) return withCalibration;
+  return patchBackground(withCalibration, target.id, resizeBackgroundToCalibration(target, calibration));
 }

@@ -1,10 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, type Ref } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { Image as KonvaImage, Layer as KonvaLayer, Line, Rect, Stage } from "react-konva";
 import Konva from "konva";
 import { computeGridLines } from "../../rendering/grid";
 import { metersToPixels, worldToScreen } from "../../rendering/viewport";
 import type { Viewport } from "../../rendering/viewport";
-import type { Background, Layer, PlanObject } from "../../domain/types";
+import type { BackgroundImage, Layer, PlanObject } from "../../domain/types";
 import { PlanObjectShape } from "./PlanObjectShape";
 import type { LabelDisplay } from "../../domain/display";
 import { useHtmlImage } from "../hooks/useHtmlImage";
@@ -17,7 +17,7 @@ interface PrintCanvasProps {
   viewport: Viewport;
   objects: PlanObject[];
   layers: Layer[];
-  background: Background;
+  backgrounds: readonly BackgroundImage[];
   showGrid: boolean;
   labelDisplay: LabelDisplay;
   /** Screen-pixel sizes (strokes, labels) are multiplied by this so they come out the right physical size at print resolution. */
@@ -54,44 +54,36 @@ export function PrintCanvas({
   viewport,
   objects,
   layers,
-  background,
+  backgrounds,
   showGrid,
   labelDisplay,
   renderScale,
   transparentBackground = false,
   onReady,
 }: PrintCanvasProps) {
-  const backgroundVisible = background?.visible === true;
-  const image = useHtmlImage(backgroundVisible ? background.url : null);
-  const backgroundNodeRef = useRef<Konva.Image>(null);
-  const waitingForImage = backgroundVisible && image === null;
-  const backgroundFilters = background ? [
-    ...(background.brightness !== 0 ? [Konva.Filters.Brighten] : []),
-    ...(background.contrast !== 0 ? [Konva.Filters.Contrast] : []),
-    ...(background.grayscale ? [Konva.Filters.Grayscale] : []),
-    ...(background.whiteRemoval ? [createWhiteRemovalFilter(background.whiteThreshold)] : []),
-  ] : [];
-  const hasBackgroundFilters = backgroundFilters.length > 0;
+  // Only the bottom visible backdrop is filtered/cached here; the rest are
+  // drawn by `PrintBackground` below, one component each, because Konva
+  // filters are per node and a hook can't be called in a loop.
+  const visibleBackgrounds = backgrounds.filter((background) => background.visible);
 
-  useLayoutEffect(() => {
-    const node = backgroundNodeRef.current;
-    if (!node) return;
-    if (hasBackgroundFilters) node.cache({ pixelRatio: 1 });
-    else node.clearCache();
-  }, [image, background?.brightness, background?.contrast, background?.grayscale, background?.whiteRemoval, background?.whiteThreshold, background?.crop?.xPx, background?.crop?.yPx, background?.crop?.widthPx, background?.crop?.heightPx, hasBackgroundFilters]);
+  /**
+   * Which backdrops have finished decoding. Rasterising before they have
+   * would silently produce a plan with blank backdrops, so the caller is
+   * told only once every one of them is in.
+   */
+  const [loadedIds, setLoadedIds] = useState<ReadonlySet<string>>(new Set());
+  const handleBackgroundLoaded = useCallback((id: string) => {
+    setLoadedIds((current) => (current.has(id) ? current : new Set(current).add(id)));
+  }, []);
+  const waitingForImages = visibleBackgrounds.some((background) => !loadedIds.has(background.id));
 
-  // Rasterising before the background has decoded would silently produce a
-  // plan with a blank backdrop, so the caller is told only once there is
-  // nothing left to wait for.
   useEffect(() => {
-    if (waitingForImage) return;
+    if (waitingForImages) return;
     onReady();
-  }, [waitingForImage, onReady]);
+  }, [waitingForImages, onReady]);
 
   const visibleLayerIds = new Set(layers.filter((layer) => layer.visible).map((layer) => layer.id));
   const grid = showGrid ? computeGridLines(viewport, pixelWidth, pixelHeight) : null;
-
-  const backgroundAnchor = background ? worldToScreen({ xM: background.xM, yM: background.yM }, viewport) : null;
 
   return (
     <Stage ref={stageRef} width={pixelWidth} height={pixelHeight} listening={false}>
@@ -104,23 +96,14 @@ export function PrintCanvas({
           the PDF so the PNG export gets the same treatment.
         */}
         {!transparentBackground && <Rect x={0} y={0} width={pixelWidth} height={pixelHeight} fill="#ffffff" listening={false} />}
-        {backgroundVisible && image && backgroundAnchor && (
-          <KonvaImage
-            ref={backgroundNodeRef}
-            image={image}
-            x={backgroundAnchor.x}
-            y={backgroundAnchor.y}
-            width={metersToPixels(background.widthM, viewport)}
-            height={metersToPixels(background.heightM, viewport)}
-            rotation={background.rotationDeg}
-            opacity={background.opacity}
-            filters={backgroundFilters}
-            brightness={background.brightness}
-            contrast={background.contrast}
-            crop={background.crop ? { x: background.crop.xPx, y: background.crop.yPx, width: background.crop.widthPx, height: background.crop.heightPx } : undefined}
-            listening={false}
+        {visibleBackgrounds.map((background) => (
+          <PrintBackground
+            key={background.id}
+            background={background}
+            viewport={viewport}
+            onLoaded={handleBackgroundLoaded}
           />
-        )}
+        ))}
       </KonvaLayer>
       {grid && (
         <KonvaLayer listening={false}>
@@ -166,3 +149,80 @@ export function PrintCanvas({
 }
 
 function noop() {}
+
+/**
+ * One backdrop on the print stage.
+ *
+ * A component of its own because Konva's filters are per node and have to
+ * be applied through `cache()` in a layout effect — neither of which can
+ * be done in a loop inside the parent. It reports back once its image has
+ * decoded so the parent knows when the whole stage is safe to rasterise.
+ */
+function PrintBackground({
+  background,
+  viewport,
+  onLoaded,
+}: {
+  background: BackgroundImage;
+  viewport: Viewport;
+  onLoaded: (id: string) => void;
+}) {
+  const image = useHtmlImage(background.url);
+  const nodeRef = useRef<Konva.Image>(null);
+
+  const filters = [
+    ...(background.brightness !== 0 ? [Konva.Filters.Brighten] : []),
+    ...(background.contrast !== 0 ? [Konva.Filters.Contrast] : []),
+    ...(background.grayscale ? [Konva.Filters.Grayscale] : []),
+    ...(background.whiteRemoval ? [createWhiteRemovalFilter(background.whiteThreshold)] : []),
+  ];
+  const hasFilters = filters.length > 0;
+
+  useLayoutEffect(() => {
+    const node = nodeRef.current;
+    if (!node) return;
+    if (hasFilters) node.cache({ pixelRatio: 1 });
+    else node.clearCache();
+  }, [
+    image,
+    background.brightness,
+    background.contrast,
+    background.grayscale,
+    background.whiteRemoval,
+    background.whiteThreshold,
+    background.crop?.xPx,
+    background.crop?.yPx,
+    background.crop?.widthPx,
+    background.crop?.heightPx,
+    hasFilters,
+  ]);
+
+  const id = background.id;
+  useEffect(() => {
+    if (image) onLoaded(id);
+  }, [image, id, onLoaded]);
+
+  if (!image) return null;
+  const anchor = worldToScreen({ xM: background.xM, yM: background.yM }, viewport);
+  return (
+    <KonvaImage
+      ref={nodeRef}
+      image={image}
+      x={anchor.x}
+      y={anchor.y}
+      width={metersToPixels(background.widthM, viewport)}
+      height={metersToPixels(background.heightM, viewport)}
+      rotation={background.rotationDeg}
+      opacity={background.opacity}
+      filters={filters}
+      brightness={background.brightness}
+      contrast={background.contrast}
+      crop={
+        background.crop
+          ? { x: background.crop.xPx, y: background.crop.yPx, width: background.crop.widthPx, height: background.crop.heightPx }
+          : undefined
+      }
+      listening={false}
+    />
+  );
+}

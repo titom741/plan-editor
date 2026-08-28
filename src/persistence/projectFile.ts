@@ -39,8 +39,15 @@ import type {
  * optional field doesn't need a bump (older files simply lack it); a
  * renamed, removed, or re-typed field does, along with either a migration
  * or an explicit refusal in `parseProjectFile`.
+ *
+ * - **1** — up to KL-028.
+ * - **2** — KL-029 replaced the single `background` with a `backgrounds`
+ *   stack. Version-1 files are migrated on read (see `readBackgrounds`);
+ *   an older build meeting a version-2 file refuses it, which is correct:
+ *   it would otherwise keep one backdrop and drop the rest on the next
+ *   save.
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /** Identifies our own files, so an unrelated `.json` is rejected with a useful message rather than a field-level complaint. */
 export const FILE_KIND = "kl-implantation/project";
@@ -204,6 +211,9 @@ function readBackground(value: unknown, path: string): Background {
   return {
     id: readString(record.id, `${path}.id`),
     kind: "image",
+    // Pre-KL-029 files have no name; the generic one is better than a
+    // blank row in the layers bar.
+    name: record.name === undefined ? "Fond de plan" : readString(record.name, `${path}.name`),
     url: readString(record.url, `${path}.url`),
     widthPx: readPositiveNumber(record.widthPx, `${path}.widthPx`),
     heightPx: readPositiveNumber(record.heightPx, `${path}.heightPx`),
@@ -222,6 +232,28 @@ function readBackground(value: unknown, path: string): Background {
     visible: readBoolean(record.visible, `${path}.visible`),
     locked: readBoolean(record.locked, `${path}.locked`),
   };
+}
+
+/**
+ * The background stack, reading both shapes.
+ *
+ * Up to KL-029 a project had one `background` (or none). It now has a
+ * `backgrounds` array, and a file written by an older build is migrated
+ * here rather than refused: the old single value becomes a one-element
+ * stack. That migration is the reason `SCHEMA_VERSION` went to 2 — an
+ * older build meeting a version-2 file refuses it, which is right, since
+ * it would otherwise drop every background but one on the next save.
+ */
+function readBackgrounds(record: Record<string, unknown>, path: string): BackgroundImage[] {
+  if (record.backgrounds !== undefined) {
+    return readArray(record.backgrounds, `${path}.backgrounds`).map((raw, index) => {
+      const background = readBackground(raw, `${path}.backgrounds[${index}]`);
+      if (!background) fail(`${path}.backgrounds[${index}]`);
+      return background;
+    });
+  }
+  const legacy = readBackground(record.background, `${path}.background`);
+  return legacy ? [legacy] : [];
 }
 
 function readLayer(value: unknown, path: string): Layer {
@@ -457,7 +489,7 @@ function readProject(value: unknown, path: string): Project {
       : {}),
     ...(georeference ? { georeference } : {}),
     ...(collaboration ? { collaboration } : {}),
-    background: readBackground(record.background, `${path}.background`),
+    backgrounds: readBackgrounds(record, path),
     layers,
     objects,
     sheets: readArray(record.sheets, `${path}.sheets`).map((sheet, i) =>
@@ -479,8 +511,8 @@ export function parseProjectFile(value: unknown): ParseResult {
     return { ok: false, error: { code: "invalidField", path: "schemaVersion" } };
   }
   // Only a *newer* file is refused outright — it may contain fields this
-  // build would drop on the next save. Older versions would be migrated
-  // here; there are none yet, SCHEMA_VERSION having always been 1.
+  // build would drop on the next save. Older versions are migrated as
+  // they are read, field by field, rather than in a separate pass.
   if (schemaVersion > SCHEMA_VERSION) {
     return {
       ok: false,

@@ -357,3 +357,15 @@ mesures persistées reçoivent un style d'annotation propre (turquoise,
 tirets, sans remplissage), modifiable comme n'importe quel objet ; la
 longueur d'une ligne s'affiche via le commutateur « Dimensions » de
 KL-027. Voir `docs/ARCHITECTURE.md`.
+
+## KL-029 — Fonds de plan multiples, bibliothèque personnalisable *(done)*
+
+`Project.background` (unique) devient `Project.backgrounds` (pile, du bas
+vers le haut) : plusieurs fonds empilés, réordonnables, chacun avec son
+nom, son placement, son opacité et ses corrections. Premier passage au
+format 2 : les fichiers version 1 sont migrés à la lecture, un build
+antérieur refuse un fichier version 2 plutôt que d'en perdre les fonds.
+La calibration reste une propriété du plan mais redimensionne le fond sur
+lequel elle a été mesurée. Bibliothèque : matériels personnels
+(création, édition, suppression) et masquage des matériels intégrés,
+stockés par installation. Voir `docs/ARCHITECTURE.md`.
