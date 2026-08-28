@@ -451,9 +451,30 @@ recopiés dans chaque fichier de test, et ajoute un stockage qui refuse
 toute écriture — le cas « navigation privée / quota plein » que ces
 modules affirment tolérer et que personne ne vérifiait.
 
-Reste ouvert : `persistence/projectStorage.ts` (371 lignes,
-l'autosauvegarde) est toujours sans test. Il parle à IndexedDB, absent de
-Node ; le couvrir demande soit une dépendance (`fake-indexeddb`), soit un
-faux maison réduit à la surface réellement utilisée. Et les hooks React
-restent non testés, faute d'un moteur de rendu de test que le projet
-évite volontairement.
+Reste ouvert : les hooks React, faute d'un moteur de rendu de test que le
+projet évite volontairement.
+
+## KL-033 — Tests de l'autosauvegarde *(done)*
+
+`persistence/projectStorage.ts` était le dernier gros module sans test, et
+celui où un défaut coûte le travail de l'utilisateur. Couvert par
+`src/testing/fakeIndexedDb.ts` : un faux maison limité à la surface que ce
+module touche, plutôt qu'une dépendance (`fake-indexeddb`) pour un seul
+fichier. Deux comportements y sont fidèles à dessein — les requêtes se
+résolvent de façon asynchrone (les appelants posent `onsuccess` après coup,
+un faux synchrone sauterait tous les gestionnaires), et `getAll` et
+`getAllKeys` s'accordent sur l'ordre, hypothèse dont dépend le zip par
+index dans les deux fonctions de listage.
+
+28 tests couvrant la reprise après onglet tué (un enregistrement à moitié
+écrit est signalé « corrupt », pas remplacé par un projet vierge), le quota
+plein, le stockage indisponible, le double classement autosave + `project:`,
+le renommage, la duplication, et la purge bornée des versions automatiques.
+
+Les tests ont été validés par mutation : huit défauts introduits
+volontairement dans le module, huit détectés. Deux d'entre eux passaient
+initialement à travers, et les tests correspondants ont été refaits — celui
+sur la clé de version ne semait aucun enregistrement, donc le garde-fou
+pouvait disparaître sans rien casser ; celui sur l'intervalle des versions
+automatiques appelait trois fois la fonction dans la même milliseconde,
+donc les trois écritures partageaient une clé et s'écrasaient.
