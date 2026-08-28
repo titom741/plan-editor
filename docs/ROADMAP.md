@@ -419,9 +419,9 @@ Ce qui a été corrigé :
   churné à chaque build web et où oxlint la parcourait.
 
 La barre d'état du canevas (coordonnées, sélection, magnétisme, calque
-actif) est supprimée volontairement — décision confirmée. Ne pas la
-rétablir : les mêmes informations sont lisibles dans les panneaux, et la
-barre mangeait le bas du plan.
-
-Reste ouvert : la liste accessible des objets, retirée en même temps,
-était le seul accès clavier et lecteur d'écran au contenu du canevas.
+actif) et la liste accessible des objets sont supprimées volontairement —
+décision confirmée, ne pas les rétablir. La barre mangeait le bas du plan
+pour des informations déjà lisibles dans les panneaux, et le panneau
+Éléments de KL-026 remplace la liste avantageusement : mêmes boutons avec
+`aria-pressed`, mais groupés par calque sous un titre, avec un filtre et
+les dimensions de chaque objet.
