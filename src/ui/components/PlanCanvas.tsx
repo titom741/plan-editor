@@ -9,9 +9,10 @@ import { boundsAreaM2, boundsFromCorners, getSelectionBoundsM, objectIdsWithinBo
 import { formatAngleDeg, formatAreaM2, formatLengthM, polygonAreaM2, polylineLengthM, segmentLengthsM } from "../../domain/measure";
 import { collectSnapTargets, snapPointM } from "../../domain/snapping";
 import type { SnapTarget } from "../../domain/snapping";
-import { constrainPointAngleM, objectLocalToWorld, tangentPointsToCircleM, worldToObjectLocal } from "../../domain/geometry";
+import { MIN_LINE_POINTS, constrainPointAngleM, objectLocalToWorld, tangentPointsToCircleM, worldToObjectLocal } from "../../domain/geometry";
 import { BACKGROUND_NODE_NAME, BackgroundImageShape } from "./BackgroundImageShape";
 import { SpatialPointIndex } from "../../domain/spatialIndex";
+import { simplifyPolylineM } from "../../domain/polyline";
 import { getObjectBoundsM } from "../../domain/bounds";
 import { PlanObjectShape } from "./PlanObjectShape";
 import type { LabelDisplay } from "../../domain/display";
@@ -75,6 +76,17 @@ const ZOOM_FACTOR_PER_TICK = 1.06;
 /** Below this size (in meters), a drag-created shape is discarded as an accidental click rather than a deliberate draw. */
 const MIN_CREATE_SIZE_M = 0.2;
 /** How close, in screen pixels, the pointer must come before it is pulled onto a snap target. Converted to meters per gesture, so it feels identical at every zoom. */
+/**
+ * How far the pointer must travel with the button down before a polyline
+ * press is read as a freehand stroke rather than a click. Below this, a
+ * click that wobbles by a pixel would start drawing by hand.
+ */
+const FREEHAND_THRESHOLD_PX = 4;
+/** Minimum spacing between recorded freehand points, in screen pixels — one point per pixel would be noise. */
+const FREEHAND_SPACING_PX = 3;
+/** Douglas–Peucker tolerance applied when a freehand stroke is committed, in screen pixels. */
+const FREEHAND_SIMPLIFY_PX = 2;
+
 const SNAP_TOLERANCE_PX = 10;
 const MEASURE_COLOR = "#0f766e";
 
@@ -83,6 +95,21 @@ type Draft =
   | { tool: "circle"; centerWorld: PointM; currentWorld: PointM }
   | { tool: "line"; startWorld: PointM; currentWorld: PointM }
   | { tool: "polygon"; anchorWorld: PointM; pointsM: PointM[]; previewWorld: PointM | null }
+  /**
+   * The polyline tool, which is two gestures in one shape: a click adds a
+   * straight-segment point, and pressing and dragging draws freehand.
+   * `pressing` distinguishes them — it becomes `"freehand"` the moment the
+   * pointer moves far enough while the button is down, and a `"click"`
+   * that never moved is committed as a single point on release.
+   */
+  | {
+      tool: "polyline";
+      anchorWorld: PointM;
+      pointsM: PointM[];
+      previewWorld: PointM | null;
+      pressing: "click" | "freehand" | null;
+      pressStartWorld: PointM | null;
+    }
   | { tool: "calibrate"; pointsWorld: PointM[]; previewWorld: PointM | null }
   | { tool: "marquee"; startWorld: PointM; currentWorld: PointM }
   | { tool: "measure"; pointsWorld: PointM[]; previewWorld: PointM | null };
@@ -289,6 +316,45 @@ export function PlanCanvas({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [draft, onCreateObject]);
 
+  /**
+   * Finishing a polyline: `Enter` (or a double-click, below) commits it,
+   * `Escape` discards it, `Backspace` takes back the last point.
+   *
+   * Freehand runs are thinned on commit rather than while drawing, so the
+   * stroke on screen is exactly what the hand did and only the stored
+   * object is simplified — see `simplifyPolylineM`.
+   */
+  const commitPolyline = useCallback(
+    (draftToCommit: Extract<Draft, { tool: "polyline" }>) => {
+      const toleranceM = FREEHAND_SIMPLIFY_PX / getEffectivePixelsPerMeter(viewport);
+      const pointsM = simplifyPolylineM(draftToCommit.pointsM, toleranceM);
+      if (pointsM.length >= MIN_LINE_POINTS) {
+        onCreateObject({
+          type: "line",
+          xM: draftToCommit.anchorWorld.xM,
+          yM: draftToCommit.anchorWorld.yM,
+          pointsM,
+        });
+      }
+      setDraft(null);
+    },
+    [viewport, onCreateObject],
+  );
+
+  useEffect(() => {
+    if (!draft || draft.tool !== "polyline") return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDraft(null);
+      else if (event.key === "Enter") commitPolyline(draft);
+      else if (event.key === "Backspace" && draft.pointsM.length > 1) {
+        event.preventDefault();
+        setDraft({ ...draft, pointsM: draft.pointsM.slice(0, -1) });
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [draft, commitPolyline]);
+
   // Enter persists a completed measurement as an ordinary editable line
   // or polygon. Its label is derived from geometry, so moving a vertex
   // keeps the displayed length/area current. Escape discards the draft.
@@ -421,6 +487,25 @@ export function PlanCanvas({
         onDeselectAll();
         return;
       }
+      if (activeTool === "polyline") {
+        // Snapped, because this is the point a *click* would place; a
+        // freehand stroke re-reads the raw pointer below.
+        const world = getPointerWorld(e.target.getStage());
+        if (!world) return;
+        setDraft((current) =>
+          current?.tool === "polyline"
+            ? { ...current, pressing: "click", pressStartWorld: world }
+            : {
+                tool: "polyline",
+                anchorWorld: world,
+                pointsM: [{ xM: 0, yM: 0 }],
+                previewWorld: world,
+                pressing: "click",
+                pressStartWorld: world,
+              },
+        );
+        return;
+      }
       if (activeTool === "rectangle" || activeTool === "circle" || activeTool === "line") {
         const world = getPointerWorld(e.target.getStage());
         if (!world) return;
@@ -440,6 +525,37 @@ export function PlanCanvas({
       if (!draft) return;
       const world = getPointerWorld(stage);
       if (!world) return;
+      if (draft.tool === "polyline") {
+        // Freehand follows the raw pointer: snapping every sampled point
+        // to the grid would turn a hand-drawn curve into a staircase.
+        const rawWorld = screen ? screenToWorld(screen, viewport) : world;
+        if (draft.pressing === null) {
+          setDraft({ ...draft, previewWorld: world });
+          return;
+        }
+        const pixelsPerMeter = getEffectivePixelsPerMeter(viewport);
+        const last = draft.pointsM.at(-1);
+        const lastWorld = last
+          ? { xM: draft.anchorWorld.xM + last.xM, yM: draft.anchorWorld.yM + last.yM }
+          : draft.anchorWorld;
+        const travelledPx =
+          Math.hypot(rawWorld.xM - lastWorld.xM, rawWorld.yM - lastWorld.yM) * pixelsPerMeter;
+        if (draft.pressing === "click" && travelledPx < FREEHAND_THRESHOLD_PX) {
+          setDraft({ ...draft, previewWorld: world });
+          return;
+        }
+        if (travelledPx < FREEHAND_SPACING_PX) return;
+        setDraft({
+          ...draft,
+          pressing: "freehand",
+          pointsM: [
+            ...draft.pointsM,
+            { xM: rawWorld.xM - draft.anchorWorld.xM, yM: rawWorld.yM - draft.anchorWorld.yM },
+          ],
+          previewWorld: rawWorld,
+        });
+        return;
+      }
       if (draft.tool === "polygon") {
         setDraft({ ...draft, previewWorld: world });
       } else if (draft.tool === "measure") {
@@ -499,6 +615,27 @@ export function PlanCanvas({
         });
       }
       setDraft(null);
+    } else if (draft.tool === "polyline") {
+      // A press that never became a stroke is a click: it placed one
+      // point, which mousedown already recorded for the first one. For a
+      // later one, add it here so the segment ends where the user clicked.
+      if (draft.pressing === "click" && draft.pressStartWorld && draft.pointsM.length > 0) {
+        const start = draft.pressStartWorld;
+        const last = draft.pointsM.at(-1)!;
+        const lastWorld = { xM: draft.anchorWorld.xM + last.xM, yM: draft.anchorWorld.yM + last.yM };
+        const isFirstPoint = draft.pointsM.length === 1 && lastWorld.xM === start.xM && lastWorld.yM === start.yM;
+        setDraft({
+          ...draft,
+          pressing: null,
+          pressStartWorld: null,
+          pointsM: isFirstPoint
+            ? draft.pointsM
+            : [...draft.pointsM, { xM: start.xM - draft.anchorWorld.xM, yM: start.yM - draft.anchorWorld.yM }],
+        });
+      } else {
+        setDraft({ ...draft, pressing: null, pressStartWorld: null });
+      }
+      return;
     } else if (draft.tool === "marquee") {
       const marquee = boundsFromCorners(draft.startWorld, draft.currentWorld);
       // A zero-area marquee is a Shift-click on empty canvas, not a
@@ -516,6 +653,11 @@ export function PlanCanvas({
     }
     // Polygon isn't finalized on mouseup — it's click-to-add-point, handled in handleClick.
   }, [draft, objects, visibleLayerIds, onCreateObject, onSelectMany]);
+
+  /** A double-click closes the polyline, the habit every drawing tool has taught. */
+  const handleDoubleClick = useCallback(() => {
+    if (draft?.tool === "polyline") commitPolyline(draft);
+  }, [draft, commitPolyline]);
 
   const handleClick = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -593,6 +735,8 @@ export function PlanCanvas({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onClick={handleClick}
+          onDblClick={handleDoubleClick}
+          onDblTap={handleDoubleClick}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -725,6 +869,45 @@ function DraftPreview({ draft, viewport }: { draft: Draft | null; viewport: View
         dash={[6, 4]}
       />
       <Text x={topLeft.x + 8} y={topLeft.y + 8} text={`${formatLengthM(widthM)} × ${formatLengthM(heightM)}`} fontSize={12} fill="#2563eb" />
+      </>
+    );
+  }
+
+  if (draft.tool === "polyline") {
+    const anchor = worldToScreen(draft.anchorWorld, viewport);
+    const committed = draft.pointsM.flatMap((point) => {
+      const screen = worldToScreen(
+        { xM: draft.anchorWorld.xM + point.xM, yM: draft.anchorWorld.yM + point.yM },
+        viewport,
+      );
+      return [screen.x, screen.y];
+    });
+    // The rubber band to the pointer is only meaningful between clicks;
+    // while a freehand stroke is being drawn the line already ends there.
+    const preview =
+      draft.previewWorld && draft.pressing !== "freehand"
+        ? (() => {
+            const screen = worldToScreen(draft.previewWorld, viewport);
+            return [screen.x, screen.y];
+          })()
+        : [];
+    const lengthM = polylineLengthM(draft.pointsM);
+    return (
+      <>
+        <Line points={[...committed, ...preview]} stroke="#2563eb" strokeWidth={1.5} dash={preview.length > 0 ? [6, 4] : undefined} lineJoin="round" lineCap="round" />
+        {draft.pointsM.map((point, index) => {
+          const screen = worldToScreen(
+            { xM: draft.anchorWorld.xM + point.xM, yM: draft.anchorWorld.yM + point.yM },
+            viewport,
+          );
+          // Freehand samples are far too dense to mark individually.
+          return draft.pressing === "freehand" && index > 0 ? null : (
+            <KonvaCircle key={index} x={screen.x} y={screen.y} radius={3} fill="#ffffff" stroke="#2563eb" strokeWidth={1.5} />
+          );
+        })}
+        {lengthM > 0 && (
+          <Text x={anchor.x + 10} y={anchor.y - 18} text={formatLengthM(lengthM)} fontSize={12} fill="#2563eb" />
+        )}
       </>
     );
   }

@@ -10,7 +10,7 @@
  * only reachable from the "Calibrer" button in the properties panel,
  * since it's meaningless without a background image already in place.
  */
-export type ToolId = "select" | "rectangle" | "circle" | "line" | "polygon" | "text" | "measure" | "calibrate";
+export type ToolId = "select" | "rectangle" | "circle" | "line" | "polyline" | "polygon" | "text" | "measure" | "calibrate";
 
 export interface ToolDefinition {
   id: ToolId;
@@ -23,6 +23,7 @@ export const TOOLS: ToolDefinition[] = [
   { id: "rectangle", label: "Rectangle", icon: "▭" },
   { id: "circle", label: "Cercle", icon: "◯" },
   { id: "line", label: "Ligne", icon: "／" },
+  { id: "polyline", label: "Tracé", icon: "〰" },
   { id: "polygon", label: "Polygone", icon: "⬠" },
   { id: "text", label: "Texte", icon: "T" },
   { id: "measure", label: "Mesure", icon: "📐" },

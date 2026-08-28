@@ -1050,3 +1050,49 @@ and two along the other would otherwise pivot around the crowded arm.
 
 `DEFAULT_TEXT_SIZE_M` went from 0.30 m to 2 m. Event plans print at 1:200
 and coarser, where a 30 cm glyph is an unreadable smudge.
+
+## The polyline tool: two gestures, one shape (KL-028)
+
+"Tracé" is click-to-place-points *and* press-and-drag-to-draw-freehand,
+mixed freely within one object. Cable runs, fencing and site boundaries
+are all part straight and part not, and making the user finish one object
+to change technique would be the wrong seam.
+
+The draft carries a `pressing` field to tell the two apart: a press starts
+as `"click"` and becomes `"freehand"` only once the pointer has travelled
+`FREEHAND_THRESHOLD_PX` with the button down, so a click that wobbles by a
+pixel doesn't start drawing by hand. `Enter` or a double-click commits,
+`Backspace` takes back the last point, `Escape` discards.
+
+Two deliberate asymmetries:
+
+- **Freehand ignores snapping.** Clicked points are pulled onto the grid
+  and onto other objects like every other tool's; sampled ones read the
+  raw pointer, because snapping each sample would turn a hand-drawn curve
+  into a staircase.
+- **Thinning happens on commit, not while drawing.** What is on screen is
+  exactly what the hand did; only the stored object is simplified.
+  `domain/polyline.ts` implements Ramer–Douglas–Peucker with a tolerance
+  derived from a screen distance at the current zoom — so the result is as
+  fine as what the user could actually see. Hundreds of samples per cable
+  run would otherwise bloat the file, slow every hit-test, and make the
+  vertex handles unusable.
+
+Both ends of a stroke are always kept, so a simplified line never starts
+or finishes anywhere other than where it was drawn.
+
+### Measurements are ordinary objects with an annotation's default look
+
+A measurement persisted with `Enter` has always been a plain line or
+polygon carrying `measurement` metadata — selectable, movable, deletable,
+and its label recomputed from geometry so moving a vertex keeps the stated
+length current. What it lacked was a look of its own: it inherited the
+layer's default fill and read as another thing standing on the ground.
+`MEASUREMENT_STYLE` gives it the measuring overlay's teal, dashed, with no
+fill. It is only a default — colour and stroke width are editable like any
+other object's, which is what the tool now offers.
+
+A line's length reaches the plan through the same `dimensions` switch as
+every other shape's size (KL-027): `getObjectDimensionSummary` already
+returns a polyline's length, so "show dimensions" and "show length" are
+one setting, not two.

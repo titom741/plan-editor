@@ -71,11 +71,14 @@ export function ToolsPanel({ activeToolId, onSelectTool, snapEnabled, onSnapEnab
       <p className="tools-panel__hint">
         {activeToolId === "measure" &&
           "Cliquez les points à mesurer. Entrée l'ajoute au plan, Échap l'efface."}
+        {activeToolId === "polyline" &&
+          "Cliquez pour poser des points ; maintenez le bouton et glissez pour dessiner à main levée. Entrée ou double-clic termine, Retour arrière annule le dernier point, Échap efface."}
         {activeToolId === "polygon" &&
           "Cliquez pour ajouter des points, Entrée pour terminer, Échap pour annuler."}
         {activeToolId === "calibrate" &&
           "Cliquez deux points d'une distance connue sur le fond de plan, Échap pour annuler."}
         {activeToolId !== "polygon" &&
+          activeToolId !== "polyline" &&
           activeToolId !== "calibrate" &&
           activeToolId !== "measure" &&
           "Échap désélectionne. Suppr efface l'objet sélectionné."}

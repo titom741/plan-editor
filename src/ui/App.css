@@ -405,6 +405,7 @@
 .plan-canvas[data-tool="circle"],
 .plan-canvas[data-tool="line"],
 .plan-canvas[data-tool="polygon"],
+.plan-canvas[data-tool="polyline"],
 .plan-canvas[data-tool="measure"] {
   cursor: crosshair;
 }

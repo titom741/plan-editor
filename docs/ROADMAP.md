@@ -345,3 +345,15 @@ d'un défaut ancien : l'export PDF vectoriel ne dessinait **aucune**
 l'objet, poignée et champ compris, sans changer la convention stockée.
 Texte à 2 m par défaut. Suppression du « libellé personnalisé » et de
 Position X/Y du panneau. Voir `docs/ARCHITECTURE.md`.
+
+## KL-028 — Outil tracé, main levée, mesures stylables *(done)*
+
+Nouvel outil « Tracé » : clic pour poser un point, appui maintenu et
+glisser pour dessiner à main levée, les deux mélangeables dans le même
+objet. Entrée ou double-clic termine, Retour arrière annule le dernier
+point. Les traits à main levée sont allégés à la validation
+(Ramer–Douglas–Peucker, `domain/polyline.ts`), pas pendant le dessin. Les
+mesures persistées reçoivent un style d'annotation propre (turquoise,
+tirets, sans remplissage), modifiable comme n'importe quel objet ; la
+longueur d'une ligne s'affiche via le commutateur « Dimensions » de
+KL-027. Voir `docs/ARCHITECTURE.md`.

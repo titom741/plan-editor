@@ -28,7 +28,7 @@ import {
   removeObjects,
   setBackground,
 } from "../domain/project";
-import type { BackgroundImage, PlanObjectPatch, PointM, Project } from "../domain/types";
+import type { BackgroundImage, ObjectStyle, PlanObjectPatch, PointM, Project } from "../domain/types";
 import { DEFAULT_SCREEN_PIXELS_PER_METER, screenToWorld } from "../rendering/viewport";
 import { CalibrationDialog } from "./components/CalibrationDialog";
 import { DeleteLayerDialog, LayerStyleDialog } from "./components/LayerDialogs";
@@ -84,9 +84,27 @@ const ExchangeDialog = lazy(() => import("./components/ExchangeDialog").then((mo
 const NUDGE_COALESCE_MS = 700;
 
 /** Builds the actual `PlanObject` (naming, layer assignment) from a gesture the canvas reports — see `PlanCanvas`'s `NewObjectSpec`. */
+/**
+ * How a persisted measurement looks by default: the same teal the live
+ * measuring overlay uses, with no fill, so an annotation reads as an
+ * annotation and not as another thing standing on the ground. It is only
+ * a *default* — a measurement is an ordinary line or polygon, so its
+ * colour and stroke width are editable like any other object's.
+ */
+const MEASUREMENT_STYLE: ObjectStyle = {
+  stroke: "#0f766e",
+  strokeWidth: 2,
+  fill: undefined,
+  dash: "dashed",
+};
+
 function buildObjectFromSpec(project: Project, spec: NewObjectSpec, layerId: string) {
   const name = nextObjectName(project, spec.type);
-  const common = { layerId, name, xM: spec.xM, yM: spec.yM, style: project.layers.find((layer) => layer.id === layerId)?.defaultStyle };
+  const isMeasurement = "measurement" in spec && spec.measurement !== undefined;
+  const style = isMeasurement
+    ? MEASUREMENT_STYLE
+    : project.layers.find((layer) => layer.id === layerId)?.defaultStyle;
+  const common = { layerId, name, xM: spec.xM, yM: spec.yM, style };
 
   switch (spec.type) {
     case "rectangle":
