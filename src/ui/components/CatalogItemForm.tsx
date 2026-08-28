@@ -32,6 +32,7 @@ export function CatalogItemForm({ item, onSubmit, onCancel }: CatalogItemFormPro
   const [widthM, setWidthM] = useState(String(item?.widthM ?? 1));
   const [heightM, setHeightM] = useState(String(item?.heightM ?? 1));
   const [radiusM, setRadiusM] = useState(String(item?.radiusM ?? 0.5));
+  const [pointsText, setPointsText] = useState((item?.pointsM ?? [{ xM: 0, yM: 0 }, { xM: 1, yM: 0 }, { xM: 1, yM: 1 }]).map((point) => `${point.xM},${point.yM}`).join("; "));
   const [unit, setUnit] = useState(item?.unit ?? "u");
   const [fill, setFill] = useState(item?.style.fill ?? "#dbeafe");
   const [stroke, setStroke] = useState(item?.style.stroke ?? "#2563eb");
@@ -39,8 +40,8 @@ export function CatalogItemForm({ item, onSubmit, onCancel }: CatalogItemFormPro
   const width = Number(widthM);
   const height = Number(heightM);
   const radius = Number(radiusM);
-  const sizeIsValid =
-    shape === "circle" ? Number.isFinite(radius) && radius > 0 : Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0;
+  const pointsM = pointsText.split(";").map((pair) => { const [x, y] = pair.split(",").map(Number); return Number.isFinite(x) && Number.isFinite(y) ? { xM: x!, yM: y! } : null; }).filter((point): point is { xM: number; yM: number } => point !== null);
+  const sizeIsValid = shape === "circle" ? Number.isFinite(radius) && radius > 0 : shape === "line" || shape === "polygon" ? pointsM.length >= (shape === "line" ? 2 : 3) : Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0;
   const isValid = name.trim().length > 0 && sizeIsValid;
 
   const handleSubmit = (event: FormEvent) => {
@@ -51,7 +52,7 @@ export function CatalogItemForm({ item, onSubmit, onCancel }: CatalogItemFormPro
       category: category.trim() || "Personnel",
       reference: reference.trim(),
       shape,
-      ...(shape === "circle" ? { radiusM: radius } : { widthM: width, heightM: height }),
+      ...(shape === "circle" ? { radiusM: radius } : shape === "line" || shape === "polygon" ? { pointsM } : { widthM: width, heightM: height }),
       unit: unit.trim() || "u",
       style: { fill, stroke, strokeWidth: 0.08, opacity: 0.9 },
     });
@@ -79,6 +80,8 @@ export function CatalogItemForm({ item, onSubmit, onCancel }: CatalogItemFormPro
           <select value={shape} onChange={(event) => setShape(event.target.value as CatalogShape)}>
             <option value="rectangle">{SHAPE_LABELS.rectangle}</option>
             <option value="circle">{SHAPE_LABELS.circle}</option>
+            <option value="line">{SHAPE_LABELS.line}</option>
+            <option value="polygon">{SHAPE_LABELS.polygon}</option>
           </select>
         </label>
         <label className="calibration-dialog__field">
@@ -91,6 +94,8 @@ export function CatalogItemForm({ item, onSubmit, onCancel }: CatalogItemFormPro
           <span>Rayon (m)</span>
           <input type="number" step="0.01" min="0.01" value={radiusM} onChange={(event) => setRadiusM(event.target.value)} />
         </label>
+      ) : shape === "line" || shape === "polygon" ? (
+        <label className="calibration-dialog__field"><span>Points X,Y (séparés par ;)</span><textarea value={pointsText} onChange={(event) => setPointsText(event.target.value)} placeholder="0,0; 2,0; 2,1" /></label>
       ) : (
         <div className="properties-panel__style-grid">
           <label className="calibration-dialog__field">

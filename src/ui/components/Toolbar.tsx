@@ -1,9 +1,10 @@
 import { getCommand, type CommandId } from "../commands";
+import { useState } from "react";
 import type { SaveStatus } from "../hooks/useAutosave";
 
 interface ToolbarProps {
   projectName: string;
-  onRenameProject: () => void;
+  onRenameProject: (name?: string) => void;
   zoom: number;
   canUndo: boolean;
   canRedo: boolean;
@@ -96,14 +97,39 @@ export function Toolbar({
 }: ToolbarProps) {
   const save = describeSaveStatus(saveStatus);
   const pinned = pinnedIds.map(getCommand).filter((command) => command !== undefined);
+  // The name is a draft while the field has focus, so the commits that
+  // land on every keystroke don't yank a half-typed name back. Outside
+  // editing it tracks the project — a file opened or an undo has to show.
+  // `editingName` is state rather than a read of `document.activeElement`:
+  // a render must not depend on where the browser's focus happens to be.
+  const [draftName, setDraftName] = useState(projectName);
+  const [editingName, setEditingName] = useState(false);
+  if (!editingName && draftName !== projectName) setDraftName(projectName);
 
   return (
     <header className="toolbar">
-      <div className="toolbar__brand">Implantation Événementielle</div>
+      <div className="toolbar__brand">Plan Editor</div>
       <div className="toolbar__project">
-        <button type="button" className="toolbar__project-name" onClick={onRenameProject} title="Renommer le projet">
-          {projectName}
-        </button>
+        <input
+          className="toolbar__project-name"
+          value={draftName}
+          aria-label="Nom du projet"
+          title="Modifier le nom du projet"
+          onFocus={() => setEditingName(true)}
+          onChange={(event) => setDraftName(event.target.value)}
+          onBlur={() => {
+            setEditingName(false);
+            const trimmed = draftName.trim();
+            // An emptied field reverts instead of committing: a project
+            // with no name is not something anyone means to create.
+            if (trimmed && trimmed !== projectName) onRenameProject(trimmed);
+            else setDraftName(projectName);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+            if (event.key === "Escape") { setDraftName(projectName); setEditingName(false); event.currentTarget.blur(); }
+          }}
+        />
         {save.label && (
           <span className={`toolbar__save toolbar__save--${save.modifier}`} title={save.title}>
             {save.label}

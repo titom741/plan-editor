@@ -13,3 +13,12 @@ createRoot(rootElement).render(
     <App />
   </StrictMode>,
 );
+
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("/sw.js").catch(() => {
+      // L'application reste pleinement utilisable en ligne si le navigateur
+      // refuse les service workers (contexte non sécurisé, politique locale).
+    });
+  });
+}

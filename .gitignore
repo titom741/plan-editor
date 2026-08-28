@@ -31,3 +31,11 @@ coverage
 *.njsproj
 *.sln
 *.sw?
+
+# macOS shell: SwiftPM build products and the copy of dist/ that
+# scripts/build-macos.sh regenerates. Committing the bundle would churn
+# the repo with minified chunks on every web build — and make oxlint
+# walk them.
+macos/**/.build/
+macos/**/.swiftpm/
+macos/PlanEditorMac/Sources/PlanEditorMac/WebApp/

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { computeDefaultBackgroundPlacement, createBackgroundImage, cropRectFromMargins, getBackgroundCropMargins, worldDistanceToImagePixels } from "../domain/background";
 import { boundsCenterM, getBackgroundBoundsM, unionBounds, type BoundsM } from "../domain/bounds";
 import { DEFAULT_LABEL_DISPLAY, type LabelDisplay } from "../domain/display";
@@ -59,14 +59,18 @@ import { useLayerActions } from "./hooks/useLayerActions";
 import { useClipboard } from "./hooks/useClipboard";
 import { useSelection } from "./hooks/useSelection";
 import {
+  clampRailSize,
   loadCollapsedSections,
+  loadRailSizes,
   saveCollapsedSections,
+  saveRailSizes,
   toggleSection,
   type PanelSectionId,
+  type RailSizes,
 } from "./panelSections";
 import { CSS_PIXELS_PER_INCH, useSheetExport } from "./hooks/useSheetExport";
 import { useViewport } from "./hooks/useViewport";
-import { describeParseError, downloadProjectFile, readProjectFile } from "./projectFileActions";
+import { describeParseError, downloadProjectFile, readProjectFile, saveProjectFileAs } from "./projectFileActions";
 import type { ToolId } from "./tools";
 import { downloadDiagnosticReport } from "./diagnosticActions";
 import { loadShortcuts, saveShortcuts, type ShortcutMap } from "./shortcuts";
@@ -182,9 +186,9 @@ export default function Editor({
   const [openDialog, setOpenDialog] = useState<DialogId | null>(null);
   const closeDialog = useCallback(() => setOpenDialog(null), []);
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(() => loadShortcuts());
-  // One set for every foldable side panel. Folding "Outils" used to hide
-  // the command menus with it, because they were nested inside its
-  // conditional; each section is now independent and the choice persists.
+  // One set for every foldable side panel. Each rail is an accordion and
+  // both the folds and the rail sizes persist — see `panelSections.ts`,
+  // which owns those rules so they can be tested without a DOM.
   const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<PanelSectionId>>(
     () => loadCollapsedSections(),
   );
@@ -195,11 +199,56 @@ export default function Editor({
   const toggleCollapsed = useCallback((id: PanelSectionId) => {
     setCollapsedSections((current) => saveCollapsedSections(toggleSection(current, id)));
   }, []);
-  // A rail only narrows to its icon width once *everything* in it is
-  // folded; folding one section of three has to leave room for the two
-  // still open.
-  const railCollapsed = isCollapsed("tools") && isCollapsed("file") && isCollapsed("project");
-  const inspectorCollapsed = isCollapsed("properties") && isCollapsed("elements");
+
+  const [railSizes, setRailSizes] = useState<RailSizes>(() => loadRailSizes());
+  /** Mirrors `railSizes` so the window-level drag handlers read it without re-subscribing on every pixel. */
+  const railSizesRef = useRef(railSizes);
+  const inspectorRailRef = useRef<HTMLDivElement | null>(null);
+  const railDragRef = useRef<
+    | { axis: "x"; key: "toolsWidthPx" | "propertiesWidthPx"; sign: 1 | -1; startPx: number; startValue: number }
+    | { axis: "y"; startPx: number; startValue: number; railHeightPx: number }
+    | null
+  >(null);
+  // A resize is a window-level gesture: the pointer routinely leaves the
+  // eight-pixel handle it started on, so both rails share one listener
+  // pair rather than each handle tracking its own.
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const drag = railDragRef.current;
+      if (!drag) return;
+      const next =
+        drag.axis === "x"
+          ? { ...railSizesRef.current, [drag.key]: clampRailSize(drag.key, drag.startValue + (event.clientX - drag.startPx) * drag.sign) }
+          : { ...railSizesRef.current, propertiesPercent: clampRailSize("propertiesPercent", drag.startValue + ((event.clientY - drag.startPx) / drag.railHeightPx) * 100) };
+      railSizesRef.current = next;
+      setRailSizes(next);
+    };
+    // Written once when the gesture ends, not on every pixel of the drag.
+    const up = () => {
+      if (!railDragRef.current) return;
+      railDragRef.current = null;
+      saveRailSizes(railSizesRef.current);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  }, []);
+  const startWidthDrag = useCallback(
+    (key: "toolsWidthPx" | "propertiesWidthPx", event: ReactPointerEvent) => {
+      event.preventDefault();
+      railDragRef.current = { axis: "x", key, sign: key === "toolsWidthPx" ? 1 : -1, startPx: event.clientX, startValue: railSizesRef.current[key] };
+    },
+    [],
+  );
+  const startInspectorDrag = useCallback((event: ReactPointerEvent) => {
+    const railHeightPx = inspectorRailRef.current?.clientHeight ?? 0;
+    if (railHeightPx <= 0) return;
+    event.preventDefault();
+    railDragRef.current = { axis: "y", startPx: event.clientY, startValue: railSizesRef.current.propertiesPercent, railHeightPx };
+  }, []);
   const [componentTemplates, setComponentTemplates] = useState<ComponentTemplate[]>(() => loadComponentTemplates());
   /** Snapping is on by default: a plan is drawn to fit together, and the people who don't want it find the switch faster than the people who need it find its absence. */
   const [snapEnabled, setSnapEnabled] = useState(true);
@@ -825,7 +874,7 @@ export default function Editor({
     if (!name) return;
     const renamed = { ...project, name, updatedAt: new Date().toISOString() };
     commitChange(() => renamed);
-    downloadProjectFile(renamed);
+    void saveProjectFileAs(renamed).catch((error: unknown) => setFileError(`L'enregistrement a échoué : ${error instanceof Error ? error.message : String(error)}`));
   }, [project, commitChange]);
 
   const handleRequestOpenProject = useCallback(() => {
@@ -862,8 +911,8 @@ export default function Editor({
     replaceDocument(createEmptyProject({ name: "Nouveau projet" }));
   }, [replaceDocument]);
 
-  const handleRenameProject = useCallback(() => {
-    const name = window.prompt("Nom du projet", project.name)?.trim();
+  const handleRenameProject = useCallback((requestedName?: string) => {
+    const name = (requestedName ?? window.prompt("Nom du projet", project.name))?.trim();
     if (!name || name === project.name) return;
     commitChange((current) => ({ ...current, name, updatedAt: new Date().toISOString() }));
   }, [project.name, commitChange]);
@@ -961,7 +1010,7 @@ export default function Editor({
   }, [effectiveLayerId, stageSize, viewport, commitChange, closeDialog, selectOnly]);
 
   return (
-    <div className={`app-layout${railCollapsed ? " tools-collapsed" : ""}${inspectorCollapsed ? " properties-collapsed" : ""}`}>
+    <div className="app-layout" style={{ "--tools-width": `${railSizes.toolsWidthPx}px`, "--properties-width": `${railSizes.propertiesWidthPx}px` } as CSSProperties}>
       <input
         ref={fileInputRef}
         type="file"
@@ -1034,6 +1083,7 @@ export default function Editor({
         collapsed={isCollapsed("project")}
         onToggleCollapsed={() => toggleCollapsed("project")}
       />
+      <div className="rail-resizer rail-resizer--tools" role="separator" aria-orientation="vertical" aria-label="Largeur des menus" onPointerDown={(event) => startWidthDrag("toolsWidthPx", event)} />
       </div>
       <PlanCanvas
         containerRef={containerRef}
@@ -1065,10 +1115,9 @@ export default function Editor({
         onBackgroundResizeLive={handleBackgroundResizeLive}
         onCalibrationMeasured={handleCalibrationMeasured}
         onCancelCalibration={handleCancelCalibration}
-        activeLayerLabel={project.layers.find((layer) => layer.id === effectiveLayerId)?.name ?? "Aucun"}
-        activeLayerLocked={project.layers.find((layer) => layer.id === effectiveLayerId)?.locked ?? false}
       />
-      <div className="inspector-rail">
+      <div className="inspector-rail" ref={inspectorRailRef} style={{ "--properties-percent": `${railSizes.propertiesPercent}%` } as CSSProperties}>
+      <div className="rail-resizer rail-resizer--properties" role="separator" aria-orientation="vertical" aria-label="Largeur de l'inspecteur" onPointerDown={(event) => startWidthDrag("propertiesWidthPx", event)} />
       <PropertiesPanel
         selected={selectedBackgroundId ? null : selectedObject}
         selectionCount={selectedBackgroundId ? 0 : selectedObjects.length}
@@ -1102,6 +1151,7 @@ export default function Editor({
         collapsed={isCollapsed("properties")}
         onToggleCollapsed={() => toggleCollapsed("properties")}
       />
+      <div className="inspector-resizer" role="separator" aria-orientation="horizontal" aria-label="Hauteur des propriétés" onPointerDown={startInspectorDrag} />
       <ElementsPanel
         layers={project.layers}
         objects={orderedObjects}

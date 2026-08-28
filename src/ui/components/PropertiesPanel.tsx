@@ -387,18 +387,27 @@ export function PropertiesPanel({
             <span>Catégorie</span>
             <input type="text" value={selected.category ?? ""} disabled={isLocked} onFocus={resetSnapshotOnFocus} onChange={(e) => applyPatch({ category: e.target.value || undefined })} />
           </label>
-          <label className="properties-panel__field">
-            <span>Référence</span>
-            <input type="text" value={selected.reference ?? ""} disabled={isLocked} onFocus={resetSnapshotOnFocus} onChange={(e) => applyPatch({ reference: e.target.value || undefined })} />
-          </label>
-          <div className="properties-panel__style-grid">
-            <NumberField label="Quantité" valueM={selected.quantity ?? 1} step={1} disabled={isLocked} onCommit={(value) => applyPatch({ quantity: Math.max(0.01, value) })} />
+          {/*
+            Folded away, not removed: reference, quantity and unit are the
+            three columns `buildSchedule` groups on, so without them the
+            nomenclature can only ever report one of everything under the
+            catalogue's own reference — and KL-027's label switches for
+            reference and quantity would have nothing to show.
+          */}
+          <details className="properties-panel__schedule">
+            <summary>Nomenclature</summary>
             <label className="properties-panel__field">
-              <span>Unité</span>
-              <input type="text" value={selected.unit ?? "u"} disabled={isLocked} onFocus={resetSnapshotOnFocus} onChange={(e) => applyPatch({ unit: e.target.value || undefined })} />
+              <span>Référence</span>
+              <input type="text" value={selected.reference ?? ""} disabled={isLocked} onFocus={resetSnapshotOnFocus} onChange={(e) => applyPatch({ reference: e.target.value || undefined })} />
             </label>
-          </div>
-
+            <div className="properties-panel__style-grid">
+              <NumberField label="Quantité" valueM={selected.quantity ?? 1} step={1} disabled={isLocked} onCommit={(value) => applyPatch({ quantity: Math.max(0.01, value) })} />
+              <label className="properties-panel__field">
+                <span>Unité</span>
+                <input type="text" value={selected.unit ?? "u"} disabled={isLocked} onFocus={resetSnapshotOnFocus} onChange={(e) => applyPatch({ unit: e.target.value || undefined })} />
+              </label>
+            </div>
+          </details>
           {layerPicker(isLocked)}
 
           <fieldset className="properties-panel__display">

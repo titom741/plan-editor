@@ -380,3 +380,45 @@ et le bouton se désactive dès que le découpage ne tient plus. La grille
 suit la rotation du parent. Une seule étape d'annulation pour l'ensemble.
 Voir `docs/ARCHITECTURE.md` pour les deux limites assumées (pas de
 groupement avec le parent, rectangles seulement).
+
+## KL-031 — Coquille macOS, PWA, rails redimensionnables *(done)*
+
+Audit et reprise du lot apporté hors session (coquille macOS `WKWebView`,
+service worker, renommage en « Plan Editor », rails redimensionnables).
+Ce qui a été corrigé :
+
+- **Les en-têtes repliés sortaient du rail.** C'était la cause du
+  symptôme, pas le pliage : le rail défilait au lieu de ses panneaux.
+  Le rail ne défile plus, chaque panneau ouvert défile dans sa part et
+  un panneau replié reste un en-tête toujours visible. L'accordéon
+  introduit pour contourner le symptôme est retiré : il contredisait
+  « repliable et **empilable** » et rendait le curseur de hauteur inutile
+  (deux panneaux n'étaient jamais ouverts ensemble).
+- **Le pliage était inversé** : replier un panneau repliait les trois du
+  rail. La règle revient dans `panelSections.ts`, testée sans DOM.
+- **Largeurs de rails non persistées** et non bornées à la relecture.
+  `loadRailSizes` / `clampRailSize` bornent et arrondissent ; un rail
+  stocké hors écran ne peut plus rouvrir l'application dans cet état.
+  La poignée de largeur de l'inspecteur, absente, a été ajoutée.
+- **Le champ « nom du projet » lisait `document.activeElement` pendant le
+  rendu** pour deviner s'il était en cours d'édition — un rendu ne peut
+  pas dépendre du focus. Remplacé par un état `editingName`. Au passage,
+  son `import` traînait en fin de fichier.
+- **Référence, quantité et unité avaient disparu du panneau Propriétés**
+  alors que ce sont les trois colonnes sur lesquelles `buildSchedule`
+  regroupe : la nomenclature ne pouvait plus rapporter qu'une unité de
+  chaque. Rétablies dans un bloc « Nomenclature » replié par défaut.
+- **« Enregistrer sous » signalait une erreur quand on annulait** le
+  dialogue natif. `saveProjectFileAs` renvoie `false` sur `AbortError` :
+  annuler n'est pas un échec.
+- **Le service worker répondait `index.html` à n'importe quelle requête
+  échouée**, y compris un script — une erreur réseau claire devenait une
+  erreur de type MIME. Repli réservé aux navigations.
+- **`Sources/PlanEditorMac/WebApp/` est une copie de `dist/`** que
+  `scripts/build-macos.sh` régénère : sortie de git, où elle aurait
+  churné à chaque build web et où oxlint la parcourait.
+
+Reste ouvert : la barre d'état du canevas (coordonnées, sélection,
+magnétisme, calque actif) et la liste accessible des objets ont été
+retirées hors session. La seconde était le seul accès clavier/lecteur
+d'écran au contenu du canevas.

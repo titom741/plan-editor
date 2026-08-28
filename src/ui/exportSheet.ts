@@ -21,7 +21,7 @@ import { suggestedFileName } from "./projectFileActions";
  * true regardless of the raster's resolution.
  */
 
-const CREATOR = "KL — Implantation Événementielle";
+const CREATOR = "Plan Editor";
 
 /** Strips the `data:` prefix and decodes the base64 payload into the raw JPEG bytes the PDF embeds unchanged. */
 export function dataUrlToBytes(dataUrl: string): Uint8Array {

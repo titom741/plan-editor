@@ -1,4 +1,4 @@
-# KL — Implantation Événementielle
+# Plan Editor
 
 A local, offline web app for drawing scaled 2D layout plans for events:
 import a floor plan, calibrate it, then place chapiteaux, scènes,

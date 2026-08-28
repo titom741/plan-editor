@@ -42,6 +42,49 @@ export function downloadProjectFile(project: Project): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+/** The slice of File System Access this app uses. Declared here because the DOM lib doesn't ship it and Safari/WKWebView don't implement it. */
+interface SaveFilePicker {
+  (options: {
+    suggestedName: string;
+    types: { description: string; accept: Record<string, string[]> }[];
+  }): Promise<{
+    createWritable: () => Promise<{ write: (data: string) => Promise<void>; close: () => Promise<void> }>;
+  }>;
+}
+
+/**
+ * Saves through the browser's native save dialog when it has one, so the
+ * user picks the folder and the name instead of the file landing in
+ * Downloads. Falls back to a plain download everywhere else — Safari and
+ * the macOS WKWebView shell included, which is why the fallback isn't
+ * an error path.
+ *
+ * Returns `false` when the user dismissed the dialog. Cancelling is not a
+ * failure and must not be reported as one, which is the whole reason this
+ * doesn't simply let the `AbortError` escape.
+ */
+export async function saveProjectFileAs(project: Project): Promise<boolean> {
+  const picker = (window as Window & { showSaveFilePicker?: SaveFilePicker }).showSaveFilePicker;
+  if (!picker) {
+    downloadProjectFile(project);
+    return true;
+  }
+  let writable;
+  try {
+    const handle = await picker({
+      suggestedName: suggestedFileName(project),
+      types: [{ description: "Projet KL", accept: { "application/json": [".kl.json"] } }],
+    });
+    writable = await handle.createWritable();
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return false;
+    throw error;
+  }
+  await writable.write(serializeProject(project));
+  await writable.close();
+  return true;
+}
+
 /** Reads a picked file and validates it. Rejects nothing — an unreadable file comes back as a `ParseError` like any other bad input. */
 export async function readProjectFile(file: File): Promise<ParseResult> {
   let text: string;

@@ -30,6 +30,6 @@ export function buildSchedulePdf(rows: readonly ScheduleRow[], projectName: stri
   ];
   return buildPdf(
     { widthPt, heightPt, text, lines },
-    { title: `${projectName} — Nomenclature`, creator: "KL — Implantation Événementielle", creationDate: toPdfDate(now) },
+    { title: `${projectName} — Nomenclature`, creator: "Plan Editor", creationDate: toPdfDate(now) },
   );
 }

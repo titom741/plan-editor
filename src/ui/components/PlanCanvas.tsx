@@ -68,8 +68,6 @@ interface PlanCanvasProps {
   onCalibrationMeasured: (pointA: PointM, pointB: PointM) => void;
   /** Fired on Escape while the calibrate tool is active, at any stage of the gesture. */
   onCancelCalibration: () => void;
-  activeLayerLabel: string;
-  activeLayerLocked: boolean;
 }
 
 /** Multiplicative zoom step applied per wheel notch. */
@@ -145,8 +143,6 @@ export function PlanCanvas({
   onBackgroundResizeLive,
   onCalibrationMeasured,
   onCancelCalibration,
-  activeLayerLabel,
-  activeLayerLocked,
 }: PlanCanvasProps) {
   const [draft, setDraft] = useState<Draft | null>(null);
   /**
@@ -167,7 +163,6 @@ export function PlanCanvas({
   const pinchDistanceRef = useRef<number | null>(null);
   /** Where the pointer was last pulled to, for the on-canvas marker. `null` when nothing snapped. */
   const [snapMarker, setSnapMarker] = useState<SnapTarget | null>(null);
-  const [pointerWorld, setPointerWorld] = useState<PointM | null>(null);
   useEffect(() => {
     const syncShift = (event: KeyboardEvent) => {
       isAltHeldRef.current = event.altKey;
@@ -526,7 +521,6 @@ export function PlanCanvas({
     (e: Konva.KonvaEventObject<MouseEvent>) => {
       const stage = e.target.getStage();
       const screen = stage?.getPointerPosition();
-      if (screen) setPointerWorld(screenToWorld(screen, viewport));
       if (!draft) return;
       const world = getPointerWorld(stage);
       if (!world) return;
@@ -838,21 +832,6 @@ export function PlanCanvas({
           </KonvaLayer>
         </Stage>
       )}
-      <div className="canvas-status" role="status" aria-live="off">
-        <span>{pointerWorld ? `X ${pointerWorld.xM.toFixed(2)} m · Y ${pointerWorld.yM.toFixed(2)} m` : "Pointeur hors du plan"}</span>
-        {/*
-          Counts the objects that actually resolve, not the raw ids: after
-          an undo that removed them, the ids linger for a moment and the
-          bar would claim a selection the panels correctly show as empty.
-        */}
-        <span>{selectedObjects.length > 0 ? `${selectedObjects.length} sélectionné(s)` : "Aucune sélection"}</span>
-        <span>{snapMarker ? `Accroché : ${{ grid: "grille", vertex: "sommet", center: "centre", midpoint: "milieu", intersection: "intersection", tangent: "tangente", "alignment-x": "guide vertical", "alignment-y": "guide horizontal", "alignment-xy": "guides croisés" }[snapMarker.kind]}` : snapEnabled ? "Magnétisme actif" : "Magnétisme inactif"}</span>
-        <span>Calque : {activeLayerLabel}{activeLayerLocked ? " 🔒" : ""}</span>
-      </div>
-      <details className="canvas-accessible-list">
-        <summary>Liste accessible des objets ({objects.filter((object) => visibleLayerIds.has(object.layerId)).length})</summary>
-        <ul>{objects.filter((object) => visibleLayerIds.has(object.layerId)).map((object) => <li key={object.id}><button type="button" onClick={() => onSelectObject(object.id, false)} aria-pressed={selectedIdSet.has(object.id)}>{object.name} — {object.type}</button></li>)}</ul>
-      </details>
     </div>
   );
 }

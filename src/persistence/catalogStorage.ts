@@ -63,6 +63,11 @@ function parseItem(value: unknown): CatalogItem | null {
     const raw = record[key];
     return typeof raw === "number" && Number.isFinite(raw) && raw > 0 ? raw : undefined;
   };
+  const points = Array.isArray(record.pointsM) ? record.pointsM.map((point) => {
+    if (typeof point !== "object" || point === null) return null;
+    const value = point as Record<string, unknown>;
+    return typeof value.xM === "number" && Number.isFinite(value.xM) && typeof value.yM === "number" && Number.isFinite(value.yM) ? { xM: value.xM, yM: value.yM } : null;
+  }).filter((point): point is { xM: number; yM: number } => point !== null) : undefined;
   return {
     id: record.id,
     name: record.name,
@@ -72,6 +77,7 @@ function parseItem(value: unknown): CatalogItem | null {
     ...(size("widthM") !== undefined ? { widthM: size("widthM") } : {}),
     ...(size("heightM") !== undefined ? { heightM: size("heightM") } : {}),
     ...(size("radiusM") !== undefined ? { radiusM: size("radiusM") } : {}),
+    ...(points && points.length > 0 ? { pointsM: points } : {}),
     unit: typeof record.unit === "string" ? record.unit : "u",
     style: readStyle(record.style),
   };

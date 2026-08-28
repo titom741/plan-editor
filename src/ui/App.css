@@ -2,7 +2,7 @@
   display: grid;
   width: 100vw;
   height: 100vh;
-  grid-template-columns: 220px 1fr 260px;
+  grid-template-columns: var(--tools-width, 220px) 1fr var(--properties-width, 260px);
   /* The notice row is `auto`, so it takes no space at all when nothing is shown. */
   grid-template-rows: auto auto 1fr auto;
   grid-template-areas:
@@ -13,26 +13,12 @@
   background: var(--bg);
   color: var(--text-h);
 }
-.app-layout.tools-collapsed { grid-template-columns: 48px 1fr 260px; }
-.app-layout.properties-collapsed { grid-template-columns: 220px 1fr 48px; }
-.app-layout.tools-collapsed.properties-collapsed { grid-template-columns: 48px 1fr 48px; }
 .panel__collapse { width: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
-.app-layout.tools-collapsed .tools-panel,
-.app-layout.tools-collapsed .command-menu,
-.app-layout.properties-collapsed .properties-panel,
-.app-layout.properties-collapsed .elements-panel { padding-inline: .55rem; overflow: hidden; }
-.canvas-accessible-list { position: absolute; z-index: 7; top: .5rem; left: .5rem; max-width: min(24rem, 70%); padding: .3rem .5rem; border: 1px solid rgba(148,163,184,.7); border-radius: 6px; background: rgba(255,255,255,.94); color: #334155; font-size: .75rem; }
-.canvas-accessible-list:not([open]) { opacity: .65; }
-.canvas-accessible-list ul { max-height: 12rem; overflow: auto; margin: .35rem 0 0; padding: 0; list-style: none; }
-.canvas-accessible-list button { width: 100%; padding: .3rem; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
-.canvas-accessible-list button[aria-pressed="true"] { background: #ffedd5; }
 
 @media (max-width: 1100px) {
   .toolbar { flex-wrap: wrap; gap: .5rem; }
   .toolbar__file { flex-wrap: wrap; }
-  .app-layout { grid-template-columns: 180px 1fr 220px; }
-  .app-layout.tools-collapsed { grid-template-columns: 48px 1fr 220px; }
-  .app-layout.properties-collapsed { grid-template-columns: 180px 1fr 48px; }
+  .app-layout { grid-template-columns: var(--tools-width, 180px) 1fr var(--properties-width, 220px); }
 }
 
 @media (max-width: 760px) {
@@ -46,7 +32,6 @@
   .toolbar__project { flex-basis: 100%; }
   .layers-panel__list { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .25rem; }
   .properties-panel__actions { flex-wrap: wrap; }
-  .canvas-status { overflow-x: auto; white-space: nowrap; }
 }
 
 .app-loading {
@@ -123,8 +108,8 @@
   gap: 0.6rem;
   min-width: 0;
 }
-.toolbar__project-name { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.toolbar__project-name:hover { text-decoration: underline; }
+.toolbar__project-name { min-width: 10rem; max-width: 24rem; border: 1px solid transparent; border-radius: 4px; padding: .2rem .35rem; background: transparent; color: inherit; font: inherit; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toolbar__project-name:hover, .toolbar__project-name:focus { border-color: var(--accent-border); background: var(--bg); outline: none; }
 
 .toolbar__save {
   font-size: 0.75rem;
@@ -261,8 +246,28 @@
   grid-area: tools;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   border-right: 1px solid var(--border);
+  /*
+    The rail itself never scrolls. It used to, and a long "Outils" then
+    pushed the folded "Fichier" and "Projet" headers below the fold —
+    a folded panel you have to scroll to reach is worse than an open one.
+    Each open panel scrolls inside its own share instead.
+  */
+  overflow: hidden;
+}
+
+/* Open panels share the rail and scroll; folded ones are just their header. */
+.side-rail > .tools-panel,
+.side-rail > .command-menu {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+}
+
+.side-rail > .is-collapsed {
+  flex: 0 0 auto;
+  overflow: hidden;
 }
 
 .tools-panel {
@@ -397,7 +402,6 @@
   overflow: hidden;
   touch-action: none;
 }
-.canvas-status { position: absolute; z-index: 5; left: .6rem; right: .6rem; bottom: .55rem; display: flex; justify-content: space-between; gap: 1rem; padding: .35rem .6rem; border: 1px solid rgba(148, 163, 184, .6); border-radius: 6px; background: rgba(255, 255, 255, .9); color: #475569; font-size: .72rem; font-variant-numeric: tabular-nums; pointer-events: none; backdrop-filter: blur(3px); }
 
 .plan-canvas[data-tool="select"] {
   cursor: default;
@@ -428,13 +432,14 @@
   flex-direction: column;
   min-height: 0;
   border-left: 1px solid var(--border);
+  overflow: hidden;
 }
 
 .elements-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  flex: 1 1 40%;
+  flex: 1 1 auto;
   padding: 0.85rem;
   border-top: 1px solid var(--border);
   overflow: hidden;
@@ -546,11 +551,28 @@
 }
 
 .properties-panel {
-  flex: 1 1 60%;
+  /*
+    The dragged split only means something while both panels are open;
+    with one folded away, the other takes what is left rather than
+    holding an empty 40 % of the rail.
+  */
+  flex: 1 1 auto;
   min-height: 0;
   padding: 0.85rem;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
 }
+.inspector-rail:has(.elements-panel:not(.is-collapsed)) .properties-panel:not(.is-collapsed) {
+  flex: 0 0 var(--properties-percent, 60%);
+}
+.properties-panel.is-collapsed { flex: 0 0 auto; overflow: hidden; }
+/* Nothing to drag when only one panel is open. */
+.inspector-rail:has(.is-collapsed) .inspector-resizer { display: none; }
+
+.properties-panel__schedule { margin-bottom: 0.6rem; border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.5rem; }
+.properties-panel__schedule > summary { cursor: pointer; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text); }
+.properties-panel__schedule[open] > summary { margin-bottom: 0.45rem; }
 
 .properties-panel__empty {
   font-size: 0.85rem;
@@ -583,6 +605,8 @@
 }
 
 .properties-panel__field input {
+  box-sizing: border-box;
+  width: 100%;
   font: inherit;
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
@@ -611,6 +635,8 @@
   border-bottom: 1px solid var(--border);
   padding-bottom: 0.35rem;
   color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .properties-panel__static span:last-child {
@@ -649,6 +675,7 @@
 
 .properties-panel__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 0.5rem;
 }
@@ -659,7 +686,8 @@
 }
 
 .properties-panel__button {
-  flex: 1;
+  flex: 1 1 8rem;
+  min-width: 0;
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--border);
   color: inherit;
@@ -1108,14 +1136,14 @@
   display: none;
 }
 
-.app-layout.tools-collapsed .side-rail .panel__title-icon {
-  display: inline;
-  font-size: 1rem;
-}
-
-.app-layout.tools-collapsed .side-rail .panel__title-text {
-  display: none;
-}
+.rail-resizer { position: absolute; top: 0; right: -4px; bottom: 0; width: 8px; z-index: 8; cursor: col-resize; }
+.rail-resizer--properties { right: auto; left: -4px; }
+/* Invisible until pointed at: a permanent divider would read as a border on a rail that already has one. */
+.rail-resizer:hover, .inspector-resizer:hover { background: var(--accent-border); }
+.side-rail { position: relative; }
+.inspector-rail { position: relative; }
+.inspector-resizer { flex: 0 0 8px; margin: 0 -0.85rem; border-block: 1px solid var(--border); cursor: row-resize; background: var(--bg); }
+@media (max-width: 760px) { .rail-resizer { display: none; } }
 
 /* A catalogue card is a big insert button plus, in manage mode, a small row of controls. */
 .library-card__insert {
