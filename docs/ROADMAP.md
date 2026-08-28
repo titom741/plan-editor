@@ -418,7 +418,10 @@ Ce qui a été corrigé :
   `scripts/build-macos.sh` régénère : sortie de git, où elle aurait
   churné à chaque build web et où oxlint la parcourait.
 
-Reste ouvert : la barre d'état du canevas (coordonnées, sélection,
-magnétisme, calque actif) et la liste accessible des objets ont été
-retirées hors session. La seconde était le seul accès clavier/lecteur
-d'écran au contenu du canevas.
+La barre d'état du canevas (coordonnées, sélection, magnétisme, calque
+actif) est supprimée volontairement — décision confirmée. Ne pas la
+rétablir : les mêmes informations sont lisibles dans les panneaux, et la
+barre mangeait le bas du plan.
+
+Reste ouvert : la liste accessible des objets, retirée en même temps,
+était le seul accès clavier et lecteur d'écran au contenu du canevas.
