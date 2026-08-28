@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { resizeBackgroundFromHeight, resizeBackgroundFromWidth } from "../../domain/background";
+import { cropBackgroundByMargins, getBackgroundCropMargins, resizeBackgroundFromHeight, resizeBackgroundFromWidth } from "../../domain/background";
 import { boundsSizeM } from "../../domain/bounds";
 import type { BoundsM } from "../../domain/bounds";
 import { formatMeters, getObjectDimensionSummary } from "../../domain/labels";
@@ -29,6 +29,14 @@ interface PropertiesPanelProps {
   onDuplicate: () => void;
   onRequestReplaceBackground: () => void;
   onRequestCalibration: () => void;
+  onRequestScaleCalibration: () => void;
+  onCreateGroup: () => void;
+  onUngroup: () => void;
+  onTransformSelection: (scale: number, rotationDeg: number) => void;
+  onDistributeSelection: (axis: "x" | "y") => void;
+  onSaveComponent: () => void;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }
 
 const TYPE_LABELS: Record<PlanObject["type"], string> = {
@@ -37,6 +45,7 @@ const TYPE_LABELS: Record<PlanObject["type"], string> = {
   line: "Ligne",
   polygon: "Polygone",
   text: "Texte",
+  image: "Image",
 };
 
 function formatForInput(value: number): string {
@@ -112,6 +121,14 @@ export function PropertiesPanel({
   onDuplicate,
   onRequestReplaceBackground,
   onRequestCalibration,
+  onRequestScaleCalibration,
+  onCreateGroup,
+  onUngroup,
+  onTransformSelection,
+  onDistributeSelection,
+  onSaveComponent,
+  collapsed = false,
+  onToggleCollapsed,
 }: PropertiesPanelProps) {
   // Snapshots undo history at most once per focus session across all
   // fields: the first change after a field gains focus pushes the
@@ -138,11 +155,15 @@ export function PropertiesPanel({
     hasSnapshotRef.current = false;
   };
 
+  if (collapsed) return <aside className="properties-panel is-collapsed"><h2 className="panel__title"><button type="button" className="panel__collapse" onClick={onToggleCollapsed} aria-expanded={false} title="Déplier les propriétés">⚙</button></h2></aside>;
+
   if (selectedBackground) {
     const bg = selectedBackground;
+    const cropMargins = getBackgroundCropMargins(bg);
+    const updateCropMargin = (key: keyof typeof cropMargins, value: number) => applyBackgroundPatch(cropBackgroundByMargins(bg, { ...cropMargins, [key]: value }));
     return (
       <aside className="properties-panel">
-        <h2 className="panel__title">Propriétés</h2>
+        <h2 className="panel__title"><button type="button" className="panel__collapse" onClick={onToggleCollapsed} aria-expanded={true}>› Propriétés</button></h2>
         <div className="properties-panel__body">
           {isLocked && <p className="properties-panel__locked-notice">🔒 Fond de plan verrouillé — lecture seule.</p>}
 
@@ -165,6 +186,13 @@ export function PropertiesPanel({
             disabled={isLocked}
             onCommit={(v) => applyBackgroundPatch(resizeBackgroundFromHeight(bg, Math.max(0.1, v)))}
           />
+          <NumberField
+            label="Rotation (°)"
+            valueM={bg.rotationDeg}
+            step={0.5}
+            disabled={isLocked}
+            onCommit={(v) => applyBackgroundPatch({ rotationDeg: v })}
+          />
 
           <label className="properties-panel__field">
             <span>Opacité ({Math.round(bg.opacity * 100)} %)</span>
@@ -180,6 +208,44 @@ export function PropertiesPanel({
             />
           </label>
 
+          <NumberField
+            label="Luminosité (-1 à 1)"
+            valueM={bg.brightness}
+            step={0.05}
+            disabled={isLocked}
+            onCommit={(v) => applyBackgroundPatch({ brightness: Math.max(-1, Math.min(1, v)) })}
+          />
+          <NumberField
+            label="Contraste (-100 à 100)"
+            valueM={bg.contrast}
+            step={5}
+            disabled={isLocked}
+            onCommit={(v) => applyBackgroundPatch({ contrast: Math.max(-100, Math.min(100, v)) })}
+          />
+          <label className="tools-panel__toggle">
+            <input
+              type="checkbox"
+              checked={bg.grayscale}
+              disabled={isLocked}
+              onFocus={resetSnapshotOnFocus}
+              onChange={(e) => applyBackgroundPatch({ grayscale: e.target.checked })}
+            />
+            <span>Niveaux de gris</span>
+          </label>
+          <label className="tools-panel__toggle">
+            <input type="checkbox" checked={bg.whiteRemoval} disabled={isLocked} onFocus={resetSnapshotOnFocus} onChange={(e) => applyBackgroundPatch({ whiteRemoval: e.target.checked })} />
+            <span>Supprimer le blanc</span>
+          </label>
+          {bg.whiteRemoval && <NumberField label="Seuil du blanc (0–255)" valueM={bg.whiteThreshold} step={1} disabled={isLocked} onCommit={(v) => applyBackgroundPatch({ whiteThreshold: Math.max(0, Math.min(255, v)) })} />}
+
+          <p className="properties-panel__hint">Recadrage non destructif en pourcentage de l’image source :</p>
+          <div className="properties-panel__style-grid">
+            <NumberField label="Gauche (%)" valueM={cropMargins.left} step={1} disabled={isLocked} onCommit={(v) => updateCropMargin("left", v)} />
+            <NumberField label="Droite (%)" valueM={cropMargins.right} step={1} disabled={isLocked} onCommit={(v) => updateCropMargin("right", v)} />
+            <NumberField label="Haut (%)" valueM={cropMargins.top} step={1} disabled={isLocked} onCommit={(v) => updateCropMargin("top", v)} />
+            <NumberField label="Bas (%)" valueM={cropMargins.bottom} step={1} disabled={isLocked} onCommit={(v) => updateCropMargin("bottom", v)} />
+          </div>
+
           <p className="properties-panel__hint">
             {calibration.source.type === "knownDistance"
               ? `Calibré : ${calibration.pixelsPerMeter.toFixed(1)} px image / m (mesuré : ${calibration.source.realDistanceM} m).`
@@ -188,10 +254,16 @@ export function PropertiesPanel({
 
           <div className="properties-panel__actions">
             <button type="button" className="properties-panel__button" onClick={onRequestCalibration} disabled={isLocked}>
-              📏 Calibrer
+              📏 Par distance
+            </button>
+            <button type="button" className="properties-panel__button" onClick={onRequestScaleCalibration} disabled={isLocked}>
+              1:100 Par échelle
             </button>
             <button type="button" className="properties-panel__button" onClick={onRequestReplaceBackground} disabled={isLocked}>
               🖼 Remplacer
+            </button>
+            <button type="button" className="properties-panel__button" onClick={() => applyBackgroundPatch({ brightness: 0, contrast: 0, grayscale: false, whiteRemoval: false })} disabled={isLocked}>
+              Réinitialiser l’image
             </button>
           </div>
           <div className="properties-panel__actions">
@@ -227,7 +299,7 @@ export function PropertiesPanel({
     const size = selectionBounds ? boundsSizeM(selectionBounds) : null;
     return (
       <aside className="properties-panel">
-        <h2 className="panel__title">Propriétés</h2>
+        <h2 className="panel__title"><button type="button" className="panel__collapse" onClick={onToggleCollapsed} aria-expanded={true}>› Propriétés</button></h2>
         <div className="properties-panel__body">
           <div className="properties-panel__static">
             <span>Sélection</span>
@@ -241,17 +313,29 @@ export function PropertiesPanel({
               </span>
             </div>
           )}
-          {layerPicker(false)}
+          {isLocked && <p className="properties-panel__locked-notice">🔒 Sélection verrouillée — lecture seule.</p>}
+          {layerPicker(isLocked)}
           <p className="properties-panel__hint">
             Déplacez le groupe en le faisant glisser ou avec les flèches (Maj = pas de 1 m). Les champs
             de position et de dimension reviennent dès qu&apos;un seul objet est sélectionné.
           </p>
           <div className="properties-panel__actions">
+            <button type="button" className="properties-panel__button" onClick={() => onTransformSelection(0.9, 0)} disabled={isLocked}>−10 %</button>
+            <button type="button" className="properties-panel__button" onClick={() => onTransformSelection(1.1, 0)} disabled={isLocked}>+10 %</button>
+            <button type="button" className="properties-panel__button" onClick={() => onTransformSelection(1, -15)} disabled={isLocked}>↶ 15°</button>
+            <button type="button" className="properties-panel__button" onClick={() => onTransformSelection(1, 15)} disabled={isLocked}>↷ 15°</button>
+            <button type="button" className="properties-panel__button" onClick={() => onDistributeSelection("x")} disabled={isLocked || selectionCount < 3}>Espacer ↔</button>
+            <button type="button" className="properties-panel__button" onClick={() => onDistributeSelection("y")} disabled={isLocked || selectionCount < 3}>Espacer ↕</button>
+          </div>
+          <div className="properties-panel__actions">
+            <button type="button" className="properties-panel__button" onClick={onCreateGroup} disabled={isLocked}>Grouper…</button>
+            <button type="button" className="properties-panel__button" onClick={onUngroup} disabled={isLocked}>Dégrouper</button>
+            <button type="button" className="properties-panel__button" onClick={onSaveComponent}>Enregistrer comme modèle…</button>
             <button type="button" className="properties-panel__button" onClick={onDuplicate}>
               ⧉ Dupliquer
             </button>
           </div>
-          <button type="button" className="properties-panel__delete" onClick={onDelete}>
+          <button type="button" className="properties-panel__delete" onClick={onDelete} disabled={isLocked}>
             🗑 Supprimer
           </button>
         </div>
@@ -261,7 +345,7 @@ export function PropertiesPanel({
 
   return (
     <aside className="properties-panel">
-      <h2 className="panel__title">Propriétés</h2>
+      <h2 className="panel__title"><button type="button" className="panel__collapse" onClick={onToggleCollapsed} aria-expanded={true}>› Propriétés</button></h2>
       {!selected && (
         <p className="properties-panel__empty">
           Sélectionnez un objet sur le plan. Maj + clic pour en ajouter, Maj + glisser pour encadrer
@@ -283,9 +367,42 @@ export function PropertiesPanel({
             />
           </label>
 
+          {selected.type !== "text" && (
+            <label className="properties-panel__field">
+              <span>Libellé personnalisé (facultatif)</span>
+              <input
+                type="text"
+                value={selected.label ?? ""}
+                placeholder={getObjectDimensionSummary(selected) ? `${selected.name} — dimensions automatiques` : selected.name}
+                disabled={isLocked}
+                onFocus={resetSnapshotOnFocus}
+                onChange={(e) => applyPatch({ label: e.target.value || undefined })}
+              />
+            </label>
+          )}
+
           <div className="properties-panel__static">
             <span>Type</span>
             <span>{TYPE_LABELS[selected.type]}</span>
+          </div>
+          {selected.groupName && (
+            <div className="properties-panel__static"><span>Groupe</span><span>{selected.groupName}</span></div>
+          )}
+
+          <label className="properties-panel__field">
+            <span>Catégorie</span>
+            <input type="text" value={selected.category ?? ""} disabled={isLocked} onFocus={resetSnapshotOnFocus} onChange={(e) => applyPatch({ category: e.target.value || undefined })} />
+          </label>
+          <label className="properties-panel__field">
+            <span>Référence</span>
+            <input type="text" value={selected.reference ?? ""} disabled={isLocked} onFocus={resetSnapshotOnFocus} onChange={(e) => applyPatch({ reference: e.target.value || undefined })} />
+          </label>
+          <div className="properties-panel__style-grid">
+            <NumberField label="Quantité" valueM={selected.quantity ?? 1} step={1} disabled={isLocked} onCommit={(value) => applyPatch({ quantity: Math.max(0.01, value) })} />
+            <label className="properties-panel__field">
+              <span>Unité</span>
+              <input type="text" value={selected.unit ?? "u"} disabled={isLocked} onFocus={resetSnapshotOnFocus} onChange={(e) => applyPatch({ unit: e.target.value || undefined })} />
+            </label>
           </div>
 
           {layerPicker(isLocked)}
@@ -303,7 +420,7 @@ export function PropertiesPanel({
             onCommit={(value) => applyPatch({ yM: value })}
           />
 
-          {selected.type === "rectangle" && (
+          {(selected.type === "rectangle" || selected.type === "image") && (
             <>
               <NumberField
                 label="Largeur"
@@ -330,17 +447,104 @@ export function PropertiesPanel({
           )}
 
           {selected.type === "text" && (
+            <>
+              <label className="properties-panel__field">
+                <span>Texte</span>
+                <input
+                  type="text"
+                  value={selected.text}
+                  disabled={isLocked}
+                  onFocus={resetSnapshotOnFocus}
+                  onChange={(e) => applyPatch({ text: e.target.value })}
+                />
+              </label>
+              <NumberField
+                label="Taille du texte (m)"
+                valueM={selected.fontSizeM}
+                step={0.05}
+                disabled={isLocked}
+                onCommit={(value) => applyPatch({ fontSizeM: Math.max(0.05, value) })}
+              />
+              <label className="properties-panel__field"><span>Police</span><select value={selected.style?.fontFamily ?? "Arial"} disabled={isLocked} onChange={(e) => applyPatch({ style: { ...selected.style, fontFamily: e.target.value as "Arial" | "Helvetica" | "Georgia" | "Courier New" } })}><option>Arial</option><option>Helvetica</option><option>Georgia</option><option>Courier New</option></select></label>
+              <div className="properties-panel__style-grid">
+                <label className="tools-panel__toggle"><input type="checkbox" checked={selected.style?.fontWeight === "bold"} disabled={isLocked} onChange={(e) => applyPatch({ style: { ...selected.style, fontWeight: e.target.checked ? "bold" : "normal" } })} /><span>Gras</span></label>
+                <label className="tools-panel__toggle"><input type="checkbox" checked={selected.style?.fontStyle === "italic"} disabled={isLocked} onChange={(e) => applyPatch({ style: { ...selected.style, fontStyle: e.target.checked ? "italic" : "normal" } })} /><span>Italique</span></label>
+              </div>
+              <label className="properties-panel__field"><span>Alignement</span><select value={selected.style?.textAlign ?? "left"} disabled={isLocked} onChange={(e) => applyPatch({ style: { ...selected.style, textAlign: e.target.value as "left" | "center" | "right" } })}><option value="left">Gauche</option><option value="center">Centré</option><option value="right">Droite</option></select></label>
+            </>
+          )}
+
+          <div className="properties-panel__style-grid">
+            {selected.type !== "line" && selected.type !== "text" && (
+              <label className="properties-panel__field">
+                <span>Remplissage</span>
+                <input
+                  type="color"
+                  value={selected.style?.fill ?? (selected.type === "rectangle" ? "#dbeafe" : selected.type === "circle" ? "#dcfce7" : "#fef9c3")}
+                  disabled={isLocked}
+                  onFocus={resetSnapshotOnFocus}
+                  onChange={(e) => applyPatch({ style: { ...selected.style, fill: e.target.value } })}
+                />
+              </label>
+            )}
             <label className="properties-panel__field">
-              <span>Texte</span>
+              <span>{selected.type === "text" ? "Couleur" : "Contour"}</span>
               <input
-                type="text"
-                value={selected.text}
+                type="color"
+                value={selected.type === "text" ? (selected.style?.fill ?? "#0f172a") : (selected.style?.stroke ?? "#0f172a")}
                 disabled={isLocked}
                 onFocus={resetSnapshotOnFocus}
-                onChange={(e) => applyPatch({ text: e.target.value })}
+                onChange={(e) => applyPatch({ style: { ...selected.style, [selected.type === "text" ? "fill" : "stroke"]: e.target.value } })}
               />
             </label>
+          </div>
+          {selected.type !== "text" && (
+            <>
+              <NumberField
+                label={selected.type === "line" ? "Largeur du tracé / câble (px)" : "Épaisseur du contour (px)"}
+                valueM={selected.style?.strokeWidth ?? 2}
+                step={0.5}
+                disabled={isLocked}
+                onCommit={(value) => applyPatch({ style: { ...selected.style, strokeWidth: Math.max(0.5, value) } })}
+              />
+              <label className="properties-panel__field">
+                <span>Style du trait</span>
+                <select value={selected.style?.dash ?? "solid"} disabled={isLocked} onFocus={resetSnapshotOnFocus} onChange={(e) => applyPatch({ style: { ...selected.style, dash: e.target.value as "solid" | "dashed" | "dotted" } })}>
+                  <option value="solid">Continu</option><option value="dashed">Tirets</option><option value="dotted">Pointillé</option>
+                </select>
+              </label>
+            </>
           )}
+          {selected.type === "line" && (
+            <>
+              <div className="properties-panel__style-grid">
+                <label className="tools-panel__toggle"><input type="checkbox" checked={selected.style?.arrowStart ?? false} disabled={isLocked} onChange={(e) => applyPatch({ style: { ...selected.style, arrowStart: e.target.checked } })} /><span>Flèche au début</span></label>
+                <label className="tools-panel__toggle"><input type="checkbox" checked={selected.style?.arrowEnd ?? false} disabled={isLocked} onChange={(e) => applyPatch({ style: { ...selected.style, arrowEnd: e.target.checked } })} /><span>Flèche à la fin</span></label>
+              </div>
+              {selected.measurement && (
+                <label className="properties-panel__field">
+                  <span>Type de cote</span>
+                  <select value={selected.measurement.kind} disabled={isLocked} onChange={(e) => applyPatch({ measurement: { ...selected.measurement, kind: e.target.value as "length" | "angle" } })}>
+                    <option value="length">Longueur ouverte</option>
+                    <option value="angle" disabled={selected.pointsM.length < 3}>Angle (3 points)</option>
+                  </select>
+                </label>
+              )}
+            </>
+          )}
+          <label className="properties-panel__field">
+            <span>Opacité ({Math.round((selected.style?.opacity ?? 1) * 100)} %)</span>
+            <input
+              type="range"
+              min={0.1}
+              max={1}
+              step={0.05}
+              value={selected.style?.opacity ?? 1}
+              disabled={isLocked}
+              onFocus={resetSnapshotOnFocus}
+              onChange={(e) => applyPatch({ style: { ...selected.style, opacity: Number.parseFloat(e.target.value) } })}
+            />
+          </label>
 
           {selected.type !== "circle" && (
             <NumberField

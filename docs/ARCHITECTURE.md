@@ -471,13 +471,14 @@ pipeline as possible rather than inventing a parallel one:
 
 - **`domain/background.ts`** gives `BackgroundImage` the same
   "anchor + size in meters" shape as `RectangleObject`
-  (`xM`/`yM`/`widthM`/`heightM`, no rotation — see
+  (`xM`/`yM`/`widthM`/`heightM` plus a top-left-anchored rotation — see
   [Layer architecture](#layer-architecture)), so `ui/components/BackgroundImageShape.tsx`
   renders and drags it through the *exact same* `worldToScreen` /
   `metersToPixels` / `screenToWorld` calls as any `PlanObject`, and its
   resize handle reuses `domain/geometry.ts`'s
   `resizeRectangleFromCorner`/`getRectangleResizeHandleWorld` directly
-  (passing `rotationDeg: 0`) rather than duplicating that math.
+  rather than duplicating that math. KL-016 also applies non-destructive
+  brightness, contrast and grayscale corrections in both renderers.
 - **Aspect ratio is locked.** A background is a photograph or scan of
   something real — stretching it non-uniformly would distort it and make
   any later calibration meaningless. `resizeBackgroundFromCorner`,
@@ -589,9 +590,9 @@ The pieces:
   from the background's properties panel, being meaningless without a
   background. `Escape` cancels at any stage.
 
-`CalibrationSource` still carries unused `knownScale` (a map scale like
-1:100) and `geo` cases — `knownDistance` is the only one KL-005
-implements, and the union is the seam where the others would slot in.
+`CalibrationSource.knownScale` is now produced by KL-017 from a map scale
+(for example 1:100) and the raster DPI. `geo` remains the seam for a future
+coordinate-system implementation.
 
 ### A design bug this surfaced
 
@@ -680,6 +681,34 @@ where the next object goes, not a fact about the document. It is kept
 valid by the same "adjust during render" pattern used elsewhere — if the
 layer it names no longer exists (another project opened, that layer
 deleted), it falls back to `getDefaultTargetLayer`.
+
+## Measurements and snapping
+
+KL-007 adds two pure domain modules. `measure.ts` computes segment and
+polyline lengths, closed perimeters and shoelace areas in metres; it also
+owns the compact metre/hectare formatting used by the canvas. The ruler
+starts as a transient `PlanCanvas` draft. `Enter` converts two points to a
+line and three or more to a polygon, after which it is a normal project
+object: editable, undoable, persisted and printed. Its displayed length,
+perimeter and area come from `getObjectDimensionSummary`, so moving a
+vertex can never leave a stale stored measurement behind.
+
+`snapping.ts` describes meaningful world-coordinate targets independently
+of Konva: rectangle corners/midpoints/centre, circle cardinal points and
+centre, polyline or polygon vertices/midpoints, and text anchors. The UI
+adds the current visible grid and supplies tolerance in metres. That
+tolerance comes from a constant 10 screen pixels divided by the viewport's
+effective pixels per metre, so the magnetic radius feels unchanged while
+zooming.
+
+Object targets deliberately beat grid targets, even if a grid crossing is
+slightly nearer. Hidden layers are filtered before targets are collected,
+and every object in the moving selection is filtered at gesture time so it
+cannot pin itself to one of its own points. Holding `Alt` bypasses the
+operation without changing the editor-wide Magnétisme setting. Calibration
+is the exception: it always reads the raw pointer because snapping against
+a grid derived from a scale that is currently being corrected would feed
+that error back into the calibration.
 
 ## Persistence
 
@@ -795,31 +824,22 @@ there would buy a migration that could never run.
 
 ### One renderer, not two
 
-The obvious way to write a PDF is to translate the model into PDF drawing
-operators. That would be a **second renderer**: every fill, stroke, label
-and rotation re-implemented against a different API, drifting from the
-Konva one every time either changed.
-
-Instead `ui/components/PrintCanvas.tsx` renders the plan with the *same*
-`PlanObjectShape` the editor uses, into an off-screen stage sized to the
-sheet's drawing area, and that raster is embedded in the PDF. What you
-print is what you saw, by construction.
+`ui/components/PrintCanvas.tsx` renders backgrounds and layered image
+objects with the same Konva pipeline as the editor. Ordinary shapes and
+texts are translated by `ui/exportSheet.ts` into PDF paths and text
+operators: they remain sharp and selectable. This hybrid renderer avoids
+rasterising the useful vector content while preserving exact image filters.
 
 `computePrintRaster` is the join: `rendering/` already turns metres into
 pixels given a `Viewport`, so printing supplies a viewport whose scale
 comes from paper instead of from the user's zoom. Nothing about drawing is
 duplicated.
 
-The trade-off, stated plainly: the drawing in the PDF is a raster, so it
-doesn't stay crisp magnified far beyond its export resolution and its text
-isn't selectable. Everything *around* the drawing — frame, title block,
-captions and the scale bar — is real PDF vector at exact point
-coordinates, so the bar a user measures is dimensionally true whatever the
-raster's resolution.
+Only source images remain resolution-dependent. Shapes, text, frame,
+cartouche, captions and scale bar are vector at exact point coordinates.
 
-`printing/pdf.ts` is a hand-written one-page writer (catalog, page,
-content stream, a `DCTDecode` JPEG, one standard font). It is small
-precisely *because* the drawing is a raster. Two details it gets right and
+`printing/pdf.ts` is a small multi-page writer (catalog, page tree,
+content streams, JPEG XObjects, paths and a standard font). Two details it gets right and
 that are easy to get wrong:
 
 - **Offsets are counted in bytes, not characters.** The cross-reference
@@ -855,3 +875,61 @@ needed an actual PDF, rendered:
 See the current mission report (delivered alongside this document) for
 the full, up-to-date list of deferred functionality and known limitations
 — kept there rather than duplicated here so it doesn't drift out of sync.
+
+## Géoréférencement et collaboration locale
+
+Le modèle conserve facultativement une origine WGS84 et une rotation. Les
+conversions GeoJSON utilisent un repère tangent local en mètres, adapté à
+l'emprise d'un site événementiel ; les autres projections sont laissées à
+un SIG spécialisé. Les commentaires et versions sont entièrement locaux et
+portables dans `.kl.json`. Une collaboration simultanée demanderait un
+service d'identité, de stockage et de résolution des conflits : aucun faux
+partage n'est activé sans ce choix d'infrastructure.
+
+## How `Editor` is decomposed (audit pass)
+
+`Editor.tsx` had grown to some 1 200 lines and thirty `useState` calls —
+the point at which the file stops being a component and becomes a place
+where things are kept. It is now the wiring it was always meant to be,
+with the cohesive parts pulled into hooks that own their own state:
+
+| Hook | Owns | Why it is separate |
+| --- | --- | --- |
+| `useSelection` | selected ids, background selection, everything derived from them | The selection is held as *ids*, resolved against the live project each render, so a deleted object leaves the selection for free. |
+| `useLayerActions` | the active layer, layer CRUD, the dialogs two of them need | The active layer is validated during *render*, so it can never point at a layer that no longer exists. |
+| `useClipboard` | the in-memory clipboard and the paste fan-out counter | Two clipboards (in-memory authoritative, system best-effort) with a fallback on every failure path. |
+| `useSheetExport` | sheets, page layout, the two-phase raster/PDF export | The mount-wait-rasterise dance needs five pieces of state that mean nothing to the rest of the editor. |
+
+Eight independent `isXOpen` booleans also became one `openDialog:
+DialogId | null`. Eight booleans can represent two dialogs stacked on top
+of each other — a state the app has no UI for and never wants to reach.
+
+### Locking is a domain rule, not a panel detail
+
+`editableObjects` and `isSelectionLocked` live in `domain/selection.ts`.
+They were previously re-derived at each call site, and three of those
+sites — group, transform and distribute a multi-selection — had simply
+forgotten to, so a locked layer's objects could be scaled, rotated and
+redistributed from the properties panel. The rule they share, set by
+delete in KL-004, is that **a mixed selection edits the unlocked part and
+leaves the rest**, rather than refusing a whole gesture because one object
+in it is protected. Copying and duplicating stay available on a fully
+locked selection: they read, they don't write.
+
+### Prompts that were doing a dialog's job
+
+Three flows used chained `window.prompt` calls for structured input and
+have proper forms now:
+
+- **Deleting a populated layer** asked the user to *type* the destination
+  layer's name, failing on a typo, and accepted the literal word
+  `SUPPRIMER` to destroy every object on it. It is a `<select>` of the
+  layers that exist plus an explicit radio for the destructive branch.
+- **The georeference anchor** asked for longitude, latitude and rotation
+  in three consecutive prompts, validating only after the third. It is a
+  form inside the exchange dialog, validated as you type.
+- **A layer's default style** asked for two hex colours as text. Two
+  colour pickers.
+
+A single free-text field (renaming a project, naming a group) still uses
+`window.prompt`, which is what it is for.

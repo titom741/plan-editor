@@ -38,6 +38,7 @@ export function createSheet(input?: Partial<Omit<Sheet, "id">>): Sheet {
     orientation: input?.orientation ?? "landscape",
     scaleDenominator: input?.scaleDenominator ?? 200,
     marginMm: input?.marginMm ?? DEFAULT_MARGIN_MM,
+    titleBlock: input?.titleBlock,
   };
 }
 

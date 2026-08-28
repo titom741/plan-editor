@@ -1,5 +1,6 @@
 /**
- * A minimal PDF writer: one page, one embedded JPEG, some text.
+ * A small PDF writer: one or several pages, an optional JPEG per page,
+ * vector paths and searchable text.
  *
  * **Why hand-written rather than a library.** Not for the sake of it — a
  * PDF library would be a reasonable dependency. It's that what this app
@@ -54,6 +55,17 @@ export interface PdfTextItem {
   xPt: number;
   yPt: number;
   sizePt: number;
+  rotationDeg?: number;
+}
+
+export interface PdfPathItem {
+  /** PDF path operators, e.g. `x y m x y l ... h`. */
+  commands: string;
+  strokeRgb?: [number, number, number];
+  fillRgb?: [number, number, number];
+  widthPt?: number;
+  dashPt?: number[];
+  opacity?: number;
 }
 
 /** A straight line in points — used for the frame and the scale bar. */
@@ -76,9 +88,12 @@ export interface PdfPage {
   widthPt: number;
   heightPt: number;
   image?: PdfImagePlacement;
+  /** Additional JPEGs, e.g. a title-block logo. */
+  images?: PdfImagePlacement[];
   lines?: PdfLineItem[];
   rects?: PdfFilledRect[];
   text?: PdfTextItem[];
+  paths?: PdfPathItem[];
 }
 
 export interface PdfMetadata {
@@ -165,6 +180,10 @@ function latin1Bytes(text: string): Uint8Array {
   return bytes;
 }
 
+function pageImages(page: PdfPage): PdfImagePlacement[] {
+  return [...(page.image ? [page.image] : []), ...(page.images ?? [])];
+}
+
 function buildContentStream(page: PdfPage): string {
   const parts: string[] = [];
 
@@ -174,11 +193,19 @@ function buildContentStream(page: PdfPage): string {
     );
   }
 
-  if (page.image) {
-    const { xPt, yPt, widthPt, heightPt } = page.image;
+  for (const [index, image] of pageImages(page).entries()) {
+    const { xPt, yPt, widthPt, heightPt } = image;
     // PDF draws an XObject into the unit square, so the CTM carries the
     // size and position: [w 0 0 h x y].
-    parts.push(`q ${num(widthPt)} 0 0 ${num(heightPt)} ${num(xPt)} ${num(yPt)} cm /Im0 Do Q`);
+    parts.push(`q ${num(widthPt)} 0 0 ${num(heightPt)} ${num(xPt)} ${num(yPt)} cm /Im${index} Do Q`);
+  }
+
+  for (const path of page.paths ?? []) {
+    const stroke = path.strokeRgb ?? [0, 0, 0];
+    const fill = path.fillRgb;
+    const dash = path.dashPt?.length ? `[${path.dashPt.map(num).join(" ")}] 0 d ` : "";
+    const colors = `${stroke.map(num).join(" ")} RG ${fill ? `${fill.map(num).join(" ")} rg ` : ""}`;
+    parts.push(`q ${colors}${num(path.widthPt ?? 0.8)} w ${dash}${path.commands} ${fill ? "B" : "S"} Q`);
   }
 
   for (const line of page.lines ?? []) {
@@ -189,9 +216,10 @@ function buildContentStream(page: PdfPage): string {
   }
 
   for (const item of page.text ?? []) {
-    parts.push(
-      `BT 0 g /F1 ${num(item.sizePt)} Tf ${num(item.xPt)} ${num(item.yPt)} Td (${pdfString(item.text)}) Tj ET`,
-    );
+    const angle = ((item.rotationDeg ?? 0) * Math.PI) / 180;
+    const cos = num(Math.cos(angle));
+    const sin = num(Math.sin(angle));
+    parts.push(`BT 0 g /F1 ${num(item.sizePt)} Tf ${cos} ${sin} ${num(-Math.sin(angle))} ${cos} ${num(item.xPt)} ${num(item.yPt)} Tm (${pdfString(item.text)}) Tj ET`);
   }
 
   return parts.join("\n");
@@ -219,15 +247,26 @@ function concatBytes(chunks: Uint8Array[]): Uint8Array {
  * one and produce a file that opens as blank.
  */
 export function buildPdf(page: PdfPage, metadata: PdfMetadata): Uint8Array {
-  const hasImage = page.image !== undefined;
-  const content = buildContentStream(page);
-  const contentBytes = latin1Bytes(content);
+  return buildMultiPagePdf([page], metadata);
+}
 
-  // Object numbering: 1 catalog, 2 pages, 3 page, 4 content, 5 font,
-  // 6 image (when present), 7 (or 6) info.
-  const imageObjectNumber = hasImage ? 6 : 0;
-  const infoObjectNumber = hasImage ? 7 : 6;
-  const objectCount = infoObjectNumber;
+/** Assembles a PDF with one independent image XObject per page when needed. */
+export function buildMultiPagePdf(pages: readonly PdfPage[], metadata: PdfMetadata): Uint8Array {
+  if (pages.length === 0) throw new Error("Un PDF doit contenir au moins une page.");
+
+  // 1 catalog, 2 page tree, 3 shared font, then page/content/(image), finally info.
+  let nextObject = 4;
+  const pageObjects = pages.map((page) => {
+    const descriptor = {
+      page,
+      pageObject: nextObject++,
+      contentObject: nextObject++,
+      imageObjects: pageImages(page).map(() => nextObject++),
+    };
+    return descriptor;
+  });
+  const infoObjectNumber = nextObject++;
+  const objectCount = nextObject - 1;
 
   const chunks: Uint8Array[] = [];
   const offsets: number[] = new Array(objectCount + 1).fill(0);
@@ -256,31 +295,34 @@ export function buildPdf(page: PdfPage, metadata: PdfMetadata): Uint8Array {
   push("<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
 
   startObject(2);
-  push("<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+  push(`<< /Type /Pages /Kids [${pageObjects.map(({ pageObject }) => `${pageObject} 0 R`).join(" ")}] /Count ${pages.length} >>\nendobj\n`);
 
   startObject(3);
-  push(
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${num(page.widthPt)} ${num(page.heightPt)}] ` +
-      `/Resources << /Font << /F1 5 0 R >>${hasImage ? ` /XObject << /Im0 ${imageObjectNumber} 0 R >>` : ""} >> ` +
-      "/Contents 4 0 R >>\nendobj\n",
-  );
-
-  startObject(4);
-  push(`<< /Length ${contentBytes.length} >>\nstream\n`);
-  pushBytes(contentBytes);
-  push("\nendstream\nendobj\n");
-
-  startObject(5);
   push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n");
 
-  if (page.image) {
-    startObject(imageObjectNumber);
+  for (const descriptor of pageObjects) {
+    const { page, pageObject, contentObject, imageObjects } = descriptor;
+    const contentBytes = latin1Bytes(buildContentStream(page));
+    startObject(pageObject);
     push(
-      `<< /Type /XObject /Subtype /Image /Width ${page.image.pixelWidth} /Height ${page.image.pixelHeight} ` +
-        `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${page.image.jpeg.length} >>\nstream\n`,
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${num(page.widthPt)} ${num(page.heightPt)}] ` +
+        `/Resources << /Font << /F1 3 0 R >>${imageObjects.length ? ` /XObject << ${imageObjects.map((objectNumber, index) => `/Im${index} ${objectNumber} 0 R`).join(" ")} >>` : ""} >> ` +
+        `/Contents ${contentObject} 0 R >>\nendobj\n`,
     );
-    pushBytes(page.image.jpeg);
+    startObject(contentObject);
+    push(`<< /Length ${contentBytes.length} >>\nstream\n`);
+    pushBytes(contentBytes);
     push("\nendstream\nendobj\n");
+    for (const [index, image] of pageImages(page).entries()) {
+      const imageObject = imageObjects[index]!;
+      startObject(imageObject);
+      push(
+        `<< /Type /XObject /Subtype /Image /Width ${image.pixelWidth} /Height ${image.pixelHeight} ` +
+          `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${image.jpeg.length} >>\nstream\n`,
+      );
+      pushBytes(image.jpeg);
+      push("\nendstream\nendobj\n");
+    }
   }
 
   startObject(infoObjectNumber);

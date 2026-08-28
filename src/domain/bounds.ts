@@ -51,21 +51,12 @@ export function unionBounds(a: BoundsM | null, b: BoundsM | null): BoundsM | nul
   };
 }
 
-/** Grows the bounds by `marginM` on every side — used to keep a drawing off the sheet's edge. */
-export function expandBounds(bounds: BoundsM, marginM: number): BoundsM {
-  return {
-    minXM: bounds.minXM - marginM,
-    minYM: bounds.minYM - marginM,
-    maxXM: bounds.maxXM + marginM,
-    maxYM: bounds.maxYM + marginM,
-  };
-}
-
 export function getObjectBoundsM(object: PlanObject): BoundsM | null {
   const anchor: PointM = { xM: object.xM, yM: object.yM };
 
   switch (object.type) {
-    case "rectangle": {
+    case "rectangle":
+    case "image": {
       // The four corners in the object's own frame, rotated into the
       // world — the axis-aligned box of a rotated rectangle is wider than
       // the rectangle itself.
@@ -91,21 +82,27 @@ export function getObjectBoundsM(object: PlanObject): BoundsM | null {
         object.pointsM.map((point) => addVector(anchor, rotateVector(point, object.rotationDeg))),
       );
     case "text":
-      // Only the anchor. A text's real extent depends on font metrics,
-      // which live in the renderer — `domain/` deliberately doesn't know
-      // what a glyph is. The sheet's margin absorbs the difference, and
-      // guessing a box here would be a wrong number wearing a confident face.
-      return { minXM: object.xM, minYM: object.yM, maxXM: object.xM, maxYM: object.yM };
+      // A conservative font-independent estimate (average Latin glyph ≈
+      // 0.6 em) prevents selection/export framing from reducing text to a
+      // point. Exact glyph metrics remain a renderer concern.
+      return boundsOfPoints([
+        { xM: 0, yM: 0 },
+        { xM: Math.max(object.fontSizeM * 0.6, object.text.length * object.fontSizeM * 0.6), yM: 0 },
+        { xM: Math.max(object.fontSizeM * 0.6, object.text.length * object.fontSizeM * 0.6), yM: object.fontSizeM * 1.2 },
+        { xM: 0, yM: object.fontSizeM * 1.2 },
+      ].map((point) => addVector(anchor, rotateVector(point, object.rotationDeg))));
   }
 }
 
 export function getBackgroundBoundsM(background: BackgroundImage): BoundsM {
-  return {
-    minXM: background.xM,
-    minYM: background.yM,
-    maxXM: background.xM + background.widthM,
-    maxYM: background.yM + background.heightM,
-  };
+  const anchor = { xM: background.xM, yM: background.yM };
+  const corners = [
+    { xM: 0, yM: 0 },
+    { xM: background.widthM, yM: 0 },
+    { xM: background.widthM, yM: background.heightM },
+    { xM: 0, yM: background.heightM },
+  ].map((corner) => addVector(anchor, rotateVector(corner, background.rotationDeg)));
+  return boundsOfPoints(corners) ?? { minXM: background.xM, minYM: background.yM, maxXM: background.xM, maxYM: background.yM };
 }
 
 /**

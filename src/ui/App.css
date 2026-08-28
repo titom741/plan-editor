@@ -13,6 +13,38 @@
   background: var(--bg);
   color: var(--text-h);
 }
+.app-layout.tools-collapsed { grid-template-columns: 48px 1fr 260px; }
+.app-layout.properties-collapsed { grid-template-columns: 220px 1fr 48px; }
+.app-layout.tools-collapsed.properties-collapsed { grid-template-columns: 48px 1fr 48px; }
+.panel__collapse { width: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
+.tools-panel.is-collapsed, .properties-panel.is-collapsed { padding-inline: .55rem; overflow: hidden; }
+.canvas-accessible-list { position: absolute; z-index: 7; top: .5rem; left: .5rem; max-width: min(24rem, 70%); padding: .3rem .5rem; border: 1px solid rgba(148,163,184,.7); border-radius: 6px; background: rgba(255,255,255,.94); color: #334155; font-size: .75rem; }
+.canvas-accessible-list:not([open]) { opacity: .65; }
+.canvas-accessible-list ul { max-height: 12rem; overflow: auto; margin: .35rem 0 0; padding: 0; list-style: none; }
+.canvas-accessible-list button { width: 100%; padding: .3rem; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.canvas-accessible-list button[aria-pressed="true"] { background: #ffedd5; }
+
+@media (max-width: 1100px) {
+  .toolbar { flex-wrap: wrap; gap: .5rem; }
+  .toolbar__file { flex-wrap: wrap; }
+  .app-layout { grid-template-columns: 180px 1fr 220px; }
+  .app-layout.tools-collapsed { grid-template-columns: 48px 1fr 220px; }
+  .app-layout.properties-collapsed { grid-template-columns: 180px 1fr 48px; }
+}
+
+@media (max-width: 760px) {
+  .app-layout, .app-layout.tools-collapsed, .app-layout.properties-collapsed, .app-layout.tools-collapsed.properties-collapsed {
+    width: 100%; min-height: 100vh; height: auto; grid-template-columns: 1fr; grid-template-rows: auto auto minmax(60vh, 1fr) auto auto;
+    grid-template-areas: "toolbar" "notice" "canvas" "tools" "properties" "layers";
+  }
+  .tools-panel, .properties-panel { border: 0; border-top: 1px solid var(--border); max-height: 45vh; }
+  .tools-panel.is-collapsed, .properties-panel.is-collapsed { max-height: 3rem; }
+  .toolbar__brand { display: none; }
+  .toolbar__project { flex-basis: 100%; }
+  .layers-panel__list { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .25rem; }
+  .properties-panel__actions { flex-wrap: wrap; }
+  .canvas-status { overflow-x: auto; white-space: nowrap; }
+}
 
 .app-loading {
   display: flex;
@@ -88,6 +120,8 @@
   gap: 0.6rem;
   min-width: 0;
 }
+.toolbar__project-name { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toolbar__project-name:hover { text-decoration: underline; }
 
 .toolbar__save {
   font-size: 0.75rem;
@@ -114,6 +148,62 @@
   display: flex;
   gap: 0.4rem;
 }
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.dialog {
+  width: min(54rem, 95vw);
+  max-height: 85vh;
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.3);
+}
+
+.dialog__header, .dialog__actions { display: flex; align-items: center; gap: .75rem; }
+.dialog__header { justify-content: space-between; margin-bottom: 1rem; }
+.dialog__header h2 { margin: 0; font-size: 1.1rem; }
+.dialog__close { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 1rem; }
+.dialog__actions { justify-content: flex-end; margin-top: 1rem; }
+.dialog__actions button { padding: .45rem .75rem; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.dialog__actions .dialog__primary { border-color: var(--accent-border); background: var(--accent-bg); }
+
+.library-dialog__filters { display: grid; grid-template-columns: 1fr 14rem; gap: .75rem; margin-bottom: 1rem; }
+.library-dialog__filters input, .library-dialog__filters select { padding: .5rem .65rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: inherit; font: inherit; }
+.library-dialog__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: .65rem; }
+.library-card { display: flex; flex-direction: column; align-items: flex-start; gap: .3rem; padding: .7rem; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: inherit; cursor: pointer; text-align: left; }
+.library-card:hover { border-color: var(--accent-border); background: var(--accent-bg); }
+.library-card__preview { width: 2rem; height: 2rem; border: 2px solid; border-radius: 4px; }
+.library-card span, .library-card small { color: var(--text); }
+.library-card__template { display: flex; flex: 1; flex-direction: column; align-items: flex-start; gap: .25rem; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+
+.schedule-dialog__table-wrap { overflow: auto; }
+.schedule-dialog table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.schedule-dialog th, .schedule-dialog td { padding: .5rem; border-bottom: 1px solid var(--border); text-align: left; }
+.schedule-dialog th:nth-child(5), .schedule-dialog td:nth-child(5) { text-align: right; font-variant-numeric: tabular-nums; }
+.projects-dialog__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
+.projects-dialog__list li { display: grid; grid-template-columns: minmax(12rem, 1fr) auto; align-items: center; gap: .5rem; padding: .65rem; border: 1px solid var(--border); border-radius: 7px; }
+.projects-dialog__list li.is-current { border-color: var(--accent-border); background: var(--accent-bg); }
+.projects-dialog__list small { display: block; margin-top: .2rem; color: var(--text); }
+.projects-dialog__list button { padding: .35rem .55rem; border: 1px solid var(--border); border-radius: 5px; background: transparent; color: inherit; cursor: pointer; }
+.projects-dialog__list button:disabled { opacity: .4; cursor: default; }
+.projects-dialog__error { color: #b91c1c; }
+.projects-dialog__toolbar { margin-bottom: .75rem; }
+.projects-dialog__toolbar button { padding: .45rem .65rem; border: 1px solid var(--accent-border); border-radius: 6px; background: var(--accent-bg); color: inherit; cursor: pointer; }
+.projects-dialog__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .3rem; max-width: 19rem; }
+.projects-dialog__versions { display: flex; flex-direction: column; align-items: flex-start; gap: .25rem; margin-top: .5rem; }
+.projects-dialog__versions button { font-size: .75rem; text-align: left; }
 
 .toolbar__zoom {
   font-variant-numeric: tabular-nums;
@@ -220,7 +310,9 @@
   min-height: 0;
   background: #f8fafc;
   overflow: hidden;
+  touch-action: none;
 }
+.canvas-status { position: absolute; z-index: 5; left: .6rem; right: .6rem; bottom: .55rem; display: flex; justify-content: space-between; gap: 1rem; padding: .35rem .6rem; border: 1px solid rgba(148, 163, 184, .6); border-radius: 6px; background: rgba(255, 255, 255, .9); color: #475569; font-size: .72rem; font-variant-numeric: tabular-nums; pointer-events: none; backdrop-filter: blur(3px); }
 
 .plan-canvas[data-tool="select"] {
   cursor: default;
@@ -229,7 +321,8 @@
 .plan-canvas[data-tool="rectangle"],
 .plan-canvas[data-tool="circle"],
 .plan-canvas[data-tool="line"],
-.plan-canvas[data-tool="polygon"] {
+.plan-canvas[data-tool="polygon"],
+.plan-canvas[data-tool="measure"] {
   cursor: crosshair;
 }
 
@@ -382,7 +475,29 @@
   background: transparent;
 }
 
-/* Layers panel */
+.properties-panel__style-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.properties-panel__field input[type="color"] {
+  width: 100%;
+  height: 2rem;
+  padding: 0.15rem;
+  cursor: pointer;
+}
+
+/* Tool options */
+.tools-panel__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  margin: 0.6rem 0 0;
+  cursor: pointer;
+}
+
 .layers-panel {
   grid-area: layers;
   border-top: 1px solid var(--border);
@@ -407,6 +522,39 @@
   padding: 0.2rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: 6px;
+  position: relative;
+}
+
+.layers-panel__objects {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 0.35rem);
+  z-index: 20;
+  min-width: 12rem;
+  max-height: 16rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+}
+
+.layers-panel__objects button {
+  width: 100%;
+  padding: 0.3rem 0.45rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.layers-panel__objects button:hover {
+  background: var(--accent-bg);
 }
 
 .layers-panel__row.is-active {
@@ -518,7 +666,8 @@
   color: var(--text);
 }
 
-.calibration-dialog__field input {
+.calibration-dialog__field input,
+.calibration-dialog__field textarea {
   font: inherit;
   font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
@@ -529,9 +678,43 @@
   color: var(--text-h);
 }
 
-.calibration-dialog__field input:focus {
+.calibration-dialog__field input:focus,
+.calibration-dialog__field textarea:focus {
   outline: 2px solid var(--accent-border);
   outline-offset: -1px;
+}
+
+/* A radio and its label sit on one line; the stacked default is for a field above its input. */
+.calibration-dialog__field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.calibration-dialog__field--inline input {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.calibration-dialog__field select {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.calibration-dialog__field select:disabled {
+  opacity: 0.5;
+}
+
+.calibration-dialog__field input[type="color"] {
+  padding: 0.15rem;
+  height: 2.2rem;
+  cursor: pointer;
 }
 
 .calibration-dialog__actions {
@@ -586,6 +769,20 @@
   gap: 0.4rem;
   padding-top: 0.2rem;
 }
+.export-dialog__sheets { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: .5rem; }
+.export-dialog__sheet-actions { display: flex; gap: .3rem; padding-bottom: .05rem; }
+.export-dialog__sheet-actions button { padding: .4rem .55rem; border: 1px solid var(--border); border-radius: 5px; background: transparent; color: inherit; cursor: pointer; }
+.export-dialog__sheet-actions button:disabled { opacity: .35; cursor: default; }
+.export-dialog { width: min(62rem, 96vw); max-height: 92vh; overflow: auto; }
+.sheet-preview { display: flex; justify-content: center; max-height: 19rem; margin-bottom: 1rem; overflow: auto; padding: .75rem; background: #cbd5e1; border-radius: 7px; }
+.sheet-preview__page { position: relative; flex: 0 0 auto; background: white; box-shadow: 0 4px 14px rgba(15, 23, 42, .25); color: #111827; }
+.sheet-preview__frame { position: absolute; border: 1px solid #111827; pointer-events: none; }
+.sheet-preview__drawing { position: absolute; overflow: hidden; }
+.sheet-preview__title { position: absolute; display: grid; grid-template-columns: 1fr auto; align-content: center; gap: .1rem .5rem; padding: .2rem .35rem; border-top: 1px solid #111827; box-sizing: border-box; overflow: hidden; font-size: .42rem; }
+.sheet-preview__title strong, .sheet-preview__title span, .sheet-preview__title small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.export-dialog__title-fields { margin: .7rem 0; padding: .55rem; border: 1px solid var(--border); border-radius: 6px; }
+.export-dialog__title-fields summary { cursor: pointer; font-size: .85rem; font-weight: 600; }
+.export-dialog__title-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; margin-top: .65rem; }
 
 .export-dialog__warning {
   margin: 0;
@@ -620,4 +817,15 @@
   height: 1px;
   overflow: hidden;
   pointer-events: none;
+}
+
+/* The georeference form unfolds inside the exchange dialog rather than stacking a second modal on it. */
+.exchange-dialog__geo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-alt, rgba(0, 0, 0, 0.02));
 }

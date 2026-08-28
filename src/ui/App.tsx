@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { createDemoProject } from "../domain/project";
 import type { Project } from "../domain/types";
 import { loadAutosavedProject } from "../persistence/projectStorage";
-import Editor from "./Editor";
 import { describeParseError } from "./projectFileActions";
 import "./App.css";
+
+const Editor = lazy(() => import("./Editor"));
 
 interface Restored {
   project: Project;
@@ -78,11 +79,11 @@ export default function App() {
   }
 
   return (
-    <Editor
+    <Suspense fallback={<div className="app-loading" role="status">Chargement de l’éditeur…</div>}><Editor
       initialProject={restored.project}
       autosaveEnabled
       restoreNotice={notice}
       onDismissRestoreNotice={() => setNotice(null)}
-    />
+    /></Suspense>
   );
 }

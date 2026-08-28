@@ -1,11 +1,13 @@
+import { useEffect, useRef } from "react";
 import { Circle as KonvaCircle, Image as KonvaImage } from "react-konva";
-import type Konva from "konva";
+import Konva from "konva";
 import { getRectangleResizeHandleWorld } from "../../domain/geometry";
 import { resizeBackgroundFromCorner } from "../../domain/background";
 import type { BackgroundImage } from "../../domain/types";
 import { metersToPixels, screenToWorld, worldToScreen } from "../../rendering/viewport";
 import type { Viewport } from "../../rendering/viewport";
 import { useHtmlImage } from "../hooks/useHtmlImage";
+import { createWhiteRemovalFilter } from "../imageFilters";
 
 interface BackgroundImageShapeProps {
   background: BackgroundImage;
@@ -51,9 +53,24 @@ export function BackgroundImageShape({
   onResizeLive,
 }: BackgroundImageShapeProps) {
   const image = useHtmlImage(background.url);
+  const imageNodeRef = useRef<Konva.Image>(null);
   const anchor = worldToScreen({ xM: background.xM, yM: background.yM }, viewport);
   const widthPx = metersToPixels(background.widthM, viewport);
   const heightPx = metersToPixels(background.heightM, viewport);
+  const filters = [
+    ...(background.brightness !== 0 ? [Konva.Filters.Brighten] : []),
+    ...(background.contrast !== 0 ? [Konva.Filters.Contrast] : []),
+    ...(background.grayscale ? [Konva.Filters.Grayscale] : []),
+    ...(background.whiteRemoval ? [createWhiteRemovalFilter(background.whiteThreshold)] : []),
+  ];
+  const hasFilters = filters.length > 0;
+
+  useEffect(() => {
+    const node = imageNodeRef.current;
+    if (!node) return;
+    if (hasFilters) node.cache({ pixelRatio: 1 });
+    else node.clearCache();
+  }, [image, background.brightness, background.contrast, background.grayscale, background.whiteRemoval, background.whiteThreshold, background.crop?.xPx, background.crop?.yPx, background.crop?.widthPx, background.crop?.heightPx, hasFilters]);
 
   const handleSelect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     // Outside the select tool (e.g. calibrating), let the click bubble up
@@ -104,7 +121,7 @@ export function BackgroundImageShape({
     yM: background.yM,
     widthM: background.widthM,
     heightM: background.heightM,
-    rotationDeg: 0,
+    rotationDeg: background.rotationDeg,
   });
   const resizeHandleScreen = worldToScreen(resizeHandleWorld, viewport);
 
@@ -113,13 +130,19 @@ export function BackgroundImageShape({
   return (
     <>
       <KonvaImage
+        ref={imageNodeRef}
         image={image}
         x={anchor.x}
         y={anchor.y}
         width={widthPx}
         height={heightPx}
+        rotation={background.rotationDeg}
         name={BACKGROUND_NODE_NAME}
         opacity={background.opacity}
+        filters={filters}
+        brightness={background.brightness}
+        contrast={background.contrast}
+        crop={background.crop ? { x: background.crop.xPx, y: background.crop.yPx, width: background.crop.widthPx, height: background.crop.heightPx } : undefined}
         stroke={selected ? HANDLE_STROKE : undefined}
         strokeWidth={selected ? 2 : 0}
         draggable={draggable}

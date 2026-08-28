@@ -1,7 +1,9 @@
 import { formatPaper, formatScale } from "../domain/sheets";
-import type { Project, Sheet } from "../domain/types";
-import { buildPdf, mmToPt, toPdfDate } from "../printing/pdf";
-import type { PdfLineItem, PdfTextItem } from "../printing/pdf";
+import type { PlanObject, Project, Sheet } from "../domain/types";
+import { buildMultiPagePdf, buildPdf, mmToPt, toPdfDate } from "../printing/pdf";
+import type { PdfLineItem, PdfPage, PdfPathItem, PdfTextItem } from "../printing/pdf";
+import { objectLocalToWorld } from "../domain/geometry";
+import { worldToScreen, type Viewport } from "../rendering/viewport";
 import type { SheetLayout } from "../printing/sheetLayout";
 import { suggestedFileName } from "./projectFileActions";
 
@@ -28,6 +30,18 @@ export function dataUrlToBytes(dataUrl: string): Uint8Array {
   return bytes;
 }
 
+function jpegSize(bytes: Uint8Array): { width: number; height: number } {
+  let offset = 2;
+  while (offset + 8 < bytes.length) {
+    if (bytes[offset] !== 0xff) { offset += 1; continue; }
+    const marker = bytes[offset + 1]!;
+    const length = (bytes[offset + 2]! << 8) | bytes[offset + 3]!;
+    if (marker >= 0xc0 && marker <= 0xc3) return { height: (bytes[offset + 5]! << 8) | bytes[offset + 6]!, width: (bytes[offset + 7]! << 8) | bytes[offset + 8]! };
+    offset += Math.max(2, length + 2);
+  }
+  return { width: 1, height: 1 };
+}
+
 function formatDate(date: Date): string {
   return date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
@@ -41,12 +55,56 @@ export interface SheetContent {
   pixelWidth: number;
   pixelHeight: number;
   now: Date;
+  vectorObjects?: readonly PlanObject[];
+  vectorViewport?: Viewport;
+}
+
+function rgb(hex: string | undefined, fallback: string): [number, number, number] {
+  const value = /^#[0-9a-f]{6}$/i.test(hex ?? "") ? hex! : fallback;
+  return [Number.parseInt(value.slice(1, 3), 16) / 255, Number.parseInt(value.slice(3, 5), 16) / 255, Number.parseInt(value.slice(5, 7), 16) / 255];
+}
+
+function vectorGraphics(content: SheetContent): { paths: PdfPathItem[]; text: PdfTextItem[] } {
+  if (!content.vectorViewport) return { paths: [], text: [] };
+  const { drawing } = content.layout;
+  const point = (world: { xM: number; yM: number }) => {
+    const screen = worldToScreen(world, content.vectorViewport!);
+    return { x: drawing.xPt + (screen.x / content.pixelWidth) * drawing.widthPt, y: drawing.yPt + drawing.heightPt - (screen.y / content.pixelHeight) * drawing.heightPt };
+  };
+  const paths: PdfPathItem[] = [];
+  const text: PdfTextItem[] = [];
+  for (const object of content.vectorObjects ?? []) {
+    const strokeRgb = rgb(object.style?.stroke, "#0f172a");
+    const fillRgb = object.type !== "line" && object.type !== "text" ? rgb(object.style?.fill, "#ffffff") : undefined;
+    const widthPt = Math.max(0.3, (object.style?.strokeWidth ?? 1.5) * 0.5);
+    const dashPt = object.style?.dash === "dashed" ? [5, 3] : object.style?.dash === "dotted" ? [1, 3] : undefined;
+    if (object.type === "text") {
+      const anchor = point({ xM: object.xM, yM: object.yM });
+      text.push({ text: object.text, xPt: anchor.x, yPt: anchor.y, sizePt: Math.max(4, object.fontSizeM * content.vectorViewport.basePixelsPerMeter * content.vectorViewport.zoom * drawing.widthPt / content.pixelWidth), rotationDeg: -object.rotationDeg });
+      continue;
+    }
+    if (object.type === "image") continue;
+    if (object.type === "circle") {
+      const center = point({ xM: object.xM, yM: object.yM });
+      const edge = point({ xM: object.xM + object.radiusM, yM: object.yM });
+      const radius = Math.abs(edge.x - center.x); const k = radius * 0.5522847498;
+      paths.push({ commands: `${center.x + radius} ${center.y} m ${center.x + radius} ${center.y + k} ${center.x + k} ${center.y + radius} ${center.x} ${center.y + radius} c ${center.x - k} ${center.y + radius} ${center.x - radius} ${center.y + k} ${center.x - radius} ${center.y} c ${center.x - radius} ${center.y - k} ${center.x - k} ${center.y - radius} ${center.x} ${center.y - radius} c ${center.x + k} ${center.y - radius} ${center.x + radius} ${center.y - k} ${center.x + radius} ${center.y} c h`, strokeRgb, fillRgb, widthPt, dashPt });
+      continue;
+    }
+    const local = object.type === "rectangle" ? [{ xM: 0, yM: 0 }, { xM: object.widthM, yM: 0 }, { xM: object.widthM, yM: object.heightM }, { xM: 0, yM: object.heightM }] : object.pointsM;
+    const points = local.map((localPoint) => point(objectLocalToWorld(object, localPoint)));
+    const first = points[0]; if (!first) continue;
+    const closed = object.type === "rectangle" || object.type === "polygon";
+    paths.push({ commands: `${first.x} ${first.y} m ${points.slice(1).map((p) => `${p.x} ${p.y} l`).join(" ")}${closed ? " h" : ""}`, strokeRgb, fillRgb: closed ? fillRgb : undefined, widthPt, dashPt });
+  }
+  return { paths, text };
 }
 
 /** Lays out the frame, title block and scale bar around the drawing, and returns the finished PDF bytes. */
-export function buildSheetPdf(content: SheetContent): Uint8Array {
+export function buildSheetPdfPage(content: SheetContent, pageLabel?: string): PdfPage {
   const { layout, project, sheet, now } = content;
   const { frame, titleBlock, scaleBar } = layout;
+  const vectors = vectorGraphics(content);
 
   const lines: PdfLineItem[] = [
     // Frame.
@@ -89,10 +147,10 @@ export function buildSheetPdf(content: SheetContent): Uint8Array {
 
   // Three columns, two baselines — the geometry comes from the layout so
   // the pieces can't be placed on top of one another (see `TitleBlockLayout`).
-  const text: PdfTextItem[] = [
+  const text: PdfTextItem[] = [...vectors.text,
     { text: project.name, xPt: titleBlock.leftColumnXPt, yPt: titleBlock.upperBaselinePt, sizePt: 11 },
     {
-      text: `Échelle ${formatScale(sheet.scaleDenominator)} — ${formatPaper(sheet)}`,
+      text: `${sheet.name}${pageLabel ? ` — ${pageLabel}` : ""} — Échelle ${formatScale(sheet.scaleDenominator)} — ${formatPaper(sheet)}`,
       xPt: titleBlock.rightColumnXPt,
       yPt: titleBlock.upperBaselinePt,
       sizePt: 9,
@@ -107,17 +165,28 @@ export function buildSheetPdf(content: SheetContent): Uint8Array {
     },
   ];
 
-  if (project.location) {
+  const block = sheet.titleBlock;
+  const clientAndLocation = [block?.client ? `Client : ${block.client}` : "", project.location].filter(Boolean).join(" — ");
+  if (clientAndLocation) {
     text.push({
-      text: project.location,
+      text: clientAndLocation,
       xPt: titleBlock.leftColumnXPt,
       yPt: titleBlock.lowerBaselinePt,
       sizePt: 8,
     });
   }
 
-  return buildPdf(
-    {
+  const delivery = [block?.planNumber ? `Plan ${block.planNumber}` : "", block?.revision ? `Rév. ${block.revision}` : "", block?.author ? `Auteur ${block.author}` : ""].filter(Boolean).join(" — ");
+  if (delivery) text.push({ text: delivery, xPt: titleBlock.rightColumnXPt, yPt: titleBlock.lowerBaselinePt, sizePt: 7 });
+  if (block?.comments) text.push({ text: block.comments, xPt: titleBlock.middleColumnXPt, yPt: titleBlock.upperBaselinePt, sizePt: 7 });
+  for (const [index, field] of (block?.customFields ?? []).slice(0, 3).entries()) {
+    text.push({ text: `${field.label} : ${field.value}`, xPt: titleBlock.middleColumnXPt, yPt: titleBlock.upperBaselinePt - mmToPt(3 + index * 2.5), sizePt: 6 });
+  }
+
+  const logoBytes = block?.logoDataUrl ? dataUrlToBytes(block.logoDataUrl) : null;
+  const logoSize = logoBytes ? jpegSize(logoBytes) : null;
+
+  return {
       widthPt: layout.pageWidthPt,
       heightPt: layout.pageHeightPt,
       image: {
@@ -129,15 +198,30 @@ export function buildSheetPdf(content: SheetContent): Uint8Array {
         widthPt: layout.drawing.widthPt,
         heightPt: layout.drawing.heightPt,
       },
+      images: logoBytes && logoSize ? [{ jpeg: logoBytes, pixelWidth: logoSize.width, pixelHeight: logoSize.height, xPt: titleBlock.xPt + titleBlock.widthPt - mmToPt(22), yPt: titleBlock.yPt + mmToPt(2), widthPt: mmToPt(18), heightPt: mmToPt(12) }] : undefined,
       lines,
+      paths: vectors.paths,
       text,
-    },
-    {
-      title: `${project.name} — plan d'implantation`,
+    };
+}
+
+/** Lays out the frame, title block and scale bar around the drawing, and returns the finished PDF bytes. */
+export function buildSheetPdf(content: SheetContent): Uint8Array {
+  return buildPdf(buildSheetPdfPage(content), {
+      title: `${content.project.name} — plan d'implantation`,
       creator: CREATOR,
-      creationDate: toPdfDate(now),
-    },
-  );
+      creationDate: toPdfDate(content.now),
+    });
+}
+
+export function buildMultiSheetPdf(contents: readonly SheetContent[]): Uint8Array {
+  const first = contents[0];
+  if (!first) throw new Error("Aucune page à exporter.");
+  return buildMultiPagePdf(contents.map((content, index) => buildSheetPdfPage(content, `${index + 1}/${contents.length}`)), {
+    title: `${first.project.name} — plan d'implantation multipage`,
+    creator: CREATOR,
+    creationDate: toPdfDate(first.now),
+  });
 }
 
 /**
@@ -172,6 +256,13 @@ export function exportFileName(project: Project, extension: "pdf" | "png"): stri
 export function downloadSheetPdf(content: SheetContent): void {
   const blob = new Blob([toBlobPart(buildSheetPdf(content))], { type: "application/pdf" });
   download(blob, exportFileName(content.project, "pdf"));
+}
+
+export function downloadMultiSheetPdf(contents: readonly SheetContent[]): void {
+  const first = contents[0];
+  if (!first) return;
+  const blob = new Blob([toBlobPart(buildMultiSheetPdf(contents))], { type: "application/pdf" });
+  download(blob, exportFileName(first.project, "pdf"));
 }
 
 export function downloadPng(dataUrl: string, project: Project): void {

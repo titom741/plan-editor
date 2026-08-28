@@ -2,6 +2,7 @@ import type { SaveStatus } from "../hooks/useAutosave";
 
 interface ToolbarProps {
   projectName: string;
+  onRenameProject: () => void;
   zoom: number;
   canUndo: boolean;
   canRedo: boolean;
@@ -10,8 +11,18 @@ interface ToolbarProps {
   saveStatus: SaveStatus;
   onNewProject: () => void;
   onOpenProject: () => void;
+  onOpenRecentProjects: () => void;
   onSaveToFile: () => void;
+  onOpenLibrary: () => void;
+  onOpenSchedule: () => void;
   onExport: () => void;
+  onExportDiagnostic: () => void;
+  onFitPlan: () => void;
+  canFitPlan: boolean;
+  onOpenExchange: () => void;
+  onImportObjectImage: () => void;
+  onOpenShortcuts: () => void;
+  onOpenComments: () => void;
 }
 
 function formatTime(iso: string): string {
@@ -68,6 +79,7 @@ function describeSaveStatus(status: SaveStatus): { label: string; title: string;
 
 export function Toolbar({
   projectName,
+  onRenameProject,
   zoom,
   canUndo,
   canRedo,
@@ -76,8 +88,18 @@ export function Toolbar({
   saveStatus,
   onNewProject,
   onOpenProject,
+  onOpenRecentProjects,
   onSaveToFile,
+  onOpenLibrary,
+  onOpenSchedule,
+  onOpenExchange,
+  onImportObjectImage,
+  onOpenShortcuts,
+  onOpenComments,
   onExport,
+  onExportDiagnostic,
+  onFitPlan,
+  canFitPlan,
 }: ToolbarProps) {
   const save = describeSaveStatus(saveStatus);
 
@@ -85,7 +107,9 @@ export function Toolbar({
     <header className="toolbar">
       <div className="toolbar__brand">Implantation Événementielle</div>
       <div className="toolbar__project">
-        {projectName}
+        <button type="button" className="toolbar__project-name" onClick={onRenameProject} title="Renommer le projet">
+          {projectName}
+        </button>
         {save.label && (
           <span className={`toolbar__save toolbar__save--${save.modifier}`} title={save.title}>
             {save.label}
@@ -99,6 +123,9 @@ export function Toolbar({
         <button type="button" className="toolbar__button" onClick={onOpenProject} title="Ouvrir un projet (.kl.json)">
           Ouvrir…
         </button>
+        <button type="button" className="toolbar__button" onClick={onOpenRecentProjects} title="Ouvrir un projet conservé dans ce navigateur">
+          Récents…
+        </button>
         <button
           type="button"
           className="toolbar__button"
@@ -107,6 +134,14 @@ export function Toolbar({
         >
           Enregistrer un fichier
         </button>
+        <button type="button" className="toolbar__button" onClick={onOpenLibrary} title="Insérer un élément de la bibliothèque métier">
+          Bibliothèque…
+        </button>
+        <button type="button" className="toolbar__button" onClick={onOpenSchedule} title="Afficher les quantités du plan">
+          Nomenclature…
+        </button>
+        <button type="button" className="toolbar__button" onClick={onOpenExchange} title="Exporter en SVG, DXF ou GeoJSON">Échanges…</button>
+        <button type="button" className="toolbar__button" onClick={onImportObjectImage} title="Importer une image ou un pictogramme comme objet">Image objet…</button>
         <button
           type="button"
           className="toolbar__button"
@@ -115,6 +150,11 @@ export function Toolbar({
         >
           🖨 Exporter…
         </button>
+        <button type="button" className="toolbar__button" onClick={onExportDiagnostic} title="Exporter un rapport technique local sans contenu du plan">
+          Diagnostic
+        </button>
+        <button type="button" className="toolbar__button" onClick={onOpenShortcuts} title="Consulter et personnaliser les raccourcis clavier">Raccourcis…</button>
+        <button type="button" className="toolbar__button" onClick={onOpenComments} title="Commentaires persistants du projet">Commentaires…</button>
       </div>
       <div className="toolbar__history">
         <button type="button" className="toolbar__button" onClick={onUndo} disabled={!canUndo} title="Annuler (Ctrl+Z)">
@@ -125,6 +165,9 @@ export function Toolbar({
         </button>
       </div>
       <div className="toolbar__zoom" data-testid="zoom-indicator">
+        <button type="button" className="toolbar__button" onClick={onFitPlan} disabled={!canFitPlan} title="Recentrer et afficher tout le fond de plan">
+          Cadrer le plan
+        </button>
         Zoom&nbsp;: {Math.round(zoom * 100)}&nbsp;%
       </div>
     </header>

@@ -47,7 +47,7 @@ export type CalibrationSource =
       scale: number;
     }
   | {
-      /** Reserved for future geo-referenced backgrounds (not implemented yet). */
+      /** Calibration imported from a geographic source; project anchoring is stored in `Project.georeference`. */
       type: "geo";
       description: string;
     };
@@ -85,9 +85,8 @@ export interface Calibration {
  * (kept to derive its aspect ratio and as useful metadata); `xM`/`yM`/
  * `widthM`/`heightM` are its placement and size in world meters — the
  * same anchor-plus-size shape as `RectangleObject`, so it reuses the same
- * metric rendering pipeline. There is no `rotationDeg`: a background is
- * not rotated in KL-003 (most scanned/photographed plans don't need it;
- * revisit if a real case comes up).
+ * metric rendering pipeline. Rotation uses the top-left anchor, like a
+ * rectangle object, which keeps screen rendering, export and bounds in sync.
  */
 export interface BackgroundImage {
   id: string;
@@ -100,7 +99,16 @@ export interface BackgroundImage {
   yM: Meters;
   widthM: Meters;
   heightM: Meters;
+  rotationDeg: Degrees;
   opacity: number;
+  /** Non-destructive image corrections; the original data URL is preserved. */
+  brightness: number;
+  contrast: number;
+  grayscale: boolean;
+  whiteRemoval: boolean;
+  whiteThreshold: number;
+  /** Source-pixel crop. Missing means the complete native image. */
+  crop?: { xPx: number; yPx: number; widthPx: number; heightPx: number };
   visible: boolean;
   locked: boolean;
 }
@@ -118,6 +126,8 @@ export interface Layer {
   locked: boolean;
   /** Draw / stacking order, ascending. */
   order: number;
+  folder?: string;
+  defaultStyle?: ObjectStyle;
 }
 
 // ---------------------------------------------------------------------------
@@ -129,6 +139,18 @@ export interface ObjectStyle {
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
+  dash?: "solid" | "dashed" | "dotted";
+  arrowStart?: boolean;
+  arrowEnd?: boolean;
+  fontFamily?: "Arial" | "Helvetica" | "Georgia" | "Courier New";
+  fontWeight?: "normal" | "bold";
+  fontStyle?: "normal" | "italic";
+  textAlign?: "left" | "center" | "right";
+}
+
+export interface MeasurementMetadata {
+  kind: "length" | "angle" | "area";
+  showSegments?: boolean;
 }
 
 /**
@@ -145,6 +167,17 @@ export interface PlanObjectBase {
   name: string;
   /** Optional user-provided override. When absent, the UI derives a label from the object's geometry (see `domain/labels.ts`). */
   label?: string;
+  /** Optional material-library reference used by schedules and quantity exports. */
+  catalogId?: string;
+  category?: string;
+  reference?: string;
+  /** Number of identical items represented by this symbol (defaults to 1). */
+  quantity?: number;
+  unit?: string;
+  /** Marks a drawable line/polygon as a persistent dimension annotation. */
+  measurement?: MeasurementMetadata;
+  groupId?: string;
+  groupName?: string;
   xM: Meters;
   yM: Meters;
   rotationDeg: Degrees;
@@ -180,12 +213,22 @@ export interface TextObject extends PlanObjectBase {
   fontSizeM: Meters;
 }
 
+export interface ImageObject extends PlanObjectBase {
+  type: "image";
+  url: string;
+  widthPx: number;
+  heightPx: number;
+  widthM: Meters;
+  heightM: Meters;
+}
+
 export type PlanObject =
   | RectangleObject
   | CircleObject
   | LineObject
   | PolygonObject
-  | TextObject;
+  | TextObject
+  | ImageObject;
 
 /**
  * A partial update to a `PlanObject`, distributed over the union so each
@@ -206,6 +249,17 @@ export type PlanObjectPatch = DistributivePartial<PlanObject>;
 export type PaperSize = "A4" | "A3" | "A2" | "A1" | "A0";
 
 export type Orientation = "portrait" | "landscape";
+
+export interface SheetTitleBlock {
+  client?: string;
+  author?: string;
+  revision?: string;
+  planNumber?: string;
+  comments?: string;
+  /** JPEG data URL, normalized on import so it can be embedded in PDF. */
+  logoDataUrl?: string;
+  customFields?: { label: string; value: string }[];
+}
 
 /**
  * How the plan is put on paper: which sheet, which way round, and — the
@@ -230,6 +284,8 @@ export interface Sheet {
   scaleDenominator: number;
   /** White border kept on every edge, in millimetres — printers can't reach the paper edge. */
   marginMm: number;
+  /** Optional project-delivery metadata printed in the title block. */
+  titleBlock?: SheetTitleBlock;
 }
 
 // ---------------------------------------------------------------------------
@@ -245,8 +301,26 @@ export interface Project {
   updatedAt: IsoDateTime;
   units: Units;
   calibration: Calibration;
+  /** Optional WGS84 anchor for converting the local metric plan to/from GeoJSON. */
+  georeference?: {
+    crs: "EPSG:4326";
+    originLongitude: number;
+    originLatitude: number;
+    /** Clockwise angle from local +X to geographic east. */
+    rotationDeg: Degrees;
+  };
   background: Background;
   layers: Layer[];
   objects: PlanObject[];
   sheets: Sheet[];
+  collaboration?: {
+    comments: {
+      id: string;
+      author: string;
+      text: string;
+      createdAt: IsoDateTime;
+      resolved: boolean;
+      objectId?: string;
+    }[];
+  };
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createBackgroundImage } from "../domain/background";
 import { calibrationFromKnownDistance } from "../domain/calibration";
 import { getDefaultTargetLayer } from "../domain/layers";
+import { createSheet } from "../domain/sheets";
 import { createCircleObject, createRectangleObject, createTextObject } from "../domain/objects";
 import { addObject, applyCalibration, createDemoProject, createEmptyProject, setBackground } from "../domain/project";
 import type { Project } from "../domain/types";
@@ -29,7 +30,12 @@ function richProject(): Project {
       yM: -2.25,
       widthM: 10,
       heightM: 5,
-      style: { fill: "#cfe3ff", stroke: "#2f6fed", strokeWidth: 2 },
+      style: { fill: "#cfe3ff", stroke: "#2f6fed", strokeWidth: 2, opacity: 0.8, dash: "dashed", arrowStart: false, arrowEnd: true },
+      catalogId: "tent-5x5",
+      category: "Structures",
+      reference: "CHP",
+      quantity: 2,
+      unit: "u",
     }),
   );
   project = addObject(
@@ -53,6 +59,10 @@ function richProject(): Project {
       opacity: 0.8,
     }),
   );
+  project = {
+    ...project,
+    sheets: [createSheet({ name: "Plan sécurité", titleBlock: { client: "Ville", author: "Léa", revision: "B", planNumber: "SEC-01", comments: "Accès pompiers" } })],
+  };
   return applyCalibration(project, calibrationFromKnownDistance(500, 5));
 }
 
@@ -67,6 +77,17 @@ describe("serializeProject / deserializeProject", () => {
   it("round-trips a project with every object type, a background and a calibration, unchanged", () => {
     const project = richProject();
     expect(roundTrip(project)).toEqual(project);
+  });
+
+  it("charge les anciens fonds sans rotation ni correction d'image", () => {
+    const file: any = JSON.parse(serializeProject(richProject()));
+    delete file.project.background.rotationDeg;
+    delete file.project.background.brightness;
+    delete file.project.background.contrast;
+    delete file.project.background.grayscale;
+    const result = parseProjectFile(file);
+    if (!result.ok) throw new Error(`fichier refusé : ${JSON.stringify(result.error)}`);
+    expect(result.file.project.background).toMatchObject({ rotationDeg: 0, brightness: 0, contrast: 0, grayscale: false });
   });
 
   it("round-trips the demo project unchanged", () => {
@@ -159,6 +180,13 @@ describe("parseProjectFile — field validation", () => {
     });
   });
 
+  it("rejects an unknown line pattern", () => {
+    expect(errorAfter((f) => (f.project.objects[0].style.dash = "zigzag"))).toEqual({
+      code: "invalidField",
+      path: "project.objects[0].style.dash",
+    });
+  });
+
   it("rejects units other than meters", () => {
     expect(errorAfter((f) => (f.project.units = "ft"))).toEqual({ code: "invalidField", path: "project.units" });
   });
@@ -185,6 +213,17 @@ describe("parseProjectFile — field validation", () => {
     expect(errorAfter((f) => (f.project.background.opacity = 1.5))).toEqual({
       code: "invalidField",
       path: "project.background.opacity",
+    });
+  });
+
+  it("rejects out-of-range background image corrections", () => {
+    expect(errorAfter((f) => (f.project.background.brightness = 2))).toEqual({
+      code: "invalidField",
+      path: "project.background.brightness",
+    });
+    expect(errorAfter((f) => (f.project.background.contrast = -101))).toEqual({
+      code: "invalidField",
+      path: "project.background.contrast",
     });
   });
 

@@ -182,6 +182,39 @@ export function computeSheetLayout(sheet: Sheet, contentBounds: BoundsM | null):
   };
 }
 
+/**
+ * Splits a large extent into assembly tiles at the sheet's exact scale.
+ * The overlap is expressed on paper, then converted to ground metres.
+ */
+export function computeTiledSheetLayouts(
+  sheet: Sheet,
+  contentBounds: BoundsM | null,
+  overlapMm = 10,
+): SheetLayout[] {
+  const base = computeSheetLayout(sheet, contentBounds);
+  if (!contentBounds) return [base];
+  const overlapM = paperMmToMeters(Math.max(0, overlapMm), sheet.scaleDenominator);
+  const stepX = Math.max(base.drawingAreaM.widthM * 0.1, base.drawingAreaM.widthM - overlapM);
+  const stepY = Math.max(base.drawingAreaM.heightM * 0.1, base.drawingAreaM.heightM - overlapM);
+  const width = Math.max(0, contentBounds.maxXM - contentBounds.minXM);
+  const height = Math.max(0, contentBounds.maxYM - contentBounds.minYM);
+  const columns = Math.max(1, Math.ceil(Math.max(0, width - overlapM) / stepX));
+  const rows = Math.max(1, Math.ceil(Math.max(0, height - overlapM) / stepY));
+  const layouts: SheetLayout[] = [];
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      layouts.push({
+        ...base,
+        drawingCenterM: {
+          xM: contentBounds.minXM + base.drawingAreaM.widthM / 2 + column * stepX,
+          yM: contentBounds.minYM + base.drawingAreaM.heightM / 2 + row * stepY,
+        },
+      });
+    }
+  }
+  return layouts;
+}
+
 /** Default raster resolution for the drawing placed on the sheet. 150 dpi is the usual floor for a printed plan. */
 export const DEFAULT_EXPORT_DPI = 150;
 

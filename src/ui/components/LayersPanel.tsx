@@ -1,16 +1,18 @@
 import { useState } from "react";
 import { sortLayersByOrder } from "../../domain/layers";
-import type { Background, Layer } from "../../domain/types";
+import type { Background, Layer, PlanObject } from "../../domain/types";
 
 interface LayersPanelProps {
   background: Background;
   isBackgroundSelected: boolean;
   layers: Layer[];
+  objects: PlanObject[];
   /** How many objects sit on each layer, keyed by layer id — shown on the row and used to warn before a delete. */
   objectCounts: ReadonlyMap<string, number>;
   /** The layer new objects are created on. */
   activeLayerId: string | null;
   onSetActiveLayer: (layerId: string) => void;
+  onSelectObject: (objectId: string) => void;
   onToggleVisible: (layerId: string) => void;
   onToggleLocked: (layerId: string) => void;
   onRenameLayer: (layerId: string, name: string) => void;
@@ -21,6 +23,9 @@ interface LayersPanelProps {
   onToggleBackgroundVisible: () => void;
   onToggleBackgroundLocked: () => void;
   onRequestImportBackground: () => void;
+  onAssignObjectToLayer: (objectId: string, layerId: string) => void;
+  onSetLayerFolder: (layerId: string) => void;
+  onSetLayerDefaultStyle: (layerId: string) => void;
 }
 
 /**
@@ -38,9 +43,11 @@ export function LayersPanel({
   background,
   isBackgroundSelected,
   layers,
+  objects,
   objectCounts,
   activeLayerId,
   onSetActiveLayer,
+  onSelectObject,
   onToggleVisible,
   onToggleLocked,
   onRenameLayer,
@@ -51,10 +58,15 @@ export function LayersPanel({
   onToggleBackgroundVisible,
   onToggleBackgroundLocked,
   onRequestImportBackground,
+  onAssignObjectToLayer,
+  onSetLayerFolder,
+  onSetLayerDefaultStyle,
 }: LayersPanelProps) {
   /** Id of the layer currently being renamed inline, with its in-progress text. */
   const [editing, setEditing] = useState<{ layerId: string; name: string } | null>(null);
+  const [expandedLayerIds, setExpandedLayerIds] = useState<Set<string>>(() => new Set());
   const orderedLayers = sortLayersByOrder(layers);
+  const folders = [...new Set(orderedLayers.map((layer) => layer.folder).filter((folder): folder is string => Boolean(folder)))];
 
   const commitRename = () => {
     if (editing) onRenameLayer(editing.layerId, editing.name);
@@ -96,11 +108,74 @@ export function LayersPanel({
             </button>
           </li>
         )}
+        {folders.map((folder) => {
+          const members = orderedLayers.filter((layer) => layer.folder === folder);
+          const allVisible = members.every((layer) => layer.visible);
+          const allLocked = members.every((layer) => layer.locked);
+          // Toggling a folder brings its layers into agreement rather than
+          // flipping each one: from "all visible" everything hides, and from
+          // any mixed state everything shows.
+          return (
+            <li key={`folder-${folder}`} className="layers-panel__row layers-panel__row--background">
+              <button
+                type="button"
+                className="layers-panel__icon-button"
+                title={allVisible ? "Masquer le dossier" : "Afficher le dossier"}
+                onClick={() =>
+                  members
+                    .filter((layer) => layer.visible === allVisible)
+                    .forEach((layer) => onToggleVisible(layer.id))
+                }
+              >
+                {allVisible ? "👁" : "🚫"}
+              </button>
+              <button
+                type="button"
+                className="layers-panel__icon-button"
+                title={allLocked ? "Déverrouiller le dossier" : "Verrouiller le dossier"}
+                onClick={() =>
+                  members
+                    .filter((layer) => layer.locked === allLocked)
+                    .forEach((layer) => onToggleLocked(layer.id))
+                }
+              >
+                {allLocked ? "🔒" : "🔓"}
+              </button>
+              <span className="layers-panel__name">
+                📁 {folder} ({members.length})
+              </span>
+            </li>
+          );
+        })}
         {orderedLayers.map((layer, index) => {
           const count = objectCounts.get(layer.id) ?? 0;
           const isActive = layer.id === activeLayerId;
+          const isExpanded = expandedLayerIds.has(layer.id);
+          const layerObjects = objects.filter((object) => object.layerId === layer.id);
           return (
-            <li key={layer.id} className={`layers-panel__row${isActive ? " is-active" : ""}`}>
+            <li
+              key={layer.id}
+              className={`layers-panel__row${isActive ? " is-active" : ""}`}
+              // A layer row is a drop target: dragging an object here rehomes it.
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                const objectId = event.dataTransfer.getData("application/x-kl-object");
+                if (objectId) onAssignObjectToLayer(objectId, layer.id);
+              }}
+            >
+              <button
+                type="button"
+                className="layers-panel__icon-button"
+                disabled={count === 0}
+                title={isExpanded ? "Masquer les éléments" : "Afficher les éléments"}
+                onClick={() => setExpandedLayerIds((current) => {
+                  const next = new Set(current);
+                  if (next.has(layer.id)) next.delete(layer.id); else next.add(layer.id);
+                  return next;
+                })}
+              >
+                {isExpanded ? "▾" : "▸"}
+              </button>
               <button
                 type="button"
                 className="layers-panel__icon-button"
@@ -143,10 +218,23 @@ export function LayersPanel({
                   }
                 >
                   {isActive ? "● " : ""}
+                  {layer.folder ? `📁 ${layer.folder} / ` : ""}
                   {layer.name}
                   {count > 0 ? ` (${count})` : ""}
                 </button>
               )}
+              <button
+                type="button"
+                className="layers-panel__icon-button"
+                onClick={() => onSetLayerFolder(layer.id)}
+                title="Classer dans un dossier"
+              >📁</button>
+              <button
+                type="button"
+                className="layers-panel__icon-button"
+                onClick={() => onSetLayerDefaultStyle(layer.id)}
+                title="Définir le style par défaut du calque"
+              >🎨</button>
               <button
                 type="button"
                 className="layers-panel__icon-button"
@@ -178,6 +266,17 @@ export function LayersPanel({
               >
                 ✕
               </button>
+              {isExpanded && layerObjects.length > 0 && (
+                <ul className="layers-panel__objects">
+                  {layerObjects.map((object) => (
+                    <li key={object.id}>
+                      <button type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("application/x-kl-object", object.id); event.dataTransfer.effectAllowed = "move"; }} onClick={() => onSelectObject(object.id)} title="Glisser vers un autre calque">
+                        {object.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           );
         })}

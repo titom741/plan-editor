@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  constrainPointAngleM,
   CIRCLE_HANDLE_IDS,
   getCircleHandleWorld,
   getRectangleHandleWorld,
@@ -35,6 +36,14 @@ const OPPOSITE: Record<ResizeHandleId, ResizeHandleId> = {
   sw: "ne",
   w: "e",
 };
+
+describe("constrainPointAngleM", () => {
+  it("conserve la longueur et contraint la direction au pas demandé", () => {
+    const point = constrainPointAngleM({ xM: 0, yM: 0 }, { xM: 10, yM: 1 }, 15);
+    expect(point.yM).toBeCloseTo(0, 9);
+    expect(Math.hypot(point.xM, point.yM)).toBeCloseTo(Math.hypot(10, 1), 9);
+  });
+});
 
 describe("worldToObjectLocal / objectLocalToWorld", () => {
   it("round-trips a point through a rotated frame", () => {

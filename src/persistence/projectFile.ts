@@ -22,6 +22,7 @@
 import { PAPER_SIZE_ORDER } from "../domain/sheets";
 import type {
   Background,
+  BackgroundImage,
   Calibration,
   CalibrationSource,
   Layer,
@@ -183,6 +184,22 @@ function readBackground(value: unknown, path: string): Background {
   if (record.kind !== "image") fail(`${path}.kind`);
   const opacity = readFiniteNumber(record.opacity, `${path}.opacity`);
   if (opacity < 0 || opacity > 1) fail(`${path}.opacity`);
+  const brightness = record.brightness === undefined ? 0 : readFiniteNumber(record.brightness, `${path}.brightness`);
+  if (brightness < -1 || brightness > 1) fail(`${path}.brightness`);
+  const contrast = record.contrast === undefined ? 0 : readFiniteNumber(record.contrast, `${path}.contrast`);
+  if (contrast < -100 || contrast > 100) fail(`${path}.contrast`);
+  const whiteThreshold = record.whiteThreshold === undefined ? 245 : readFiniteNumber(record.whiteThreshold, `${path}.whiteThreshold`);
+  if (whiteThreshold < 0 || whiteThreshold > 255) fail(`${path}.whiteThreshold`);
+  let crop: BackgroundImage["crop"];
+  if (record.crop !== undefined) {
+    const cropRecord = readRecord(record.crop, `${path}.crop`);
+    crop = {
+      xPx: readFiniteNumber(cropRecord.xPx, `${path}.crop.xPx`),
+      yPx: readFiniteNumber(cropRecord.yPx, `${path}.crop.yPx`),
+      widthPx: readPositiveNumber(cropRecord.widthPx, `${path}.crop.widthPx`),
+      heightPx: readPositiveNumber(cropRecord.heightPx, `${path}.crop.heightPx`),
+    };
+  }
   return {
     id: readString(record.id, `${path}.id`),
     kind: "image",
@@ -193,7 +210,14 @@ function readBackground(value: unknown, path: string): Background {
     yM: readFiniteNumber(record.yM, `${path}.yM`),
     widthM: readPositiveNumber(record.widthM, `${path}.widthM`),
     heightM: readPositiveNumber(record.heightM, `${path}.heightM`),
+    rotationDeg: record.rotationDeg === undefined ? 0 : readFiniteNumber(record.rotationDeg, `${path}.rotationDeg`),
     opacity,
+    brightness,
+    contrast,
+    grayscale: record.grayscale === undefined ? false : readBoolean(record.grayscale, `${path}.grayscale`),
+    whiteRemoval: record.whiteRemoval === undefined ? false : readBoolean(record.whiteRemoval, `${path}.whiteRemoval`),
+    whiteThreshold,
+    ...(crop ? { crop } : {}),
     visible: readBoolean(record.visible, `${path}.visible`),
     locked: readBoolean(record.locked, `${path}.locked`),
   };
@@ -207,6 +231,8 @@ function readLayer(value: unknown, path: string): Layer {
     visible: readBoolean(record.visible, `${path}.visible`),
     locked: readBoolean(record.locked, `${path}.locked`),
     order: readFiniteNumber(record.order, `${path}.order`),
+    ...(record.folder !== undefined ? { folder: readString(record.folder, `${path}.folder`) } : {}),
+    ...(record.defaultStyle !== undefined ? { defaultStyle: readStyle(record.defaultStyle, `${path}.defaultStyle`) } : {}),
   };
 }
 
@@ -217,10 +243,52 @@ function readStyle(value: unknown, path: string): PlanObject["style"] {
   if (record.fill !== undefined) style.fill = readString(record.fill, `${path}.fill`);
   if (record.stroke !== undefined) style.stroke = readString(record.stroke, `${path}.stroke`);
   if (record.strokeWidth !== undefined) {
-    style.strokeWidth = readFiniteNumber(record.strokeWidth, `${path}.strokeWidth`);
+    style.strokeWidth = readPositiveNumber(record.strokeWidth, `${path}.strokeWidth`);
   }
-  if (record.opacity !== undefined) style.opacity = readFiniteNumber(record.opacity, `${path}.opacity`);
+  if (record.opacity !== undefined) {
+    const opacity = readFiniteNumber(record.opacity, `${path}.opacity`);
+    if (opacity < 0 || opacity > 1) fail(`${path}.opacity`);
+    style.opacity = opacity;
+  }
+  if (record.dash !== undefined) {
+    const dash = readString(record.dash, `${path}.dash`);
+    if (dash !== "solid" && dash !== "dashed" && dash !== "dotted") fail(`${path}.dash`);
+    style.dash = dash;
+  }
+  if (record.arrowStart !== undefined) style.arrowStart = readBoolean(record.arrowStart, `${path}.arrowStart`);
+  if (record.arrowEnd !== undefined) style.arrowEnd = readBoolean(record.arrowEnd, `${path}.arrowEnd`);
+  if (record.fontFamily !== undefined) {
+    const value = readString(record.fontFamily, `${path}.fontFamily`);
+    if (value !== "Arial" && value !== "Helvetica" && value !== "Georgia" && value !== "Courier New") fail(`${path}.fontFamily`);
+    style.fontFamily = value;
+  }
+  if (record.fontWeight !== undefined) {
+    const value = readString(record.fontWeight, `${path}.fontWeight`);
+    if (value !== "normal" && value !== "bold") fail(`${path}.fontWeight`);
+    style.fontWeight = value;
+  }
+  if (record.fontStyle !== undefined) {
+    const value = readString(record.fontStyle, `${path}.fontStyle`);
+    if (value !== "normal" && value !== "italic") fail(`${path}.fontStyle`);
+    style.fontStyle = value;
+  }
+  if (record.textAlign !== undefined) {
+    const value = readString(record.textAlign, `${path}.textAlign`);
+    if (value !== "left" && value !== "center" && value !== "right") fail(`${path}.textAlign`);
+    style.textAlign = value;
+  }
   return style;
+}
+
+function readMeasurement(value: unknown, path: string): PlanObject["measurement"] {
+  if (value === undefined || value === null) return undefined;
+  const record = readRecord(value, path);
+  const kind = readString(record.kind, `${path}.kind`);
+  if (kind !== "length" && kind !== "angle" && kind !== "area") fail(`${path}.kind`);
+  return {
+    kind,
+    ...(record.showSegments !== undefined ? { showSegments: readBoolean(record.showSegments, `${path}.showSegments`) } : {}),
+  };
 }
 
 function readObject(value: unknown, path: string): PlanObject {
@@ -233,7 +301,15 @@ function readObject(value: unknown, path: string): PlanObject {
     yM: readFiniteNumber(record.yM, `${path}.yM`),
     rotationDeg: readFiniteNumber(record.rotationDeg, `${path}.rotationDeg`),
     ...(record.label !== undefined ? { label: readString(record.label, `${path}.label`) } : {}),
+    ...(record.catalogId !== undefined ? { catalogId: readString(record.catalogId, `${path}.catalogId`) } : {}),
+    ...(record.category !== undefined ? { category: readString(record.category, `${path}.category`) } : {}),
+    ...(record.reference !== undefined ? { reference: readString(record.reference, `${path}.reference`) } : {}),
+    ...(record.quantity !== undefined ? { quantity: readPositiveNumber(record.quantity, `${path}.quantity`) } : {}),
+    ...(record.unit !== undefined ? { unit: readString(record.unit, `${path}.unit`) } : {}),
     ...(record.style !== undefined ? { style: readStyle(record.style, `${path}.style`) } : {}),
+    ...(record.measurement !== undefined ? { measurement: readMeasurement(record.measurement, `${path}.measurement`) } : {}),
+    ...(record.groupId !== undefined ? { groupId: readString(record.groupId, `${path}.groupId`) } : {}),
+    ...(record.groupName !== undefined ? { groupName: readString(record.groupName, `${path}.groupName`) } : {}),
   };
 
   const type = readString(record.type, `${path}.type`);
@@ -258,6 +334,8 @@ function readObject(value: unknown, path: string): PlanObject {
         text: readString(record.text, `${path}.text`),
         fontSizeM: readPositiveNumber(record.fontSizeM, `${path}.fontSizeM`),
       };
+    case "image":
+      return { ...base, type: "image", url: readString(record.url, `${path}.url`), widthPx: readPositiveNumber(record.widthPx, `${path}.widthPx`), heightPx: readPositiveNumber(record.heightPx, `${path}.heightPx`), widthM: readPositiveNumber(record.widthM, `${path}.widthM`), heightM: readPositiveNumber(record.heightM, `${path}.heightM`) };
     default:
       fail(`${path}.type`);
   }
@@ -284,6 +362,23 @@ function readSheet(value: unknown, path: string): Sheet {
     record.orientation === undefined ? defaults.orientation : readString(record.orientation, `${path}.orientation`);
   if (orientation !== "portrait" && orientation !== "landscape") fail(`${path}.orientation`);
 
+  let titleBlock: Sheet["titleBlock"];
+  if (record.titleBlock !== undefined) {
+    const block = readRecord(record.titleBlock, `${path}.titleBlock`);
+    titleBlock = {
+      ...(block.client !== undefined ? { client: readString(block.client, `${path}.titleBlock.client`) } : {}),
+      ...(block.author !== undefined ? { author: readString(block.author, `${path}.titleBlock.author`) } : {}),
+      ...(block.revision !== undefined ? { revision: readString(block.revision, `${path}.titleBlock.revision`) } : {}),
+      ...(block.planNumber !== undefined ? { planNumber: readString(block.planNumber, `${path}.titleBlock.planNumber`) } : {}),
+      ...(block.comments !== undefined ? { comments: readString(block.comments, `${path}.titleBlock.comments`) } : {}),
+      ...(block.logoDataUrl !== undefined ? { logoDataUrl: readString(block.logoDataUrl, `${path}.titleBlock.logoDataUrl`) } : {}),
+      ...(block.customFields !== undefined ? { customFields: readArray(block.customFields, `${path}.titleBlock.customFields`).map((value, index) => {
+        const field = readRecord(value, `${path}.titleBlock.customFields[${index}]`);
+        return { label: readString(field.label, `${path}.titleBlock.customFields[${index}].label`), value: readString(field.value, `${path}.titleBlock.customFields[${index}].value`) };
+      }) } : {}),
+    };
+  }
+
   return {
     id: readString(record.id, `${path}.id`),
     name: readString(record.name, `${path}.name`),
@@ -295,6 +390,7 @@ function readSheet(value: unknown, path: string): Sheet {
         : readPositiveNumber(record.scaleDenominator, `${path}.scaleDenominator`),
     marginMm:
       record.marginMm === undefined ? defaults.marginMm : readFiniteNumber(record.marginMm, `${path}.marginMm`),
+    ...(titleBlock ? { titleBlock } : {}),
   };
 }
 
@@ -320,6 +416,20 @@ function readProject(value: unknown, path: string): Project {
     }
   }
 
+  let georeference: Project["georeference"];
+  if (record.georeference !== undefined) {
+    const geo = readRecord(record.georeference, `${path}.georeference`);
+    if (geo.crs !== "EPSG:4326") fail(`${path}.georeference.crs`);
+    georeference = { crs: "EPSG:4326", originLongitude: readFiniteNumber(geo.originLongitude, `${path}.georeference.originLongitude`), originLatitude: readFiniteNumber(geo.originLatitude, `${path}.georeference.originLatitude`), rotationDeg: readFiniteNumber(geo.rotationDeg, `${path}.georeference.rotationDeg`) };
+  }
+  let collaboration: Project["collaboration"];
+  if (record.collaboration !== undefined) {
+    const value = readRecord(record.collaboration, `${path}.collaboration`);
+    collaboration = { comments: readArray(value.comments, `${path}.collaboration.comments`).map((raw, index) => {
+      const comment = readRecord(raw, `${path}.collaboration.comments[${index}]`);
+      return { id: readString(comment.id, `${path}.collaboration.comments[${index}].id`), author: readString(comment.author, `${path}.collaboration.comments[${index}].author`), text: readString(comment.text, `${path}.collaboration.comments[${index}].text`), createdAt: readString(comment.createdAt, `${path}.collaboration.comments[${index}].createdAt`), resolved: readBoolean(comment.resolved, `${path}.collaboration.comments[${index}].resolved`), ...(comment.objectId !== undefined ? { objectId: readString(comment.objectId, `${path}.collaboration.comments[${index}].objectId`) } : {}) };
+    }) };
+  }
   return {
     id: readString(record.id, `${path}.id`),
     name: readString(record.name, `${path}.name`),
@@ -329,6 +439,8 @@ function readProject(value: unknown, path: string): Project {
     updatedAt: readString(record.updatedAt, `${path}.updatedAt`),
     units: "m",
     calibration: readCalibration(record.calibration, `${path}.calibration`),
+    ...(georeference ? { georeference } : {}),
+    ...(collaboration ? { collaboration } : {}),
     background: readBackground(record.background, `${path}.background`),
     layers,
     objects,
@@ -372,6 +484,24 @@ export function parseProjectFile(value: unknown): ParseResult {
     };
   } catch (error) {
     if (error instanceof FieldError) return { ok: false, error: error.error };
+    throw error;
+  }
+}
+
+/**
+ * Validates a bare array of plan objects — the payload the reusable-component
+ * library keeps in `localStorage`, which has no project, layers or sheets
+ * around it. It goes through the very same `readObject` the project parser
+ * uses, so a template can never smuggle in a shape the editor cannot draw.
+ * Returns `null` rather than a `ParseError`: the caller's only sane recovery
+ * is to ignore the stored value.
+ */
+export function parsePlanObjects(value: unknown): PlanObject[] | null {
+  if (!Array.isArray(value)) return null;
+  try {
+    return value.map((item, index) => readObject(item, `objects[${index}]`));
+  } catch (error) {
+    if (error instanceof FieldError) return null;
     throw error;
   }
 }

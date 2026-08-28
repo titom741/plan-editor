@@ -1,4 +1,5 @@
 import type { PlanObject, Project } from "./types";
+import { angleAtPointDeg, formatAngleDeg, polygonAreaM2, polygonPerimeterM, polylineLengthM, formatAreaM2, formatLengthM } from "./measure";
 
 /**
  * Formats a meter value for display: whole numbers with no decimals,
@@ -20,10 +21,14 @@ export function getObjectDimensionSummary(object: PlanObject): string | null {
       return `${formatMeters(object.widthM)} × ${formatMeters(object.heightM)} m`;
     case "circle":
       return `⌀ ${formatMeters(object.radiusM * 2)} m`;
-    case "text":
     case "line":
+      return formatLengthM(polylineLengthM(object.pointsM));
     case "polygon":
+      return `${formatLengthM(polygonPerimeterM(object.pointsM))} · ${formatAreaM2(polygonAreaM2(object.pointsM))}`;
+    case "text":
       return null;
+    case "image":
+      return `${formatMeters(object.widthM)} × ${formatMeters(object.heightM)} m`;
   }
 }
 
@@ -35,6 +40,13 @@ export function getObjectDimensionSummary(object: PlanObject): string | null {
  */
 export function getObjectDisplayLabel(object: PlanObject): string {
   if (object.label) return object.label;
+  if (object.measurement?.kind === "angle" && object.type === "line" && object.pointsM.length >= 3) {
+    const [a, b, c] = object.pointsM;
+    if (a && b && c) return `${object.name}\n${formatAngleDeg(angleAtPointDeg(a, b, c))}`;
+  }
+  if (object.measurement?.kind === "area" && object.type === "polygon") {
+    return `${object.name}\n${formatAreaM2(polygonAreaM2(object.pointsM))}\nPérimètre ${formatLengthM(polygonPerimeterM(object.pointsM))}`;
+  }
   const dimensions = getObjectDimensionSummary(object);
   return dimensions ? `${object.name}\n${dimensions}` : object.name;
 }
@@ -45,6 +57,7 @@ const TYPE_NAME_PREFIXES: Record<PlanObject["type"], string> = {
   line: "Ligne",
   polygon: "Polygone",
   text: "Texte",
+  image: "Image",
 };
 
 /**

@@ -85,3 +85,30 @@ export function getSelectionBoundsM(objects: readonly PlanObject[]): BoundsM | n
   }
   return bounds;
 }
+
+/**
+ * The part of a selection a bulk edit may touch: everything not sitting on
+ * a locked layer.
+ *
+ * A locked layer's objects can still be *selected* — you need to be able
+ * to click one and read its dimensions — so every operation that writes
+ * has to filter, and the rule they all share belongs here rather than
+ * being re-derived at each call site. The convention, set by delete in
+ * KL-004, is that a mixed selection edits the unlocked part and leaves the
+ * rest, instead of refusing the whole gesture because one object in it is
+ * protected.
+ */
+export function editableObjects(
+  objects: readonly PlanObject[],
+  lockedLayerIds: ReadonlySet<string>,
+): PlanObject[] {
+  return objects.filter((object) => !lockedLayerIds.has(object.layerId));
+}
+
+/** True when a selection is non-empty and *entirely* locked — the point at which the properties panel goes read-only. */
+export function isSelectionLocked(
+  objects: readonly PlanObject[],
+  lockedLayerIds: ReadonlySet<string>,
+): boolean {
+  return objects.length > 0 && objects.every((object) => lockedLayerIds.has(object.layerId));
+}

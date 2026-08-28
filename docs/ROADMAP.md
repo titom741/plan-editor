@@ -48,8 +48,8 @@ half-finished features spanning missions.
 
   Not covered, and still open: resizing or rotating a multi-selection as
   a group (what "resize" means for a circle and a text label in the same
-  gesture is a design question, not a missing function); snapping, which
-  belongs to KL-007; and the system clipboard — copies live in memory, so
+  gesture is a design question, not a missing function); and the system
+  clipboard — copies live in memory, so
   they don't cross between browser tabs.
 
 - **KL-005 — Calibration** *(done)*
@@ -64,10 +64,11 @@ half-finished features spanning missions.
   fixes shapes swallowing clicks meant for a non-select tool. See the
   KL-005 mission report for the full list of decisions.
 
-  Not covered, and still open: the `knownScale` (1:100) and `geo`
-  `CalibrationSource` cases, and calibrating with the plan rotated.
+  La calibration par échelle connue (1:100 + DPI) et la calibration d'un
+  fond tourné ont depuis été ajoutées dans KL-016/KL-017. Le cas `geo`
+  reste ouvert.
 
-- **KL-006 — Layers** *(this mission)*
+- **KL-006 — Layers** *(done)*
   Full layer management: create, rename (double-click), reorder, delete,
   and an **active layer** that new objects land on — KL-002 always
   targeted the first unlocked one. A layer picker in the properties panel
@@ -80,9 +81,22 @@ half-finished features spanning missions.
   Not covered, and still open: dragging objects between layers directly
   on the canvas, per-layer default styles, and layer groups/folders.
 
-- **KL-007 — Measurements**
-  On-canvas measurement tool (distance, area) and snapping to grid/objects,
-  built on the KL-002 geometry primitives.
+- **KL-007 — Measurements** *(done)*
+  An on-canvas ruler measures every segment, the running open length and,
+  from three points onward, the enclosed area. `Enter` persists the result
+  as an editable, printable line or polygon whose dimensions remain
+  derived from geometry; `Escape` clears an unfinished measurement.
+
+  Snapping is enabled by default for creation, movement, resize handles
+  and line/polygon vertices. It targets the visible grid plus vertices,
+  edge midpoints and centres of objects on visible layers, with a constant
+  10 px screen tolerance at every zoom. Object targets take priority over
+  the grid; the moving selection is excluded to prevent self-snapping.
+  `Alt` bypasses snapping for one gesture and the Magnétisme checkbox turns
+  it off persistently for the current editor session.
+
+  Not covered, and still open: angular measurements, alignment guides and
+  snapping to projected axes rather than discrete points.
 
 - **KL-008 — Persistence** *(done)*
   A new `persistence/` layer: `projectFile.ts` (pure — a versioned
@@ -101,7 +115,7 @@ half-finished features spanning missions.
 - **KL-009 — Export** *(done)*
   `Sheet` becomes functional (paper size, orientation, print scale,
   margin) and a new `printing/` layer puts the plan on paper: a
-  hand-written one-page PDF writer, sheet layout with frame, title block
+  hand-written PDF writer, sheet layout with frame, title block
   and a true scale bar, and `domain/bounds.ts` to frame the drawing. PDF
   and PNG export, with the dialog warning — before you print — when the
   plan won't fit at the chosen scale. Verified against real PDFs: page
@@ -115,7 +129,198 @@ half-finished features spanning missions.
 
 ---
 
-The roadmap as first drafted is complete, and KL-004 and KL-006 have
-closed both of the features deferred from it. Natural next steps, in rough
-order of usefulness: KL-007 (measurement and snapping), then multi-sheet plans, a legend/schedule of objects, and
-vector PDF output.
+The first roadmap is complete. The product backlog below turns the 41-point
+audit into bounded KL missions. A mission is only marked done when its UI,
+persistence, tests and documentation are complete.
+
+## Product backlog — audit des 41 améliorations
+
+- **KL-010 — Bibliothèque métier et nomenclature** *(done)*
+  Palette de matériels événementiels avec dimensions/styles prédéfinis,
+  métadonnées (catégorie, référence, quantité, unité), légende et
+  nomenclature regroupée par type/calque, export CSV puis PDF. Couvre les
+  points **6, 10 et 26 (CSV)**. La bibliothèque, les quantités et le CSV
+  sont implémentés, y compris longueurs, surfaces et regroupement par
+  calque ; la nomenclature est exportable en CSV et en PDF textuel.
+
+- **KL-011 — Portefeuille de projets et versions** *(done)*
+  Plusieurs projets locaux, projets récents, duplication, renommage,
+  suppression, instantanés datés et restauration d'une version. Couvre les
+  points **2, 24 et 27**. La conservation et l'ouverture de plusieurs
+  projets, le renommage, la duplication, la suppression et les versions
+  datées restaurables sont implémentés. Une piste de récupération automatique
+  est enregistrée toutes les cinq minutes d'activité et bornée aux vingt
+  derniers instantanés, en complément de l'annuler/rétablir de session.
+
+- **KL-012 — Cotations avancées** *(done)*
+  Cotes linéaires persistantes, angles, surfaces annotées, unités et styles,
+  association dynamique avec la géométrie ; fermeture explicite, retour au
+  point précédent et reprise d'une mesure. Couvre les points **3 et 37**.
+  Les longueurs ouvertes, angles à trois points et surfaces/périmètres fermés
+  sont persistants, modifiables, stylables et imprimables. Retour arrière
+  pendant la saisie avec Retour arrière, fermeture explicite par clic sur le
+  premier point et reprise par modification des sommets sont disponibles.
+
+- **KL-013 — Transformations de groupe et composants** *(done)*
+  Redimensionnement/rotation d'une sélection multiple, groupes nommés,
+  composants réutilisables et modèles enregistrables. Couvre les points
+  **4 et 11**. Les groupes nommés, la sélection solidaire, le déplacement,
+  la duplication, la mise à l'échelle uniforme et la rotation collective
+  sont implémentés. Une sélection ou un groupe peut être enregistré dans la
+  bibliothèque personnelle locale, réinséré, déplacé, dupliqué et supprimé.
+
+- **KL-014 — Guides, contraintes et géométrie avancée** *(done)*
+  Guides d'alignement, axes projetés, prolongements, intersections,
+  tangentes, espacement régulier, contrainte de rotation par pas et retour
+  visuel de l'accrochage. Couvre les points **7, 8 et 36 (guides/snap)**.
+  La rotation et le dessin de ligne contraints par pas de 15° avec Maj,
+  les guides horizontaux/verticaux projetés, les intersections de segments
+  et prolongements, les tangentes aux cercles et la répartition régulière
+  d'une sélection sont implémentés.
+
+- **KL-015 — Nouveaux objets et styles complets** *(done)*
+  Arcs, secteurs, flèches, pointillés, câbles avec largeur, portes,
+  ouvertures, pictogrammes/images, polices et styles par défaut. Le calcul
+  des limites du texte utilisera son étendue rendue. Couvre les points
+  **9, 12 et 13**.
+  Les traits continus/tirets/pointillés, flèches et largeurs de câbles sont
+  désormais disponibles et conservés dans les fichiers/exports. Les polices,
+  graisse, italique, alignement et l'étendue estimée du texte sont également
+  gérés ; portes, véhicules et symboles techniques ont rejoint la bibliothèque.
+  Les images/pictogrammes sont des objets ordinaires de calque. Arcs et
+  secteurs métriques éditables sont fournis comme polylignes/polygones dans
+  la bibliothèque, ce qui les rend compatibles avec tous les exports.
+
+- **KL-016 — Fonds de plan multiples et traitement d'image** *(done)*
+  Plusieurs fonds superposables, rotation/redressement, recadrage,
+  luminosité/contraste, niveaux de gris, suppression du blanc et
+  remplacement en conservant la transformation. Couvre les points
+  **14, 16 et 17**. La rotation/redressement, la luminosité, le contraste,
+  les niveaux de gris et le remplacement en conservant la transformation
+  sont implémentés. La grille et la navigation sont automatiquement bornées
+  à l'emprise tournée du fond, avec cadrage automatique et commande de
+  recentrage. Le recadrage non destructif et la suppression paramétrable du
+  blanc sont implémentés. Un fond principal reste la référence calibrée ;
+  autant de plans complémentaires que nécessaire peuvent être superposés
+  comme images ordinaires, placées et verrouillées sur leurs propres calques.
+
+- **KL-017 — Calibration avancée et géoréférencement** *(done)*
+  Calibration par échelle connue, coordonnées réelles, système de
+  projection et import géoréférencé. Couvre les points **15 et 18**. La
+  calibration directe par échelle connue et DPI (par exemple 1:100 à
+  300 DPI) est implémentée. Le projet accepte une origine WGS84 et une
+  rotation locale ; l'export et l'import GeoJSON convertissent réellement
+  mètres locaux et longitude/latitude. Les projections SIG autres que
+  WGS84 passent volontairement par un outil SIG externe.
+
+- **KL-018 — Calques avancés** *(done)*
+  Glisser-déposer d'objets entre calques, dossiers/sous-calques, opérations
+  collectives, styles par défaut et choix de destination ou suppression des
+  objets lors de la suppression d'un calque. Couvre les points
+  **19, 20, 21 et 22**. Les objets se glissent depuis la liste vers un autre
+  calque, les calques se classent en dossiers, disposent d'un style par
+  défaut, et leur suppression propose une destination ou l'effacement
+  explicite de leur contenu. Visibilité et verrouillage s'appliquent aussi
+  collectivement à un dossier.
+
+- **KL-019 — Échanges et presse-papiers interopérables** *(done)*
+  Presse-papiers système, échange d'une sélection, SVG, DXF, GeoJSON,
+  image transparente et stratégie documentée pour DWG. Couvre les points
+  **25 et 26 (hors CSV)**. DWG nécessitera vraisemblablement un convertisseur
+  externe ; DXF/SVG/GeoJSON restent locaux et sont maintenant exportables
+  pour le plan entier ou la sélection. Le presse-papiers système transporte
+  les objets entre onglets KL avec repli sur le presse-papiers mémoire.
+  GeoJSON local ou WGS84 est importé nativement et le PNG peut conserver
+  la transparence. Les imports CAO SVG/DXF complexes et le DWG utilisent
+  la stratégie documentée de conversion externe afin de ne pas interpréter
+  partiellement des fichiers métier.
+
+- **KL-020 — Collaboration et révisions** *(local part done; backend required)*
+  Partage, comptes, commentaires, synchronisation, historique partagé,
+  résolution des conflits et édition simultanée. Couvre le point **23**.
+  Les commentaires nommés, liés éventuellement à un objet, résolus/rouverts,
+  sont persistants dans le fichier et les versions locales. Le partage avec
+  comptes, la synchronisation et l'édition simultanée exigent encore le choix
+  d'un backend, d'une politique d'accès et d'un hébergement par le propriétaire.
+
+- **KL-021 — Feuilles, aperçu et cartouche** *(done)*
+  Plusieurs feuilles avec réglages indépendants, prévisualisation fidèle,
+  cartouche configurable (logo, client, auteur, révision, numéro,
+  commentaires et champs personnalisés). Couvre les points **1, 28 et 30**.
+  Plusieurs feuilles avec ajout, duplication, suppression, nom, format,
+  orientation et échelle indépendants, aperçu fidèle et cartouche
+  configurable sont implémentés, y compris logo réellement embarqué dans le
+  PDF et champs personnalisés.
+
+- **KL-022 — Impression multipage et PDF vectoriel** *(done)*
+  Dessin réellement vectoriel, texte sélectionnable, découpage automatique
+  en pages avec recouvrement/repères et stratégie de résolution explicite.
+  Couvre les points **5, 29 et 31**. Les objets, contours et textes sont
+  désormais écrits en primitives PDF vectorielles et le fond reste la seule
+  image raster. Le plan est automatiquement découpé en un PDF multi-pages
+  avec 10 mm de recouvrement, cadre d'assemblage et numérotation des pages.
+
+- **KL-023 — Interface adaptative et accessibilité** *(done)*
+  Panneaux repliables, tablette/tactile, pincement, poignées adaptées,
+  navigation clavier du plan, représentation DOM parallèle accessible,
+  aide et personnalisation des raccourcis. Couvre les points
+  **32, 33, 34 et 35**.
+  Les panneaux latéraux sont repliables, la disposition bascule en colonne
+  sur mobile/tablette, le canevas accepte le pincement et une liste DOM
+  parallèle rend les objets sélectionnables au clavier et lisibles par les
+  aides techniques. Une fenêtre récapitule les raccourcis et permet de
+  réaffecter chaque commande, avec restauration des valeurs par défaut.
+
+- **KL-024 — Barre d'état et retours de dessin** *(done)*
+  Coordonnées du curseur, distance/angle en direct, cible d'accrochage,
+  calque actif/verrouillé plus visible et messages d'état consolidés.
+  Couvre le point **36** (hors guides, traités en KL-014). La barre d'état
+  affiche coordonnées, sélection, type exact d'accrochage et calque actif ;
+  rectangles, cercles et lignes montrent dimensions et angle pendant le geste.
+
+- **KL-025 — Robustesse, performances et diagnostic** *(local work done; browser runner external)*
+  Scénarios end-to-end React/Konva, découpage dynamique du bundle, index
+  spatial et cache pour les grands plans, limitation à la zone visible,
+  mode de rendu simplifié et rapport de diagnostic local exportable sans
+  télémétrie automatique. Couvre les points **38, 39, 40 et 41**.
+  Les dialogues lourds et l'écriture des exports sont chargés à la demande.
+  Un rapport de diagnostic anonymisé et entièrement local est exportable ;
+  il exclut noms d'objets, textes, coordonnées et pixels du fond. Les cibles
+  d'accrochage utilisent maintenant un index spatial, le rendu est limité au
+  viewport et simplifié au-delà de 2 000 objets. L'éditeur/Konva est chargé
+  à la demande : le plus gros chunk est passé sous 500 kB. Les 313 tests
+  automatisés locaux passent. L'exécution de scénarios React/Konva end-to-end
+  reste une étape d'intégration : elle demande l'installation d'un navigateur
+  Playwright/Cypress (absent de cet environnement) ou la reconnexion de l'outil
+  navigateur, et n'est donc pas déclarée comme exécutée ici.
+
+### Correspondance exhaustive
+
+Les 41 points sont affectés ainsi : 1→KL-021, 2→KL-011, 3→KL-012,
+4→KL-013, 5→KL-022, 6→KL-010, 7–8→KL-014, 9→KL-015, 10→KL-010,
+11→KL-013, 12–13→KL-015, 14→KL-016, 15→KL-017, 16–17→KL-016,
+18→KL-017, 19–22→KL-018, 23→KL-020, 24→KL-011, 25→KL-019,
+26→KL-010/KL-019, 27→KL-011, 28→KL-021, 29→KL-022,
+30→KL-021, 31→KL-022, 32–35→KL-023, 36→KL-014/KL-024,
+37→KL-012 et 38–41→KL-025.
+
+## Audit pass (2026-08-28)
+
+A full read of everything through KL-025, before committing the batch.
+No feature work: two real defects fixed, `Editor.tsx` decomposed into
+four hooks, three `window.prompt` chains replaced by forms, dead code
+removed, and the reusable-component store made to validate what it reads
+back. See "How `Editor` is decomposed" in `docs/ARCHITECTURE.md`.
+
+Still open, and deliberately not done here:
+
+- **No formatter.** The code written across KL-010+ is far denser than
+  KL-001–009 (single lines of 400–2 000 characters); the worst were
+  reformatted by hand, but the repo has no mechanical guard. Adding
+  Prettier would settle it — as its own commit, so the reformat diff
+  stays separate from real changes.
+- **`domain/labels.ts` has no test file**, and it now carries the
+  measurement-label branching.
+- **`useSelection` / `useLayerActions` are untested**: exercising a hook
+  needs a React test renderer, which the project does not have. The rules
+  worth testing were moved into `domain/` instead.

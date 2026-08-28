@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createBackgroundImage, worldDistanceToImagePixels } from "./background";
 import { calibrationFromKnownDistance } from "./calibration";
 import { getObjectDimensionSummary, getObjectDisplayLabel, nextObjectName } from "./labels";
-import { createCircleObject, createRectangleObject } from "./objects";
+import { createCircleObject, createLineObject, createPolygonObject, createRectangleObject } from "./objects";
 import { createDefaultLayers, DEFAULT_LAYER_NAMES, getDefaultTargetLayer } from "./layers";
 import {
   addObject,
@@ -14,7 +14,6 @@ import {
   patchObject,
   patchObjects,
   removeBackground,
-  removeObject,
   removeObjects,
   setBackground,
 } from "./project";
@@ -104,6 +103,25 @@ describe("getObjectDimensionSummary / getObjectDisplayLabel", () => {
     const circle = createCircleObject({ layerId: "l", name: "Bassin", xM: 0, yM: 0, radiusM: 2 });
     expect(getObjectDimensionSummary(circle)).toBe("⌀ 4 m");
   });
+
+  it("keeps persistent measurement labels derived from editable geometry", () => {
+    const line = createLineObject({
+      layerId: "l",
+      name: "Mesure",
+      xM: 0,
+      yM: 0,
+      pointsM: [{ xM: 0, yM: 0 }, { xM: 3, yM: 4 }],
+    });
+    const area = createPolygonObject({
+      layerId: "l",
+      name: "Mesure de zone",
+      xM: 0,
+      yM: 0,
+      pointsM: [{ xM: 0, yM: 0 }, { xM: 4, yM: 0 }, { xM: 4, yM: 3 }],
+    });
+    expect(getObjectDimensionSummary(line)).toBe("5 m");
+    expect(getObjectDimensionSummary(area)).toBe("12 m · 6 m²");
+  });
 });
 
 describe("nextObjectName", () => {
@@ -120,7 +138,7 @@ describe("nextObjectName", () => {
   });
 });
 
-describe("addObject / removeObject / patchObject", () => {
+describe("addObject / removeObjects / patchObject", () => {
   it("addObject appends without mutating the original project", () => {
     const project = createEmptyProject({ name: "Test" });
     const layer = project.layers[0];
@@ -133,15 +151,15 @@ describe("addObject / removeObject / patchObject", () => {
     expect(next.objects[0]).toBe(rect);
   });
 
-  it("removeObject filters out the matching object and is a no-op otherwise", () => {
+  it("removeObjects filters out the matching objects and is a no-op otherwise", () => {
     const project = createDemoProject();
     const id = project.objects[0]?.id;
     if (!id) throw new Error("expected the demo object");
 
-    const removed = removeObject(project, id);
+    const removed = removeObjects(project, [id]);
     expect(removed.objects).toHaveLength(0);
 
-    const noop = removeObject(project, "does-not-exist");
+    const noop = removeObjects(project, ["does-not-exist"]);
     expect(noop.objects).toHaveLength(1);
   });
 

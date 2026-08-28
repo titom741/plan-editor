@@ -8,12 +8,10 @@ dimensions in meters.
 Deliberately **not** a general-purpose CAD tool — it's scoped to fast,
 simple event-layout drafting.
 
-Current mission: **KL-006 (Calques)** — create, rename, reorder and
-delete layers, choose which one new objects land on, and move a selection
-between them. On top of everything
-the earlier missions deliver: draw and edit in real-world dimensions with
-undo/redo, import and calibrate a background, save the project
-automatically, and print it to a true-scale PDF. See
+The **KL-010 to KL-025** programme derived from the 41-point product audit
+is implemented locally. Only real-time multi-user synchronization and
+connected-browser E2E execution remain dependent on external infrastructure.
+The earlier KL-001 to KL-009 missions remain complete. See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how it's built and
 [`docs/ROADMAP.md`](docs/ROADMAP.md) for what's next.
 
@@ -43,12 +41,16 @@ model → viewport → Konva) is visible immediately.
 **Canvas**
 
 - **Scroll / wheel** to zoom, centered on the cursor.
-- **Drag** empty canvas to pan (select tool only).
+- **Drag** empty canvas to pan (select tool only). Dès qu'un fond est
+  visible, la navigation et la grille restent bornées à son emprise : le
+  plan ne peut plus être perdu dans un canevas infini. **Cadrer le plan**
+  le recentre intégralement.
 - **Click** an object to select it; **drag** it to move it.
 - **Drag any of the eight handles** on a selected rectangle — four corners
   and four edge midpoints — to resize it; hold **Maj** to keep its
   proportions. A circle has four handles, one per compass point. The
   handle **above** a selection rotates it.
+  Hold **Maj** while rotating to constrain the angle to 15° increments.
 - **Drag a vertex** of a selected line or polygon to reshape it; **click a
   small dashed dot** on a segment to add a vertex there; **double-click a
   vertex** to remove it (a line keeps at least 2 points, a polygon 3).
@@ -74,8 +76,8 @@ model → viewport → Konva) is visible immediately.
   Holding a key down is one undo step, not fifty.
 - **`Ctrl`/`Cmd` + C** / **+ V** copy and paste; **+ D** duplicates in
   place. Each successive paste is offset a little further so copies don't
-  stack invisibly, and the copies become the new selection. The clipboard
-  lives in the page, so it doesn't cross between tabs.
+  stack invisibly, and the copies become the new selection. The system
+  clipboard lets KL selections cross between tabs, with an in-memory fallback.
 
 **Creating objects** — pick a tool in the left panel, then:
 
@@ -85,11 +87,42 @@ model → viewport → Konva) is visible immediately.
 - **Texte** — click once to place it, then rename its content from the
   properties panel.
 
-Every tool returns to Selection and selects the object you just drew.
+Every object-creation tool returns to Selection and selects the object you
+just drew.
+
+Le fond de plan peut être redressé par rotation et corrigé sans modifier
+son fichier source (recadrage, luminosité, contraste, niveaux de gris,
+suppression du blanc). Le remplacer conserve sa transformation et ses
+réglages. Des plans complémentaires peuvent être importés comme images
+ordinaires et superposés sur des calques verrouillables.
+
+**Measurements and snapping**
+
+- **Mesure** — click successive points to read each segment and the running
+  total. From three points onward the enclosed area is shown too. `Entrée`
+  adds the result to the plan; `Échap` clears the unfinished measurement.
+  The resulting line or area can be selected, edited, styled, saved and
+  printed, and its dimensions are recalculated when its vertices move.
+- **Magnétisme** is enabled by default. Creation points, object anchors,
+  resize handles and line/polygon vertices snap to visible grid
+  intersections and to object vertices, edge midpoints and centres.
+- Les lignes s'accrochent aussi aux intersections/prolongements et aux
+  tangentes des cercles ; une sélection de trois objets ou plus peut être
+  répartie à espacement régulier.
+- Hold **Alt** during a gesture to bypass snapping temporarily, or clear
+  the Magnétisme checkbox to disable it until you turn it back on. Hidden
+  layers never contribute snap targets, and the objects being moved are
+  excluded so a selection cannot snap to itself.
+- The grid can be hidden. With **Limiter au fond**, it is clipped to the
+  imported reference plan and does not attract the pointer outside it.
 
 **Properties panel** — edit an object's name, position, dimensions,
 rotation, or text directly; the canvas updates live as you type, and
 dimensions on the canvas label update live as you drag.
+It also exposes a custom label, fill/text colour, outline colour and
+thickness, opacity, and text font size; all are preserved in project files
+and in exports. Lines can be continuous, dashed or dotted, display an arrow
+at either end, and use a wider stroke to represent a cable or path.
 
 **Undo / redo** — `Ctrl`/`Cmd`+`Z` to undo, `Ctrl`/`Cmd`+`Shift`+`Z` (or
 `Ctrl`/`Cmd`+`Y`) to redo, or the toolbar buttons. Covers creation, moving,
@@ -98,7 +131,10 @@ resizing, rotating, deleting, and property edits.
 **Saving** — your project is saved automatically in this browser a moment
 after you stop editing; the toolbar shows the save state, and reopening the
 page restores the project (background image included). That copy is local
-to this browser, so use **Enregistrer un fichier** for a real, portable
+to this browser. **Récents…** lists every locally retained project and lets
+you open, rename, duplicate or delete it, create a dated version and restore
+an earlier version. Click the current project name in the toolbar to rename
+it. Use **Enregistrer un fichier** for a real, portable
 `.kl.json` copy you can back up or move to another machine, and **Ouvrir…**
 to load one back. **Nouveau** starts an empty project (it asks first). A
 file that isn't a valid project is refused with an explanation and your
@@ -106,13 +142,40 @@ current work is left untouched; opening or creating a project clears the
 undo history, since undo can't meaningfully cross from one document into
 another.
 
-**Exporting to paper** — **🖨 Exporter…** puts the plan on a sheet: pick a
-paper size, orientation and scale, and export a **PDF** or a **PNG**. The
+**Material library and schedule** — **Bibliothèque…** inserts common event
+equipment with real dimensions, a reference, category and ready-made style.
+Each object can carry a quantity and unit in the properties panel.
+**Nomenclature…** groups items by layer/category/reference and exports a
+spreadsheet-ready CSV; ordinary lines are measured in metres and polygons
+in square metres when no explicit unit is set.
+
+**Local diagnostic** — **Diagnostic** exports a technical JSON report for
+troubleshooting. It stays on the machine unless you choose to share it and
+contains no object names, text, coordinates or background image pixels.
+
+**Exporting to paper** — **🖨 Exporter…** puts the plan on a sheet: create,
+duplicate and switch between several named sheets, each with its own format,
+orientation and scale, then export the active sheet as a
+**PDF**, un **PDF multi-feuilles** avec recouvrement ou un **PNG** transparent. The
 dialog tells you how much ground the sheet covers and how big your plan
 actually is, and warns you *before* you print if it won't fit at the
 chosen scale (with a one-click "Ajuster" to the nearest standard scale
 that does). The scale is never changed for you — a sheet labelled 1:200
 is at 1:200.
+The dialog previews the actual rendered sheet and lets each sheet carry a
+client, author, revision, plan number, comments, logo and custom fields in
+its title block.
+
+**Échanges et géoréférencement** — **Échanges…** exporte le plan ou la
+sélection en SVG, DXF et GeoJSON. Une origine WGS84 et une rotation peuvent
+être associées au projet ; GeoJSON est alors exporté et réimporté en vraies
+longitude/latitude. Le DWG et les projections SIG spécialisées passent par
+un convertisseur CAO/SIG externe.
+
+**Commentaires et raccourcis** — les commentaires persistent avec le projet,
+peuvent viser l'objet sélectionné et être résolus. **Raccourcis…** permet de
+consulter et réaffecter les commandes clavier. La synchronisation simultanée
+entre comptes n'est pas simulée : elle requiert un backend choisi et configuré.
 
 Print the PDF **without** "fit to page" or any scaling and it is
 dimensionally true: at 1:200, one metre on the ground is 5 mm on the
@@ -133,18 +196,22 @@ always behind everything).
   the layer below, and the confirmation says how many will. The last
   remaining layer can't be deleted.
 - **＋ Calque** adds one on top.
+- **▸** opens the layer's element list; click an element there to select it
+  on the plan, including when objects overlap.
 - The **Calque** dropdown in the properties panel moves the selection —
   one object or a whole group — to another layer.
 
 **Background** — click "Importer un fond de plan…" in the layers bar (or
 "Remplacer" in the properties panel once one exists) to choose a PNG/JPEG.
 It's placed centered on the current view at an approximate size; select it
-to drag it into place, drag its corner handle to resize (aspect ratio is
+to inspect it. It is locked by default so dragging on the reference moves
+the view rather than accidentally shifting the plan. Explicitly unlock it
+to drag it into place or resize it from its corner (aspect ratio is
 always preserved — a background is a photo/scan, not a shape to stretch),
 and adjust its opacity from the properties panel.
 
 **Calibration** — to give the plan its true real-world scale, select the
-background and click **📏 Calibrer**, then click two points on it whose
+background and click **📏 Par distance**, then click two points on it whose
 real distance you know (a door width, a marked dimension, a building
 edge) and enter that distance. The background resizes to its true size;
 `Échap` cancels at any point, and the whole calibration is a single undo
@@ -152,6 +219,8 @@ step. Calibrating never moves your objects and never changes the zoom
 level — it corrects the background, not the plan. Recalibrate as often as
 you like: each pass measures against the current scale, so repeating it
 on the same segment gives the same answer instead of drifting.
+Si le document possède une échelle imprimée et un DPI fiable, **1:100 Par
+échelle** permet aussi de saisir directement ces deux valeurs.
 
 ## Test
 

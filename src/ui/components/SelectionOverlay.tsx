@@ -33,6 +33,8 @@ interface SelectionOverlayProps {
   onLiveUpdate: (patch: PlanObjectPatch) => void;
   /** Applies a one-shot structural change — adding or removing a vertex — as its own undo step. */
   onCommit: (patch: PlanObjectPatch) => void;
+  /** Pulls a pointer position onto a snap target (KL-007). Applied to resize and vertex handles; a rotation follows the pointer's angle, which has nothing to snap to. */
+  snapWorld: (pointM: PointM) => PointM;
 }
 
 /** Screen-pixel gap between a shape and its rotate handle — constant on screen at any zoom, since it's converted to meters fresh from the current viewport. */
@@ -85,6 +87,8 @@ interface OverlayHandle {
   shape: "square" | "circle" | "dot";
   cursor: string;
   onDragMove?: (pointerWorld: PointM, modifiers: { shiftKey: boolean }) => void;
+  /** Whether this handle's pointer position goes through snapping. */
+  snaps?: boolean;
   onClick?: () => void;
   onDoubleClick?: () => void;
 }
@@ -97,7 +101,7 @@ interface OverlayHandle {
  * *world* position, never by accumulating pixel deltas. That's what keeps
  * editing drift-free across zoom changes.
  */
-export function SelectionOverlay({ object, viewport, onBeginEdit, onLiveUpdate, onCommit }: SelectionOverlayProps) {
+export function SelectionOverlay({ object, viewport, onBeginEdit, onLiveUpdate, onCommit, snapWorld }: SelectionOverlayProps) {
   const gapM = ROTATE_HANDLE_GAP_PX / (viewport.basePixelsPerMeter * viewport.zoom);
   const anchorWorld: PointM = { xM: object.xM, yM: object.yM };
   const handles: OverlayHandle[] = [];
@@ -107,16 +111,19 @@ export function SelectionOverlay({ object, viewport, onBeginEdit, onLiveUpdate, 
     worldPoint: getRotateHandleWorld(anchorWorld, object.rotationDeg, gapM, localOffset),
     shape: "circle",
     cursor: "grab",
-    onDragMove: (pointerWorld) =>
-      onLiveUpdate({ rotationDeg: computeRotationFromPointer(anchorWorld, pointerWorld) }),
+    onDragMove: (pointerWorld, modifiers) => {
+      const rawRotation = computeRotationFromPointer(anchorWorld, pointerWorld);
+      onLiveUpdate({ rotationDeg: modifiers.shiftKey ? Math.round(rawRotation / 15) * 15 % 360 : rawRotation });
+    },
   });
 
-  if (object.type === "rectangle") {
+  if (object.type === "rectangle" || object.type === "image") {
     for (const handle of RESIZE_HANDLE_IDS) {
       handles.push({
         key: `resize-${handle}`,
         worldPoint: getRectangleHandleWorld(object, handle),
         shape: "square",
+        snaps: true,
         cursor: resizeCursorFor(handle, object.rotationDeg),
         onDragMove: (pointerWorld, modifiers) =>
           onLiveUpdate(
@@ -131,6 +138,7 @@ export function SelectionOverlay({ object, viewport, onBeginEdit, onLiveUpdate, 
         key: `resize-${handle}`,
         worldPoint: getCircleHandleWorld(object, handle),
         shape: "square",
+        snaps: true,
         // The handle sits at a fixed compass point; a circle's own rotation
         // doesn't move it, so the cursor doesn't rotate either.
         cursor: resizeCursorFor(handle, 0),
@@ -149,6 +157,7 @@ export function SelectionOverlay({ object, viewport, onBeginEdit, onLiveUpdate, 
         key: `vertex-${index}`,
         worldPoint,
         shape: "circle",
+        snaps: true,
         cursor: "move",
         onDragMove: (pointerWorld) => {
           const moved = moveVertexTo(object, index, pointerWorld);
@@ -213,7 +222,8 @@ export function SelectionOverlay({ object, viewport, onBeginEdit, onLiveUpdate, 
             // from the stage instead of the node for both shapes, and the
             // two behave identically.
             const pointer = node.getStage()?.getPointerPosition();
-            const pointerWorld = screenToWorld(pointer ?? { x: node.x(), y: node.y() }, viewport);
+            const rawWorld = screenToWorld(pointer ?? { x: node.x(), y: node.y() }, viewport);
+            const pointerWorld = handle.snaps ? snapWorld(rawWorld) : rawWorld;
             handle.onDragMove(pointerWorld, { shiftKey: e.evt.shiftKey });
           },
           onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => {

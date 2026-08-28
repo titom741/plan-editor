@@ -34,6 +34,30 @@ export function normalizeAngleDeg(deg: number): number {
   return normalized < 0 ? normalized + 360 : normalized;
 }
 
+/** Keeps a segment length while snapping its direction to an angular step. */
+export function constrainPointAngleM(start: PointM, end: PointM, stepDeg = 15): PointM {
+  const vector = subtractPoints(end, start);
+  const length = vectorLength(vector);
+  if (length === 0 || !(stepDeg > 0)) return end;
+  const angle = Math.atan2(vector.yM, vector.xM);
+  const step = degToRad(stepDeg);
+  const constrained = Math.round(angle / step) * step;
+  return { xM: start.xM + Math.cos(constrained) * length, yM: start.yM + Math.sin(constrained) * length };
+}
+
+/** Tangency points from an external point to a circle; empty inside/on it. */
+export function tangentPointsToCircleM(origin: PointM, center: PointM, radiusM: number): PointM[] {
+  const dx = origin.xM - center.xM; const dy = origin.yM - center.yM;
+  const distanceSquared = dx * dx + dy * dy;
+  if (!(radiusM > 0) || distanceSquared <= radiusM * radiusM) return [];
+  const base = radiusM * radiusM / distanceSquared;
+  const offset = radiusM * Math.sqrt(distanceSquared - radiusM * radiusM) / distanceSquared;
+  return [
+    { xM: center.xM + base * dx - offset * dy, yM: center.yM + base * dy + offset * dx },
+    { xM: center.xM + base * dx + offset * dy, yM: center.yM + base * dy - offset * dx },
+  ];
+}
+
 export function subtractPoints(a: PointM, b: PointM): VectorM {
   return { xM: a.xM - b.xM, yM: a.yM - b.yM };
 }
@@ -61,11 +85,6 @@ export function rotateVector(vector: VectorM, angleDeg: number): VectorM {
     xM: vector.xM * cos - vector.yM * sin,
     yM: vector.xM * sin + vector.yM * cos,
   };
-}
-
-/** Translates an anchor point by a world-space delta. */
-export function translatePoint(anchor: PointM, deltaM: VectorM): PointM {
-  return addVector(anchor, deltaM);
 }
 
 /**

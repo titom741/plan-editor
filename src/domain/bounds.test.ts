@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boundsCenterM, boundsSizeM, expandBounds, getObjectBoundsM, getProjectBoundsM, unionBounds } from "./bounds";
+import { boundsCenterM, boundsSizeM, getBackgroundBoundsM, getObjectBoundsM, getProjectBoundsM, unionBounds } from "./bounds";
 import { createBackgroundImage } from "./background";
 import { getDefaultTargetLayer } from "./layers";
 import { createCircleObject, createLineObject, createRectangleObject, createTextObject } from "./objects";
@@ -47,6 +47,20 @@ describe("getObjectBoundsM — rectangles", () => {
   });
 });
 
+describe("getBackgroundBoundsM", () => {
+  it("inclut les quatre coins d'un fond tourné", () => {
+    const background = {
+      ...createBackgroundImage({ url: "data:,", widthPx: 100, heightPx: 50, xM: 10, yM: 20, widthM: 10, heightM: 5 }),
+      rotationDeg: 90,
+    };
+    const bounds = getBackgroundBoundsM(background);
+    expect(bounds.minXM).toBeCloseTo(5, 9);
+    expect(bounds.maxXM).toBeCloseTo(10, 9);
+    expect(bounds.minYM).toBeCloseTo(20, 9);
+    expect(bounds.maxYM).toBeCloseTo(30, 9);
+  });
+});
+
 describe("getObjectBoundsM — other shapes", () => {
   it("bounds a circle around its centre, ignoring rotation", () => {
     const circle = { ...createCircleObject({ layerId: "l", name: "C", xM: 5, yM: 5, radiusM: 2 }), rotationDeg: 37 };
@@ -67,13 +81,17 @@ describe("getObjectBoundsM — other shapes", () => {
     expect(getObjectBoundsM(line)).toEqual({ minXM: 10, minYM: 7, maxXM: 15, maxYM: 10 });
   });
 
-  it("reduces a text to its anchor — glyph metrics belong to the renderer", () => {
+  it("estime l'étendue réelle d'un texte au lieu de le réduire à son ancre", () => {
     const text = createTextObject({ layerId: "l", name: "T", xM: 4, yM: 6, text: "Entrée pompiers" });
-    expect(getObjectBoundsM(text)).toEqual({ minXM: 4, minYM: 6, maxXM: 4, maxYM: 6 });
+    const bounds = getObjectBoundsM(text);
+    expect(bounds?.minXM).toBe(4);
+    expect(bounds?.minYM).toBe(6);
+    expect(bounds?.maxXM).toBeCloseTo(6.7, 9);
+    expect(bounds?.maxYM).toBeCloseTo(6.36, 9);
   });
 });
 
-describe("unionBounds / expandBounds", () => {
+describe("unionBounds", () => {
   it("treats a missing side as the identity", () => {
     const box = { minXM: 0, minYM: 0, maxXM: 1, maxYM: 1 };
     expect(unionBounds(null, box)).toEqual(box);
@@ -86,14 +104,6 @@ describe("unionBounds / expandBounds", () => {
     expect(union).toEqual({ minXM: -1, minYM: 0, maxXM: 2, maxYM: 6 });
   });
 
-  it("grows on every side", () => {
-    expect(expandBounds({ minXM: 0, minYM: 0, maxXM: 10, maxYM: 4 }, 1)).toEqual({
-      minXM: -1,
-      minYM: -1,
-      maxXM: 11,
-      maxYM: 5,
-    });
-  });
 
   it("reports size and centre", () => {
     const bounds = { minXM: -10, minYM: 0, maxXM: 10, maxYM: 4 };

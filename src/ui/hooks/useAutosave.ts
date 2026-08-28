@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { saveAutosavedProject } from "../../persistence/projectStorage";
+import { saveAutomaticProjectVersion, saveAutosavedProject } from "../../persistence/projectStorage";
 import type { Project } from "../../domain/types";
 
 /**
@@ -63,6 +63,7 @@ export function useAutosave(project: Project, enabled: boolean): SaveStatus {
           case "saved":
             lastSavedProjectRef.current = project;
             setStatus({ state: "saved", savedAt: result.savedAt });
+            void saveAutomaticProjectVersion(project);
             break;
           case "unavailable":
             setStatus({ state: "unavailable" });

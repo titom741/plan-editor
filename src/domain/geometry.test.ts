@@ -11,9 +11,20 @@ import {
   resizeRectangleFromCorner,
   rotateVector,
   subtractPoints,
-  translatePoint,
   vectorLength,
+  tangentPointsToCircleM,
 } from "./geometry";
+
+describe("tangentPointsToCircleM", () => {
+  it("retourne deux points sur le cercle et perpendiculaires au rayon", () => {
+    const points = tangentPointsToCircleM({ xM: 5, yM: 0 }, { xM: 0, yM: 0 }, 3);
+    expect(points).toHaveLength(2);
+    for (const point of points) {
+      expect(Math.hypot(point.xM, point.yM)).toBeCloseTo(3, 8);
+      expect(point.xM * (5 - point.xM) + point.yM * (0 - point.yM)).toBeCloseTo(0, 8);
+    }
+  });
+});
 
 describe("rotateVector", () => {
   it("leaves a vector unchanged at 0deg", () => {
@@ -57,7 +68,7 @@ describe("normalizeAngleDeg", () => {
   });
 });
 
-describe("addVector / subtractPoints / translatePoint", () => {
+describe("addVector / subtractPoints", () => {
   it("round-trips add then subtract", () => {
     const point = { xM: 10, yM: 20 };
     const vector = { xM: -3, yM: 7 };
@@ -65,9 +76,6 @@ describe("addVector / subtractPoints / translatePoint", () => {
     expect(subtractPoints(moved, point)).toEqual(vector);
   });
 
-  it("translatePoint is an alias for addVector semantics", () => {
-    expect(translatePoint({ xM: 1, yM: 2 }, { xM: 3, yM: 4 })).toEqual({ xM: 4, yM: 6 });
-  });
 });
 
 describe("resizeRectangleFromCorner", () => {

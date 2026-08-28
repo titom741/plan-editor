@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useMemo, useState, type Ref } from "react";
-import { Layer as KonvaLayer, Line, Rect as KonvaRect, Circle as KonvaCircle, Stage, Text } from "react-konva";
+import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from "react";
+import { Group, Layer as KonvaLayer, Line, Rect as KonvaRect, Circle as KonvaCircle, Stage, Text } from "react-konva";
 import type Konva from "konva";
 import { computeGridLines } from "../../rendering/grid";
-import { metersToPixels, screenToWorld, worldToScreen } from "../../rendering/viewport";
+import { getEffectivePixelsPerMeter, metersToPixels, screenToWorld, worldToScreen } from "../../rendering/viewport";
 import type { ScreenPoint, Viewport } from "../../rendering/viewport";
 import type { Background, Layer, PlanObject, PlanObjectPatch, PointM } from "../../domain/types";
 import { boundsAreaM2, boundsFromCorners, getSelectionBoundsM, objectIdsWithinBounds } from "../../domain/selection";
+import { formatAngleDeg, formatAreaM2, formatLengthM, polygonAreaM2, polylineLengthM, segmentLengthsM } from "../../domain/measure";
+import { collectSnapTargets, snapPointM } from "../../domain/snapping";
+import type { SnapTarget } from "../../domain/snapping";
+import { constrainPointAngleM, objectLocalToWorld, tangentPointsToCircleM, worldToObjectLocal } from "../../domain/geometry";
 import { BACKGROUND_NODE_NAME, BackgroundImageShape } from "./BackgroundImageShape";
+import { SpatialPointIndex } from "../../domain/spatialIndex";
+import { getObjectBoundsM } from "../../domain/bounds";
 import { PlanObjectShape } from "./PlanObjectShape";
 import { MultiSelectionOutline, SelectionOverlay } from "./SelectionOverlay";
 import type { StageSize } from "../hooks/useViewport";
@@ -16,8 +22,8 @@ import type { ToolId } from "../tools";
 export type NewObjectSpec =
   | { type: "rectangle"; xM: number; yM: number; widthM: number; heightM: number }
   | { type: "circle"; xM: number; yM: number; radiusM: number }
-  | { type: "line"; xM: number; yM: number; pointsM: PointM[] }
-  | { type: "polygon"; xM: number; yM: number; pointsM: PointM[] }
+  | { type: "line"; xM: number; yM: number; pointsM: PointM[]; measurement?: { kind: "length" | "angle"; showSegments?: boolean } }
+  | { type: "polygon"; xM: number; yM: number; pointsM: PointM[]; measurement?: { kind: "area"; showSegments?: boolean } }
   | { type: "text"; xM: number; yM: number };
 
 interface PlanCanvasProps {
@@ -30,6 +36,10 @@ interface PlanCanvasProps {
   layers: Layer[];
   background: Background;
   activeTool: ToolId;
+  /** Whether the pointer is pulled onto grid intersections and object corners (KL-007). Hold Alt to bypass it for one gesture. */
+  snapEnabled: boolean;
+  gridVisible: boolean;
+  gridLimited: boolean;
   selectedIds: readonly string[];
   isBackgroundSelected: boolean;
   /** `additive` (Shift/Ctrl/Cmd) toggles the object in the selection instead of replacing it. */
@@ -53,12 +63,17 @@ interface PlanCanvasProps {
   onCalibrationMeasured: (pointA: PointM, pointB: PointM) => void;
   /** Fired on Escape while the calibrate tool is active, at any stage of the gesture. */
   onCancelCalibration: () => void;
+  activeLayerLabel: string;
+  activeLayerLocked: boolean;
 }
 
 /** Multiplicative zoom step applied per wheel notch. */
 const ZOOM_FACTOR_PER_TICK = 1.06;
 /** Below this size (in meters), a drag-created shape is discarded as an accidental click rather than a deliberate draw. */
 const MIN_CREATE_SIZE_M = 0.2;
+/** How close, in screen pixels, the pointer must come before it is pulled onto a snap target. Converted to meters per gesture, so it feels identical at every zoom. */
+const SNAP_TOLERANCE_PX = 10;
+const MEASURE_COLOR = "#0f766e";
 
 type Draft =
   | { tool: "rectangle"; startWorld: PointM; currentWorld: PointM }
@@ -66,7 +81,8 @@ type Draft =
   | { tool: "line"; startWorld: PointM; currentWorld: PointM }
   | { tool: "polygon"; anchorWorld: PointM; pointsM: PointM[]; previewWorld: PointM | null }
   | { tool: "calibrate"; pointsWorld: PointM[]; previewWorld: PointM | null }
-  | { tool: "marquee"; startWorld: PointM; currentWorld: PointM };
+  | { tool: "marquee"; startWorld: PointM; currentWorld: PointM }
+  | { tool: "measure"; pointsWorld: PointM[]; previewWorld: PointM | null };
 
 export function PlanCanvas({
   containerRef,
@@ -78,6 +94,9 @@ export function PlanCanvas({
   layers,
   background,
   activeTool,
+  snapEnabled,
+  gridVisible,
+  gridLimited,
   selectedIds,
   isBackgroundSelected,
   onSelectObject,
@@ -94,6 +113,8 @@ export function PlanCanvas({
   onBackgroundResizeLive,
   onCalibrationMeasured,
   onCancelCalibration,
+  activeLayerLabel,
+  activeLayerLocked,
 }: PlanCanvasProps) {
   const [draft, setDraft] = useState<Draft | null>(null);
   /**
@@ -105,11 +126,27 @@ export function PlanCanvas({
    * events at all, so the rubber band would never even follow the pointer.
    */
   const [isShiftHeld, setIsShiftHeld] = useState(false);
+  /**
+   * Alt bypasses snapping for as long as it is held. Kept in a ref, not
+   * state: it is read inside pointer handlers and must never cause a
+   * re-render of its own.
+   */
+  const isAltHeldRef = useRef(false);
+  const pinchDistanceRef = useRef<number | null>(null);
+  /** Where the pointer was last pulled to, for the on-canvas marker. `null` when nothing snapped. */
+  const [snapMarker, setSnapMarker] = useState<SnapTarget | null>(null);
+  const [pointerWorld, setPointerWorld] = useState<PointM | null>(null);
   useEffect(() => {
-    const syncShift = (event: KeyboardEvent) => setIsShiftHeld(event.shiftKey);
+    const syncShift = (event: KeyboardEvent) => {
+      isAltHeldRef.current = event.altKey;
+      setIsShiftHeld(event.shiftKey);
+    };
     // Releasing Shift outside the window (Cmd+Tab and back) never reaches
     // keyup, which would leave panning disabled with nothing to explain it.
-    const clearShift = () => setIsShiftHeld(false);
+    const clearShift = () => {
+      isAltHeldRef.current = false;
+      setIsShiftHeld(false);
+    };
     window.addEventListener("keydown", syncShift);
     window.addEventListener("keyup", syncShift);
     window.addEventListener("blur", clearShift);
@@ -131,9 +168,18 @@ export function PlanCanvas({
   if (activeTool !== lastActiveTool) {
     setLastActiveTool(activeTool);
     if (activeTool !== "calibrate" && draft?.tool === "calibrate") setDraft(null);
+    if (activeTool !== "measure" && draft?.tool === "measure") setDraft(null);
   }
 
   const grid = computeGridLines(viewport, stageSize.widthPx || 1, stageSize.heightPx || 1);
+  const gridClipPoints = gridLimited && background?.visible
+    ? [
+        { xM: 0, yM: 0 },
+        { xM: background.widthM, yM: 0 },
+        { xM: background.widthM, yM: background.heightM },
+        { xM: 0, yM: background.heightM },
+      ].map((point) => worldToScreen(objectLocalToWorld(background, point), viewport))
+    : null;
   const layersById = useMemo(() => new Map(layers.map((layer) => [layer.id, layer])), [layers]);
   // Memoised because the marquee's mouse-up handler closes over it: a set
   // rebuilt every render would make that callback a new function every
@@ -151,13 +197,76 @@ export function PlanCanvas({
   const canEditSelection = activeTool === "select" && selectedObject !== null && selectedLayer?.locked !== true;
   const multiSelectionBounds = selectedObjects.length > 1 ? getSelectionBoundsM(selectedObjects) : null;
 
+  // Snap targets are the corners, midpoints and centres of everything on a
+  // visible layer. Rebuilt only when the objects or layer visibility
+  // change — not per pointer move.
+  const snapTargets = useMemo(
+    () =>
+      snapEnabled
+        ? collectSnapTargets(objects, { isEligible: (object) => visibleLayerIds.has(object.layerId) })
+        : [],
+    [snapEnabled, objects, visibleLayerIds],
+  );
+  const snapIndex = useMemo(() => new SpatialPointIndex(snapTargets, 10), [snapTargets]);
+  const visibleWorldTopLeft = screenToWorld({ x: 0, y: 0 }, viewport);
+  const visibleWorldBottomRight = screenToWorld({ x: stageSize.widthPx, y: stageSize.heightPx }, viewport);
+  const renderObjects = objects.filter((object) => {
+    if (!visibleLayerIds.has(object.layerId)) return false;
+    const bounds = getObjectBoundsM(object);
+    if (!bounds) return true;
+    return bounds.maxXM >= visibleWorldTopLeft.xM && bounds.minXM <= visibleWorldBottomRight.xM && bounds.maxYM >= visibleWorldTopLeft.yM && bounds.minYM <= visibleWorldBottomRight.yM;
+  });
+  const simplifiedRendering = objects.length > 2000;
+
+  /**
+   * Pulls a world point onto a snap target. The tolerance is a fixed
+   * distance *on screen* converted to metres through the current viewport,
+   * so snapping feels the same at every zoom instead of grabbing half a
+   * field when zoomed out.
+   */
+  const snapWorld = useCallback(
+    (pointM: PointM, excludeIds?: ReadonlySet<string>): PointM => {
+      if (!snapEnabled || isAltHeldRef.current) {
+        setSnapMarker(null);
+        return pointM;
+      }
+      const toleranceM = SNAP_TOLERANCE_PX / getEffectivePixelsPerMeter(viewport);
+      const nearbyTargets = snapIndex.query(pointM, toleranceM);
+      const ordinaryTargets = excludeIds ? nearbyTargets.filter((target) => !target.objectId || !excludeIds.has(target.objectId)) : nearbyTargets;
+      const tangentTargets: SnapTarget[] = draft?.tool === "line" ? objects.flatMap((object) => object.type === "circle" && visibleLayerIds.has(object.layerId) ? tangentPointsToCircleM(draft.startWorld, object, object.radiusM).map((pointM) => ({ pointM, kind: "tangent" as const, objectId: object.id })) : []) : [];
+      const targets = [...ordinaryTargets, ...tangentTargets];
+      const backgroundLocal = background?.visible ? worldToObjectLocal(background, pointM) : null;
+      const insideGridBounds =
+        !gridLimited ||
+        !background?.visible ||
+        (backgroundLocal !== null &&
+          backgroundLocal.xM >= 0 &&
+          backgroundLocal.xM <= background.widthM &&
+          backgroundLocal.yM >= 0 &&
+          backgroundLocal.yM <= background.heightM);
+      const result = snapPointM(pointM, {
+        targets,
+        gridStepM: gridVisible && insideGridBounds ? grid.spacingM : 0,
+        toleranceM,
+      });
+      setSnapMarker((current) =>
+        current?.pointM.xM === result.target?.pointM.xM && current?.pointM.yM === result.target?.pointM.yM
+          ? current
+          : result.target,
+      );
+      return result.pointM;
+    },
+    [snapEnabled, snapIndex, grid.spacingM, gridVisible, gridLimited, background, viewport, draft, objects, visibleLayerIds],
+  );
+
   const getPointerWorld = useCallback(
-    (stage: Konva.Stage | null): PointM | null => {
+    (stage: Konva.Stage | null, options: { snap?: boolean } = {}): PointM | null => {
       const pointer = stage?.getPointerPosition();
       if (!pointer) return null;
-      return screenToWorld(pointer, viewport);
+      const world = screenToWorld(pointer, viewport);
+      return options.snap === false ? world : snapWorld(world);
     },
-    [viewport],
+    [viewport, snapWorld],
   );
 
   // Cancel/finish an in-progress polygon draft from the keyboard: Escape
@@ -169,6 +278,35 @@ export function PlanCanvas({
         setDraft(null);
       } else if (event.key === "Enter" && draft.pointsM.length >= 3) {
         onCreateObject({ type: "polygon", xM: draft.anchorWorld.xM, yM: draft.anchorWorld.yM, pointsM: draft.pointsM });
+        setDraft(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [draft, onCreateObject]);
+
+  // Enter persists a completed measurement as an ordinary editable line
+  // or polygon. Its label is derived from geometry, so moving a vertex
+  // keeps the displayed length/area current. Escape discards the draft.
+  useEffect(() => {
+    if (!draft || draft.tool !== "measure") return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDraft(null);
+      else if (event.key === "Backspace" && draft.pointsWorld.length > 1) {
+        event.preventDefault();
+        setDraft({ ...draft, pointsWorld: draft.pointsWorld.slice(0, -1) });
+      }
+      else if (event.key === "Enter" && draft.pointsWorld.length >= 2) {
+        const first = draft.pointsWorld[0];
+        if (!first) return;
+        const pointsM = draft.pointsWorld.map((point) => ({ xM: point.xM - first.xM, yM: point.yM - first.yM }));
+        onCreateObject({
+          type: "line",
+          xM: first.xM,
+          yM: first.yM,
+          pointsM,
+          measurement: { kind: pointsM.length === 3 ? "angle" : "length", showSegments: true },
+        });
         setDraft(null);
       }
     };
@@ -200,6 +338,29 @@ export function PlanCanvas({
     },
     [onZoomAt],
   );
+
+  const handleTouchStart = useCallback((event: Konva.KonvaEventObject<TouchEvent>) => {
+    if (event.evt.touches.length !== 2) return;
+    const [a, b] = [event.evt.touches[0], event.evt.touches[1]];
+    if (!a || !b) return;
+    event.evt.preventDefault();
+    event.target.getStage()?.stopDrag();
+    pinchDistanceRef.current = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+  }, []);
+
+  const handleTouchMove = useCallback((event: Konva.KonvaEventObject<TouchEvent>) => {
+    if (event.evt.touches.length !== 2 || pinchDistanceRef.current === null) return;
+    const [a, b] = [event.evt.touches[0], event.evt.touches[1]];
+    if (!a || !b) return;
+    event.evt.preventDefault();
+    const distance = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+    const rect = event.target.getStage()?.container().getBoundingClientRect();
+    if (!rect || distance <= 0) return;
+    onZoomAt({ x: (a.clientX + b.clientX) / 2 - rect.left, y: (a.clientY + b.clientY) / 2 - rect.top }, distance / pinchDistanceRef.current);
+    pinchDistanceRef.current = distance;
+  }, [onZoomAt]);
+
+  const handleTouchEnd = useCallback(() => { pinchDistanceRef.current = null; }, []);
 
   // The Stage's own x/y is used purely as a drag handle: every dragmove we
   // fold its displacement into the viewport's offset (the single source of
@@ -247,7 +408,7 @@ export function PlanCanvas({
         // selection would have been the more fashionable choice and a
         // daily regression for the user.
         if (e.evt.shiftKey && isEmptySpace) {
-          const world = getPointerWorld(stage);
+          const world = getPointerWorld(stage, { snap: false });
           if (!world) return;
           setDraft({ tool: "marquee", startWorld: world, currentWorld: world });
           return;
@@ -269,11 +430,17 @@ export function PlanCanvas({
 
   const handleMouseMove = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
+      const stage = e.target.getStage();
+      const screen = stage?.getPointerPosition();
+      if (screen) setPointerWorld(screenToWorld(screen, viewport));
       if (!draft) return;
-      const world = getPointerWorld(e.target.getStage());
+      const world = getPointerWorld(stage);
       if (!world) return;
       if (draft.tool === "polygon") {
         setDraft({ ...draft, previewWorld: world });
+      } else if (draft.tool === "measure") {
+        // A finished measurement (previewWorld === null) stops following.
+        if (draft.previewWorld !== null) setDraft({ ...draft, previewWorld: world });
       } else if (draft.tool === "marquee") {
         setDraft({ ...draft, currentWorld: world });
       } else if (draft.tool === "calibrate") {
@@ -281,13 +448,15 @@ export function PlanCanvas({
         // following the pointer while App.tsx's distance dialog is open.
         if (draft.pointsWorld.length < 2) setDraft({ ...draft, previewWorld: world });
       } else {
-        setDraft({ ...draft, currentWorld: world } as Draft);
+        const currentWorld = draft.tool === "line" && isShiftHeld ? constrainPointAngleM(draft.startWorld, world, 15) : world;
+        setDraft({ ...draft, currentWorld } as Draft);
       }
     },
-    [draft, getPointerWorld],
+    [draft, getPointerWorld, viewport, isShiftHeld],
   );
 
   const handleMouseUp = useCallback(() => {
+    setSnapMarker(null);
     if (!draft) return;
     if (draft.tool === "rectangle") {
       const widthM = Math.abs(draft.currentWorld.xM - draft.startWorld.xM);
@@ -364,8 +533,30 @@ export function PlanCanvas({
           });
         }
       }
-      if (activeTool === "calibrate") {
+      if (activeTool === "measure") {
         const world = getPointerWorld(e.target.getStage());
+        if (!world) return;
+        if (!draft || draft.tool !== "measure" || draft.previewWorld === null) {
+          // A click after Enter starts a fresh measurement rather than
+          // extending the finished one.
+          setDraft({ tool: "measure", pointsWorld: [world], previewWorld: world });
+          return;
+        }
+        const first = draft.pointsWorld[0];
+        if (first && draft.pointsWorld.length >= 3 && Math.hypot(world.xM - first.xM, world.yM - first.yM) <= SNAP_TOLERANCE_PX / getEffectivePixelsPerMeter(viewport)) {
+          const pointsM = draft.pointsWorld.map((point) => ({ xM: point.xM - first.xM, yM: point.yM - first.yM }));
+          onCreateObject({ type: "polygon", xM: first.xM, yM: first.yM, pointsM, measurement: { kind: "area", showSegments: true } });
+          setDraft(null);
+          return;
+        }
+        setDraft({ ...draft, pointsWorld: [...draft.pointsWorld, world] });
+        return;
+      }
+      if (activeTool === "calibrate") {
+        // Calibration measures against the plan as drawn, so it reads the
+        // raw pointer: snapping it to a grid derived from the current
+        // (still wrong) scale would fold that error into the correction.
+        const world = getPointerWorld(e.target.getStage(), { snap: false });
         if (!world) return;
         if (!draft || draft.tool !== "calibrate") {
           setDraft({ tool: "calibrate", pointsWorld: [world], previewWorld: world });
@@ -380,7 +571,7 @@ export function PlanCanvas({
         onCalibrationMeasured(pointA, world);
       }
     },
-    [activeTool, draft, getPointerWorld, onCreateObject, onCalibrationMeasured],
+    [activeTool, draft, getPointerWorld, onCreateObject, onCalibrationMeasured, viewport],
   );
 
   return (
@@ -398,6 +589,9 @@ export function PlanCanvas({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onClick={handleClick}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
         >
           <KonvaLayer>
             {background?.visible && (
@@ -415,26 +609,38 @@ export function PlanCanvas({
             )}
           </KonvaLayer>
           <KonvaLayer listening={false}>
-            {grid.vertical.map((line) => (
-              <Line
-                key={`v-${line.points[0]}`}
-                points={line.points}
-                stroke={line.isAxis ? "#94a3b8" : "#e2e8f0"}
-                strokeWidth={line.isAxis ? 1.5 : 1}
-              />
-            ))}
-            {grid.horizontal.map((line) => (
-              <Line
-                key={`h-${line.points[1]}`}
-                points={line.points}
-                stroke={line.isAxis ? "#94a3b8" : "#e2e8f0"}
-                strokeWidth={line.isAxis ? 1.5 : 1}
-              />
-            ))}
+            {gridVisible && (
+              <Group
+                clipFunc={gridClipPoints ? (context) => {
+                  const first = gridClipPoints[0];
+                  if (!first) return;
+                  context.beginPath();
+                  context.moveTo(first.x, first.y);
+                  for (const point of gridClipPoints.slice(1)) context.lineTo(point.x, point.y);
+                  context.closePath();
+                } : undefined}
+              >
+                {grid.vertical.map((line) => (
+                  <Line
+                    key={`v-${line.points[0]}`}
+                    points={line.points}
+                    stroke={line.isAxis ? "#94a3b8" : "#e2e8f0"}
+                    strokeWidth={line.isAxis ? 1.5 : 1}
+                  />
+                ))}
+                {grid.horizontal.map((line) => (
+                  <Line
+                    key={`h-${line.points[1]}`}
+                    points={line.points}
+                    stroke={line.isAxis ? "#94a3b8" : "#e2e8f0"}
+                    strokeWidth={line.isAxis ? 1.5 : 1}
+                  />
+                ))}
+              </Group>
+            )}
           </KonvaLayer>
           <KonvaLayer>
-            {objects
-              .filter((object) => visibleLayerIds.has(object.layerId))
+            {renderObjects
               .map((object) => {
                 const layer = layersById.get(object.layerId);
                 return (
@@ -447,7 +653,13 @@ export function PlanCanvas({
                     selectable={activeTool === "select"}
                     onSelect={(additive) => onSelectObject(object.id, additive)}
                     onBeginEdit={() => onBeginObjectDrag(object.id)}
-                    onMoveLive={(xM, yM) => onObjectMoveLive(object.id, xM, yM)}
+                    onMoveLive={(xM, yM) => {
+                      // An object must not snap to its own corners, or it
+                      // would pin itself the instant the drag began.
+                      const snapped = snapWorld({ xM, yM }, selectedIdSet.has(object.id) ? selectedIdSet : new Set([object.id]));
+                      onObjectMoveLive(object.id, snapped.xM, snapped.yM);
+                    }}
+                    simplified={simplifiedRendering}
                   />
                 );
               })}
@@ -458,15 +670,27 @@ export function PlanCanvas({
                 onBeginEdit={onBeginObjectEdit}
                 onLiveUpdate={(patch) => onObjectLiveUpdate(selectedObject.id, patch)}
                 onCommit={(patch) => onObjectCommitUpdate(selectedObject.id, patch)}
+                snapWorld={(pointM) => snapWorld(pointM, new Set([selectedObject.id]))}
               />
             )}
             {multiSelectionBounds && <MultiSelectionOutline bounds={multiSelectionBounds} viewport={viewport} />}
           </KonvaLayer>
           <KonvaLayer listening={false}>
             <DraftPreview draft={draft} viewport={viewport} />
+            {snapMarker && <SnapMarker target={snapMarker} viewport={viewport} />}
           </KonvaLayer>
         </Stage>
       )}
+      <div className="canvas-status" role="status" aria-live="off">
+        <span>{pointerWorld ? `X ${pointerWorld.xM.toFixed(2)} m · Y ${pointerWorld.yM.toFixed(2)} m` : "Pointeur hors du plan"}</span>
+        <span>{selectedIds.length > 0 ? `${selectedIds.length} sélectionné(s)` : "Aucune sélection"}</span>
+        <span>{snapMarker ? `Accroché : ${{ grid: "grille", vertex: "sommet", center: "centre", midpoint: "milieu", intersection: "intersection", tangent: "tangente", "alignment-x": "guide vertical", "alignment-y": "guide horizontal", "alignment-xy": "guides croisés" }[snapMarker.kind]}` : snapEnabled ? "Magnétisme actif" : "Magnétisme inactif"}</span>
+        <span>Calque : {activeLayerLabel}{activeLayerLocked ? " 🔒" : ""}</span>
+      </div>
+      <details className="canvas-accessible-list">
+        <summary>Liste accessible des objets ({objects.filter((object) => visibleLayerIds.has(object.layerId)).length})</summary>
+        <ul>{objects.filter((object) => visibleLayerIds.has(object.layerId)).map((object) => <li key={object.id}><button type="button" onClick={() => onSelectObject(object.id, false)} aria-pressed={selectedIdSet.has(object.id)}>{object.name} — {object.type}</button></li>)}</ul>
+      </details>
     </div>
   );
 }
@@ -481,7 +705,10 @@ function DraftPreview({ draft, viewport }: { draft: Draft | null; viewport: View
     );
     const widthPx = metersToPixels(Math.abs(draft.currentWorld.xM - draft.startWorld.xM), viewport);
     const heightPx = metersToPixels(Math.abs(draft.currentWorld.yM - draft.startWorld.yM), viewport);
+    const widthM = Math.abs(draft.currentWorld.xM - draft.startWorld.xM);
+    const heightM = Math.abs(draft.currentWorld.yM - draft.startWorld.yM);
     return (
+      <>
       <KonvaRect
         x={topLeft.x}
         y={topLeft.y}
@@ -492,6 +719,8 @@ function DraftPreview({ draft, viewport }: { draft: Draft | null; viewport: View
         strokeWidth={1.5}
         dash={[6, 4]}
       />
+      <Text x={topLeft.x + 8} y={topLeft.y + 8} text={`${formatLengthM(widthM)} × ${formatLengthM(heightM)}`} fontSize={12} fill="#2563eb" />
+      </>
     );
   }
 
@@ -502,6 +731,7 @@ function DraftPreview({ draft, viewport }: { draft: Draft | null; viewport: View
       viewport,
     );
     return (
+      <>
       <KonvaCircle
         x={center.x}
         y={center.y}
@@ -511,13 +741,17 @@ function DraftPreview({ draft, viewport }: { draft: Draft | null; viewport: View
         strokeWidth={1.5}
         dash={[6, 4]}
       />
+      <Text x={center.x + radiusPx + 8} y={center.y - 8} text={`R ${formatLengthM(radiusPx / (viewport.basePixelsPerMeter * viewport.zoom))}`} fontSize={12} fill="#16a34a" />
+      </>
     );
   }
 
   if (draft.tool === "line") {
     const start = worldToScreen(draft.startWorld, viewport);
     const end = worldToScreen(draft.currentWorld, viewport);
-    return <Line points={[start.x, start.y, end.x, end.y]} stroke="#0f172a" strokeWidth={2} dash={[6, 4]} />;
+    const dx = draft.currentWorld.xM - draft.startWorld.xM;
+    const dy = draft.currentWorld.yM - draft.startWorld.yM;
+    return <><Line points={[start.x, start.y, end.x, end.y]} stroke="#0f172a" strokeWidth={2} dash={[6, 4]} /><Text x={(start.x + end.x) / 2 + 8} y={(start.y + end.y) / 2 - 18} text={`${formatLengthM(Math.hypot(dx, dy))} · ${formatAngleDeg((Math.atan2(dy, dx) * 180) / Math.PI)}`} fontSize={12} fill="#0f172a" /></>;
   }
 
   if (draft.tool === "marquee") {
@@ -541,6 +775,61 @@ function DraftPreview({ draft, viewport }: { draft: Draft | null; viewport: View
         strokeWidth={1}
         dash={[4, 3]}
       />
+    );
+  }
+
+  if (draft.tool === "measure") {
+    const screen = draft.pointsWorld.map((point) => worldToScreen(point, viewport));
+    const previewScreen = draft.previewWorld ? worldToScreen(draft.previewWorld, viewport) : null;
+    // The live segment is part of the measurement as far as the reader is
+    // concerned, so the running total includes it.
+    const livePoints = draft.previewWorld ? [...draft.pointsWorld, draft.previewWorld] : draft.pointsWorld;
+    const liveScreen = previewScreen ? [...screen, previewScreen] : screen;
+    const lengths = segmentLengthsM(livePoints);
+    const totalM = polylineLengthM(livePoints);
+    const areaM2 = livePoints.length >= 3 ? polygonAreaM2(livePoints) : 0;
+    const flat = liveScreen.flatMap((point) => [point.x, point.y]);
+    const last = liveScreen[liveScreen.length - 1];
+
+    return (
+      <>
+        {livePoints.length >= 3 && (
+          <Line points={flat} closed fill="rgba(15, 118, 110, 0.10)" listening={false} />
+        )}
+        {flat.length >= 4 && <Line points={flat} stroke={MEASURE_COLOR} strokeWidth={2} />}
+        {liveScreen.map((point, index) => (
+          <KonvaCircle key={`m-${index}-${point.x}-${point.y}`} x={point.x} y={point.y} radius={4} fill={MEASURE_COLOR} />
+        ))}
+        {lengths.map((lengthM, index) => {
+          const from = liveScreen[index];
+          const to = liveScreen[index + 1];
+          if (!from || !to) return null;
+          return (
+            <Text
+              key={`ml-${index}`}
+              x={(from.x + to.x) / 2 + 6}
+              y={(from.y + to.y) / 2 - 16}
+              text={formatLengthM(lengthM)}
+              fontSize={12}
+              fill={MEASURE_COLOR}
+            />
+          );
+        })}
+        {last && lengths.length > 0 && (
+          <Text
+            x={last.x + 10}
+            y={last.y + 10}
+            text={
+              areaM2 > 0
+                ? `Total ${formatLengthM(totalM)}\nAire ${formatAreaM2(areaM2)}`
+                : `Total ${formatLengthM(totalM)}`
+            }
+            fontSize={13}
+            fontStyle="bold"
+            fill={MEASURE_COLOR}
+          />
+        )}
+      </>
     );
   }
 
@@ -582,6 +871,38 @@ function DraftPreview({ draft, viewport }: { draft: Draft | null; viewport: View
       {points.map((p, i) => (
         <KonvaCircle key={`${i}-${p.x}-${p.y}`} x={p.x} y={p.y} radius={4} fill="#ca8a04" />
       ))}
+    </>
+  );
+}
+
+/** A small cross-hair on the point the pointer was pulled to, so a snap is visible rather than merely felt. */
+function SnapMarker({ target, viewport }: { target: SnapTarget; viewport: Viewport }) {
+  const point = worldToScreen(target.pointM, viewport);
+  if (target.kind === "alignment-x" || target.kind === "alignment-y" || target.kind === "alignment-xy") {
+    return (
+      <>
+        {(target.kind === "alignment-x" || target.kind === "alignment-xy") && <Line points={[point.x, -10000, point.x, 10000]} stroke={MEASURE_COLOR} strokeWidth={1} dash={[5, 5]} />}
+        {(target.kind === "alignment-y" || target.kind === "alignment-xy") && <Line points={[-10000, point.y, 10000, point.y]} stroke={MEASURE_COLOR} strokeWidth={1} dash={[5, 5]} />}
+        <KonvaCircle x={point.x} y={point.y} radius={5} fill="#ffffff" stroke={MEASURE_COLOR} strokeWidth={1.5} />
+      </>
+    );
+  }
+  const size = target.kind === "grid" ? 4 : 6;
+  return (
+    <>
+      <Line
+        points={[point.x - size, point.y, point.x + size, point.y]}
+        stroke={MEASURE_COLOR}
+        strokeWidth={1.5}
+      />
+      <Line
+        points={[point.x, point.y - size, point.x, point.y + size]}
+        stroke={MEASURE_COLOR}
+        strokeWidth={1.5}
+      />
+      {target.kind !== "grid" && (
+        <KonvaCircle x={point.x} y={point.y} radius={size + 2} stroke={MEASURE_COLOR} strokeWidth={1.5} />
+      )}
     </>
   );
 }

@@ -6,10 +6,12 @@ import {
   resizeBackgroundFromHeight,
   resizeBackgroundToCalibration,
   worldDistanceToImagePixels,
+  cropBackgroundByMargins,
+  getBackgroundCropMargins,
 } from "./background";
 
 describe("createBackgroundImage", () => {
-  it("creates a visible, unlocked background with a stable id", () => {
+  it("creates a visible, locked reference background with a stable id", () => {
     const bg = createBackgroundImage({
       url: "data:image/png;base64,xyz",
       widthPx: 2000,
@@ -22,8 +24,12 @@ describe("createBackgroundImage", () => {
     expect(bg.id).toBeTruthy();
     expect(bg.kind).toBe("image");
     expect(bg.visible).toBe(true);
-    expect(bg.locked).toBe(false);
+    expect(bg.locked).toBe(true);
     expect(bg.opacity).toBe(1);
+    expect(bg.rotationDeg).toBe(0);
+    expect(bg.brightness).toBe(0);
+    expect(bg.contrast).toBe(0);
+    expect(bg.grayscale).toBe(false);
     expect(bg.widthM).toBe(40);
     expect(bg.heightM).toBe(20);
   });
@@ -40,6 +46,18 @@ describe("createBackgroundImage", () => {
       opacity: 0.5,
     });
     expect(bg.opacity).toBe(0.5);
+  });
+});
+
+describe("recadrage", () => {
+  it("conserve l'échelle des pixels restants et déplace l'ancre", () => {
+    const background = createBackgroundImage({ url: "data:,", widthPx: 1000, heightPx: 500, xM: 10, yM: 20, widthM: 100, heightM: 50 });
+    const patch = cropBackgroundByMargins(background, { left: 10, top: 20, right: 10, bottom: 20 });
+    expect(patch.xM).toBeCloseTo(20, 9);
+    expect(patch.yM).toBeCloseTo(30, 9);
+    expect(patch.widthM).toBeCloseTo(80, 9);
+    expect(patch.heightM).toBeCloseTo(30, 9);
+    expect(getBackgroundCropMargins({ ...background, ...patch })).toEqual({ left: 10, top: 20, right: 10, bottom: 20 });
   });
 });
 

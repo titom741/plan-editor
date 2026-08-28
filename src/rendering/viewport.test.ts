@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   createViewport,
+  constrainViewportToBounds,
+  fitViewportToBounds,
   metersToPixels,
   panViewport,
   pixelsToMeters,
@@ -28,6 +30,37 @@ describe("metersToPixels / pixelsToMeters", () => {
   it("scales with zoom", () => {
     const viewport = { ...createViewport(20), zoom: 2 };
     expect(metersToPixels(10, viewport)).toBe(400);
+  });
+});
+
+describe("navigation bornée", () => {
+  const bounds = { minXM: 10, minYM: 20, maxXM: 110, maxYM: 70 };
+  const size = { widthPx: 800, heightPx: 600 };
+
+  it("empêche un plan plus grand que l'écran de disparaître", () => {
+    const viewport = { ...createViewport(20), offsetXPx: 5000, offsetYPx: -5000 };
+    const constrained = constrainViewportToBounds(viewport, bounds, size);
+    expect(worldToScreen({ xM: bounds.minXM, yM: bounds.minYM }, constrained).x).toBe(24);
+    expect(worldToScreen({ xM: bounds.maxXM, yM: bounds.maxYM }, constrained).y).toBe(600 - 24);
+  });
+
+  it("centre un plan plus petit que l'écran au lieu de laisser dériver le viewport", () => {
+    const viewport = { ...createViewport(2), offsetXPx: -9999, offsetYPx: 9999 };
+    const constrained = constrainViewportToBounds(viewport, bounds, size);
+    const topLeft = worldToScreen({ xM: bounds.minXM, yM: bounds.minYM }, constrained);
+    const bottomRight = worldToScreen({ xM: bounds.maxXM, yM: bounds.maxYM }, constrained);
+    expect((topLeft.x + bottomRight.x) / 2).toBeCloseTo(size.widthPx / 2);
+    expect((topLeft.y + bottomRight.y) / 2).toBeCloseTo(size.heightPx / 2);
+  });
+
+  it("cadre tout le fond avec une marge", () => {
+    const fitted = fitViewportToBounds(createViewport(20), bounds, size, 32);
+    const topLeft = worldToScreen({ xM: bounds.minXM, yM: bounds.minYM }, fitted);
+    const bottomRight = worldToScreen({ xM: bounds.maxXM, yM: bounds.maxYM }, fitted);
+    expect(topLeft.x).toBeGreaterThanOrEqual(32 - EPSILON);
+    expect(topLeft.y).toBeGreaterThanOrEqual(32 - EPSILON);
+    expect(bottomRight.x).toBeLessThanOrEqual(size.widthPx - 32 + EPSILON);
+    expect(bottomRight.y).toBeLessThanOrEqual(size.heightPx - 32 + EPSILON);
   });
 });
 

@@ -24,9 +24,17 @@ export function createBackgroundImage(input: CreateBackgroundImageInput): Backgr
     yM: input.yM,
     widthM: input.widthM,
     heightM: input.heightM,
+    rotationDeg: 0,
     opacity: input.opacity ?? 1,
+    brightness: 0,
+    contrast: 0,
+    grayscale: false,
+    whiteRemoval: false,
+    whiteThreshold: 245,
     visible: true,
-    locked: false,
+    // A reference plan should stay put once imported. Users can explicitly
+    // unlock it from the layers bar when it really needs repositioning.
+    locked: true,
   };
 }
 
@@ -66,28 +74,31 @@ export function computeDefaultBackgroundPlacement(
  * calibration meaningless, so only uniform scaling is offered.
  */
 export function resizeBackgroundFromCorner(
-  background: Pick<BackgroundImage, "xM" | "yM" | "widthPx" | "heightPx">,
+  background: Pick<BackgroundImage, "xM" | "yM" | "widthPx" | "heightPx"> & Partial<Pick<BackgroundImage, "rotationDeg" | "crop">>,
   pointerWorld: PointM,
 ): { widthM: number; heightM: number } {
-  const { widthM } = resizeRectangleFromCorner({ xM: background.xM, yM: background.yM, rotationDeg: 0 }, pointerWorld);
+  const rotationDeg = "rotationDeg" in background && typeof background.rotationDeg === "number" ? background.rotationDeg : 0;
+  const { widthM } = resizeRectangleFromCorner({ xM: background.xM, yM: background.yM, rotationDeg }, pointerWorld);
   return resizeBackgroundFromWidth(background, widthM);
 }
 
 /** Recomputes `heightM` from a new `widthM`, preserving aspect ratio — the properties-panel counterpart to dragging the corner handle. */
 export function resizeBackgroundFromWidth(
-  background: Pick<BackgroundImage, "widthPx" | "heightPx">,
+  background: Pick<BackgroundImage, "widthPx" | "heightPx"> & Partial<Pick<BackgroundImage, "crop">>,
   widthM: number,
 ): { widthM: number; heightM: number } {
-  const aspectRatio = background.heightPx / background.widthPx;
+  const crop = getBackgroundCrop(background);
+  const aspectRatio = crop.heightPx / crop.widthPx;
   return { widthM, heightM: widthM * aspectRatio };
 }
 
 /** Recomputes `widthM` from a new `heightM`, preserving aspect ratio — the properties-panel counterpart to dragging the corner handle. */
 export function resizeBackgroundFromHeight(
-  background: Pick<BackgroundImage, "widthPx" | "heightPx">,
+  background: Pick<BackgroundImage, "widthPx" | "heightPx"> & Partial<Pick<BackgroundImage, "crop">>,
   heightM: number,
 ): { widthM: number; heightM: number } {
-  const aspectRatio = background.heightPx / background.widthPx;
+  const crop = getBackgroundCrop(background);
+  const aspectRatio = crop.heightPx / crop.widthPx;
   return { widthM: heightM / aspectRatio, heightM };
 }
 
@@ -102,12 +113,12 @@ export function resizeBackgroundFromHeight(
  * since both dimensions are derived from the same `pixelsPerMeter`.
  */
 export function resizeBackgroundToCalibration(
-  background: Pick<BackgroundImage, "widthPx" | "heightPx">,
+  background: Pick<BackgroundImage, "widthPx" | "heightPx" | "crop">,
   calibration: Pick<Calibration, "pixelsPerMeter">,
 ): { widthM: number; heightM: number } {
   return {
-    widthM: background.widthPx / calibration.pixelsPerMeter,
-    heightM: background.heightPx / calibration.pixelsPerMeter,
+    widthM: (background.crop?.widthPx ?? background.widthPx) / calibration.pixelsPerMeter,
+    heightM: (background.crop?.heightPx ?? background.heightPx) / calibration.pixelsPerMeter,
   };
 }
 
@@ -125,8 +136,61 @@ export function resizeBackgroundToCalibration(
  * independently stretched (see `resizeBackgroundFromCorner`).
  */
 export function worldDistanceToImagePixels(
-  background: Pick<BackgroundImage, "widthPx" | "widthM">,
+  background: Pick<BackgroundImage, "widthPx" | "widthM" | "crop">,
   worldDistanceM: number,
 ): number {
-  return worldDistanceM * (background.widthPx / background.widthM);
+  const visibleWidthPx = background.crop?.widthPx ?? background.widthPx;
+  return worldDistanceM * (visibleWidthPx / background.widthM);
+}
+
+export interface CropMarginsPercent { left: number; top: number; right: number; bottom: number }
+
+export function cropRectFromMargins(widthPx: number, heightPx: number, requested: CropMarginsPercent) {
+  const clampMargin = (value: number) => Math.max(0, Math.min(95, value));
+  const left = clampMargin(requested.left);
+  let right = clampMargin(requested.right);
+  const top = clampMargin(requested.top);
+  let bottom = clampMargin(requested.bottom);
+  if (left + right > 99) right = 99 - left;
+  if (top + bottom > 99) bottom = 99 - top;
+  return {
+    xPx: (left / 100) * widthPx,
+    yPx: (top / 100) * heightPx,
+    widthPx: ((100 - left - right) / 100) * widthPx,
+    heightPx: ((100 - top - bottom) / 100) * heightPx,
+  };
+}
+
+export function getBackgroundCrop(background: Pick<BackgroundImage, "widthPx" | "heightPx" | "crop">) {
+  return background.crop ?? { xPx: 0, yPx: 0, widthPx: background.widthPx, heightPx: background.heightPx };
+}
+
+export function getBackgroundCropMargins(background: Pick<BackgroundImage, "widthPx" | "heightPx" | "crop">): CropMarginsPercent {
+  const crop = getBackgroundCrop(background);
+  return {
+    left: (crop.xPx / background.widthPx) * 100,
+    top: (crop.yPx / background.heightPx) * 100,
+    right: ((background.widthPx - crop.xPx - crop.widthPx) / background.widthPx) * 100,
+    bottom: ((background.heightPx - crop.yPx - crop.heightPx) / background.heightPx) * 100,
+  };
+}
+
+/** Recrops while keeping the remaining source pixels at the exact same world scale and location. */
+export function cropBackgroundByMargins(background: BackgroundImage, requested: CropMarginsPercent): Partial<BackgroundImage> {
+  const oldCrop = getBackgroundCrop(background);
+  const crop = cropRectFromMargins(background.widthPx, background.heightPx, requested);
+  const metersPerPixel = background.widthM / oldCrop.widthPx;
+  const localShift = { xM: (crop.xPx - oldCrop.xPx) * metersPerPixel, yM: (crop.yPx - oldCrop.yPx) * metersPerPixel };
+  const angle = (background.rotationDeg * Math.PI) / 180;
+  const worldShift = {
+    xM: localShift.xM * Math.cos(angle) - localShift.yM * Math.sin(angle),
+    yM: localShift.xM * Math.sin(angle) + localShift.yM * Math.cos(angle),
+  };
+  return {
+    crop,
+    xM: background.xM + worldShift.xM,
+    yM: background.yM + worldShift.yM,
+    widthM: crop.widthPx * metersPerPixel,
+    heightM: crop.heightPx * metersPerPixel,
+  };
 }

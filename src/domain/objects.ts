@@ -7,6 +7,7 @@ import type {
   PolygonObject,
   RectangleObject,
   TextObject,
+  ImageObject,
 } from "./types";
 
 /** Fields every `create*Object` factory accepts in addition to its own geometry. */
@@ -14,10 +15,31 @@ interface CommonObjectInput {
   layerId: string;
   name: string;
   label?: string;
+  catalogId?: string;
+  category?: string;
+  reference?: string;
+  quantity?: number;
+  unit?: string;
+  measurement?: import("./types").MeasurementMetadata;
+  groupId?: string;
+  groupName?: string;
   xM: number;
   yM: number;
   rotationDeg?: number;
   style?: ObjectStyle;
+}
+
+function materialFields(input: CommonObjectInput) {
+  return {
+    catalogId: input.catalogId,
+    category: input.category,
+    reference: input.reference,
+    quantity: input.quantity,
+    unit: input.unit,
+    measurement: input.measurement,
+    groupId: input.groupId,
+    groupName: input.groupName,
+  };
 }
 
 export function createRectangleObject(
@@ -29,6 +51,7 @@ export function createRectangleObject(
     layerId: input.layerId,
     name: input.name,
     label: input.label,
+    ...materialFields(input),
     xM: input.xM,
     yM: input.yM,
     rotationDeg: input.rotationDeg ?? 0,
@@ -47,6 +70,7 @@ export function createCircleObject(
     layerId: input.layerId,
     name: input.name,
     label: input.label,
+    ...materialFields(input),
     xM: input.xM,
     yM: input.yM,
     rotationDeg: input.rotationDeg ?? 0,
@@ -64,6 +88,7 @@ export function createLineObject(
     layerId: input.layerId,
     name: input.name,
     label: input.label,
+    ...materialFields(input),
     xM: input.xM,
     yM: input.yM,
     rotationDeg: input.rotationDeg ?? 0,
@@ -81,6 +106,7 @@ export function createPolygonObject(
     layerId: input.layerId,
     name: input.name,
     label: input.label,
+    ...materialFields(input),
     xM: input.xM,
     yM: input.yM,
     rotationDeg: input.rotationDeg ?? 0,
@@ -98,6 +124,7 @@ export function createTextObject(
     layerId: input.layerId,
     name: input.name,
     label: input.label,
+    ...materialFields(input),
     xM: input.xM,
     yM: input.yM,
     rotationDeg: input.rotationDeg ?? 0,
@@ -105,4 +132,8 @@ export function createTextObject(
     text: input.text,
     fontSizeM: input.fontSizeM ?? 0.3,
   };
+}
+
+export function createImageObject(input: CommonObjectInput & { url: string; widthPx: number; heightPx: number; widthM: number; heightM: number }): ImageObject {
+  return { id: createId("obj"), type: "image", layerId: input.layerId, name: input.name, label: input.label, ...materialFields(input), xM: input.xM, yM: input.yM, rotationDeg: input.rotationDeg ?? 0, style: input.style, url: input.url, widthPx: input.widthPx, heightPx: input.heightPx, widthM: input.widthM, heightM: input.heightM };
 }

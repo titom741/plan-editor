@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { createViewport, panViewport, zoomViewportAt } from "../../rendering/viewport";
-import type { ScreenPoint, Viewport } from "../../rendering/viewport";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { constrainViewportToBounds, createViewport, fitViewportToBounds, panViewport, zoomViewportAt } from "../../rendering/viewport";
+import type { ScreenPoint, Viewport, ViewportBounds } from "../../rendering/viewport";
 
 export interface StageSize {
   widthPx: number;
@@ -13,7 +13,7 @@ export interface StageSize {
  * `zoomAt` / `pan` actions that delegate to the pure functions. All the
  * actual math stays in `rendering/`; this hook only owns React state.
  */
-export function useViewport(basePixelsPerMeter: number) {
+export function useViewport(basePixelsPerMeter: number, navigationBounds: ViewportBounds | null = null) {
   const [viewport, setViewport] = useState<Viewport>(() => createViewport(basePixelsPerMeter));
   const [stageSize, setStageSize] = useState<StageSize>({ widthPx: 0, heightPx: 0 });
   const hasCenteredRef = useRef(false);
@@ -61,13 +61,28 @@ export function useViewport(basePixelsPerMeter: number) {
     return () => observer.disconnect();
   }, [applySize]);
 
+  const constrain = useCallback(
+    (candidate: Viewport) =>
+      navigationBounds ? constrainViewportToBounds(candidate, navigationBounds, stageSize) : candidate,
+    [navigationBounds, stageSize],
+  );
+
+  const visibleViewport = useMemo(
+    () => (navigationBounds ? constrainViewportToBounds(viewport, navigationBounds, stageSize) : viewport),
+    [viewport, navigationBounds, stageSize],
+  );
+
   const zoomAt = useCallback((screenPoint: ScreenPoint, factor: number) => {
-    setViewport((current) => zoomViewportAt(current, screenPoint, factor));
-  }, []);
+    setViewport((current) => constrain(zoomViewportAt(current, screenPoint, factor)));
+  }, [constrain]);
 
   const pan = useCallback((deltaXPx: number, deltaYPx: number) => {
-    setViewport((current) => panViewport(current, deltaXPx, deltaYPx));
-  }, []);
+    setViewport((current) => constrain(panViewport(current, deltaXPx, deltaYPx)));
+  }, [constrain]);
 
-  return { viewport, containerRef, stageSize, zoomAt, pan };
+  const fitBounds = useCallback((bounds: ViewportBounds) => {
+    setViewport((current) => fitViewportToBounds(current, bounds, stageSize));
+  }, [stageSize]);
+
+  return { viewport: visibleViewport, containerRef, stageSize, zoomAt, pan, fitBounds };
 }

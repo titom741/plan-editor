@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPdf, mmToPt, ptToMm, toPdfDate } from "./pdf";
+import { buildMultiPagePdf, buildPdf, mmToPt, ptToMm, toPdfDate } from "./pdf";
 
 /** Decodes the produced bytes as Latin-1 so offsets in the file line up with string indices. */
 function asLatin1(bytes: Uint8Array): string {
@@ -102,6 +102,12 @@ describe("buildPdf — structure", () => {
     expect(text).not.toContain("/XObject");
     expect(text).not.toContain("DCTDecode");
   });
+
+  it("écrit les tracés vectoriels et les matrices de rotation du texte", () => {
+    const text = asLatin1(buildPdf({ ...page, paths: [{ commands: "10 10 m 20 20 l", strokeRgb: [1, 0, 0], widthPt: 2 }], text: [{ text: "Cote", xPt: 30, yPt: 40, sizePt: 8, rotationDeg: 90 }] }, metadata));
+    expect(text).toContain("1 0 0 RG 2 w 10 10 m 20 20 l S");
+    expect(text).toContain("0 1 -1 0 30 40 Tm (Cote)");
+  });
 });
 
 describe("buildPdf — embedded image", () => {
@@ -147,5 +153,17 @@ describe("buildPdf — embedded image", () => {
 describe("toPdfDate", () => {
   it("formats a UTC date the way PDF expects", () => {
     expect(toPdfDate(new Date(Date.UTC(2026, 7, 27, 14, 5, 9)))).toBe("D:20260827140509Z");
+  });
+});
+
+describe("buildMultiPagePdf", () => {
+  it("produit un arbre de pages et plusieurs ressources image", () => {
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+    const image = { jpeg, pixelWidth: 1, pixelHeight: 1, xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 };
+    const text = asLatin1(buildMultiPagePdf([{ widthPt: 100, heightPt: 100, image, images: [{ ...image, xPt: 20 }] }, { widthPt: 100, heightPt: 100, text: [{ text: "Page 2", xPt: 10, yPt: 10, sizePt: 8 }] }], metadata));
+    expect(text).toContain("/Count 2");
+    expect(text).toContain("/Im0");
+    expect(text).toContain("/Im1");
+    expect(text).toContain("(Page 2)");
   });
 });

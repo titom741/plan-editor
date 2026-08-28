@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ORIENTATIONS, PAPER_SIZE_ORDER, STANDARD_SCALE_DENOMINATORS, createSheet } from "../domain/sheets";
 import { metersToPixels, worldToScreen } from "../rendering/viewport";
-import { MAX_EXPORT_PIXELS, chooseScaleBarLengthM, computePrintRaster, computeSheetLayout } from "./sheetLayout";
+import { MAX_EXPORT_PIXELS, chooseScaleBarLengthM, computePrintRaster, computeSheetLayout, computeTiledSheetLayouts } from "./sheetLayout";
 import { mmToPt, ptToMm } from "./pdf";
 
 const a3Landscape = createSheet({ paperSize: "A3", orientation: "landscape", scaleDenominator: 200, marginMm: 10 });
@@ -220,5 +220,14 @@ describe("title block layout", () => {
 describe("mmToPt sanity for the sheet", () => {
   it("agrees with the paper module on A3 landscape", () => {
     expect(mmToPt(420)).toBeCloseTo(1190.5512, 3);
+  });
+});
+
+describe("computeTiledSheetLayouts", () => {
+  it("keeps a fitting plan on one page and splits a large plan", () => {
+    expect(computeTiledSheetLayouts(a3Landscape, { minXM: 0, minYM: 0, maxXM: 20, maxYM: 10 })).toHaveLength(1);
+    const pages = computeTiledSheetLayouts(a3Landscape, { minXM: 0, minYM: 0, maxXM: 200, maxYM: 100 }, 10);
+    expect(pages.length).toBeGreaterThan(1);
+    expect(pages[0]?.drawingCenterM).not.toEqual(pages.at(-1)?.drawingCenterM);
   });
 });

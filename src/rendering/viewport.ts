@@ -16,6 +16,19 @@ export interface WorldPoint {
   yM: number;
 }
 
+/** Axis-aligned world extent used to keep navigation near a finite plan. */
+export interface ViewportBounds {
+  minXM: number;
+  minYM: number;
+  maxXM: number;
+  maxYM: number;
+}
+
+export interface ViewportSize {
+  widthPx: number;
+  heightPx: number;
+}
+
 /**
  * A viewport is the runtime pan/zoom state — purely a display concern. It
  * never touches the business model: zooming or panning changes `zoom` /
@@ -114,5 +127,56 @@ export function panViewport(viewport: Viewport, deltaXPx: number, deltaYPx: numb
     ...viewport,
     offsetXPx: viewport.offsetXPx + deltaXPx,
     offsetYPx: viewport.offsetYPx + deltaYPx,
+  };
+}
+
+/**
+ * Keeps a finite world extent reachable without allowing it to be thrown
+ * completely off screen. When an axis of the plan is smaller than the
+ * viewport it is centred on that axis, so repeated panning cannot drift
+ * into an empty, effectively infinite canvas.
+ */
+export function constrainViewportToBounds(
+  viewport: Viewport,
+  bounds: ViewportBounds,
+  size: ViewportSize,
+  paddingPx = 24,
+): Viewport {
+  if (size.widthPx <= 0 || size.heightPx <= 0) return viewport;
+  const scale = getEffectivePixelsPerMeter(viewport);
+  const constrainAxis = (minM: number, maxM: number, screenSizePx: number, offsetPx: number) => {
+    const extentPx = Math.max(0, maxM - minM) * scale;
+    const usablePx = Math.max(0, screenSizePx - paddingPx * 2);
+    if (extentPx <= usablePx) return (screenSizePx - extentPx) / 2 - minM * scale;
+    const minimumOffset = screenSizePx - paddingPx - maxM * scale;
+    const maximumOffset = paddingPx - minM * scale;
+    return clamp(offsetPx, minimumOffset, maximumOffset);
+  };
+  return {
+    ...viewport,
+    offsetXPx: constrainAxis(bounds.minXM, bounds.maxXM, size.widthPx, viewport.offsetXPx),
+    offsetYPx: constrainAxis(bounds.minYM, bounds.maxYM, size.heightPx, viewport.offsetYPx),
+  };
+}
+
+/** Fits an entire finite extent into the viewport with a small margin. */
+export function fitViewportToBounds(
+  viewport: Viewport,
+  bounds: ViewportBounds,
+  size: ViewportSize,
+  paddingPx = 32,
+): Viewport {
+  const widthM = Math.max(1e-6, bounds.maxXM - bounds.minXM);
+  const heightM = Math.max(1e-6, bounds.maxYM - bounds.minYM);
+  const availableWidthPx = Math.max(1, size.widthPx - paddingPx * 2);
+  const availableHeightPx = Math.max(1, size.heightPx - paddingPx * 2);
+  const effectiveScale = Math.min(availableWidthPx / widthM, availableHeightPx / heightM);
+  const zoom = clamp(effectiveScale / viewport.basePixelsPerMeter, DEFAULT_MIN_ZOOM, DEFAULT_MAX_ZOOM);
+  const fitted = { ...viewport, zoom };
+  const scale = getEffectivePixelsPerMeter(fitted);
+  return {
+    ...fitted,
+    offsetXPx: size.widthPx / 2 - ((bounds.minXM + bounds.maxXM) / 2) * scale,
+    offsetYPx: size.heightPx / 2 - ((bounds.minYM + bounds.maxYM) / 2) * scale,
   };
 }

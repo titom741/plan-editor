@@ -33,3 +33,17 @@ export function calibrationFromKnownDistance(pixelDistance: number, realDistance
     source: { type: "knownDistance", pixelDistance, realDistanceM },
   };
 }
+
+/**
+ * Derives image pixels per real-world metre from a printed scale and the
+ * scan/export resolution. At 1:S, one real metre occupies 1000/S mm on
+ * paper; multiplying that by dpi/25.4 gives its raster pixel length.
+ */
+export function calibrationFromKnownScale(scale: number, dpi: number): Calibration {
+  if (!Number.isFinite(scale) || scale <= 0) throw new RangeError("scale must be positive");
+  if (!Number.isFinite(dpi) || dpi <= 0) throw new RangeError("dpi must be positive");
+  return {
+    pixelsPerMeter: (dpi / 25.4) * (1000 / scale),
+    source: { type: "knownScale", scale },
+  };
+}

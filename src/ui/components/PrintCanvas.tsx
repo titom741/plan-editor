@@ -1,12 +1,13 @@
-import { useEffect, type Ref } from "react";
+import { useEffect, useLayoutEffect, useRef, type Ref } from "react";
 import { Image as KonvaImage, Layer as KonvaLayer, Line, Rect, Stage } from "react-konva";
-import type Konva from "konva";
+import Konva from "konva";
 import { computeGridLines } from "../../rendering/grid";
 import { metersToPixels, worldToScreen } from "../../rendering/viewport";
 import type { Viewport } from "../../rendering/viewport";
 import type { Background, Layer, PlanObject } from "../../domain/types";
 import { PlanObjectShape } from "./PlanObjectShape";
 import { useHtmlImage } from "../hooks/useHtmlImage";
+import { createWhiteRemovalFilter } from "../imageFilters";
 
 interface PrintCanvasProps {
   stageRef: Ref<Konva.Stage>;
@@ -19,6 +20,7 @@ interface PrintCanvasProps {
   showGrid: boolean;
   /** Screen-pixel sizes (strokes, labels) are multiplied by this so they come out the right physical size at print resolution. */
   renderScale: number;
+  transparentBackground?: boolean;
   /** Called once everything that needs loading has loaded and the stage is safe to rasterise. */
   onReady: () => void;
 }
@@ -53,11 +55,27 @@ export function PrintCanvas({
   background,
   showGrid,
   renderScale,
+  transparentBackground = false,
   onReady,
 }: PrintCanvasProps) {
   const backgroundVisible = background?.visible === true;
   const image = useHtmlImage(backgroundVisible ? background.url : null);
+  const backgroundNodeRef = useRef<Konva.Image>(null);
   const waitingForImage = backgroundVisible && image === null;
+  const backgroundFilters = background ? [
+    ...(background.brightness !== 0 ? [Konva.Filters.Brighten] : []),
+    ...(background.contrast !== 0 ? [Konva.Filters.Contrast] : []),
+    ...(background.grayscale ? [Konva.Filters.Grayscale] : []),
+    ...(background.whiteRemoval ? [createWhiteRemovalFilter(background.whiteThreshold)] : []),
+  ] : [];
+  const hasBackgroundFilters = backgroundFilters.length > 0;
+
+  useLayoutEffect(() => {
+    const node = backgroundNodeRef.current;
+    if (!node) return;
+    if (hasBackgroundFilters) node.cache({ pixelRatio: 1 });
+    else node.clearCache();
+  }, [image, background?.brightness, background?.contrast, background?.grayscale, background?.whiteRemoval, background?.whiteThreshold, background?.crop?.xPx, background?.crop?.yPx, background?.crop?.widthPx, background?.crop?.heightPx, hasBackgroundFilters]);
 
   // Rasterising before the background has decoded would silently produce a
   // plan with a blank backdrop, so the caller is told only once there is
@@ -82,15 +100,21 @@ export function PrintCanvas({
           prints as a solid dark rectangle. Drawn here rather than left to
           the PDF so the PNG export gets the same treatment.
         */}
-        <Rect x={0} y={0} width={pixelWidth} height={pixelHeight} fill="#ffffff" listening={false} />
+        {!transparentBackground && <Rect x={0} y={0} width={pixelWidth} height={pixelHeight} fill="#ffffff" listening={false} />}
         {backgroundVisible && image && backgroundAnchor && (
           <KonvaImage
+            ref={backgroundNodeRef}
             image={image}
             x={backgroundAnchor.x}
             y={backgroundAnchor.y}
             width={metersToPixels(background.widthM, viewport)}
             height={metersToPixels(background.heightM, viewport)}
+            rotation={background.rotationDeg}
             opacity={background.opacity}
+            filters={backgroundFilters}
+            brightness={background.brightness}
+            contrast={background.contrast}
+            crop={background.crop ? { x: background.crop.xPx, y: background.crop.yPx, width: background.crop.widthPx, height: background.crop.heightPx } : undefined}
             listening={false}
           />
         )}

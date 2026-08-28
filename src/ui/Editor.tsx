@@ -1,12 +1,11 @@
-import { useCallback, useMemo, useRef, useState, type ChangeEvent } from "react";
-import type Konva from "konva";
-import { computeDefaultBackgroundPlacement, createBackgroundImage, worldDistanceToImagePixels } from "../domain/background";
-import { getProjectBoundsM } from "../domain/bounds";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { computeDefaultBackgroundPlacement, createBackgroundImage, cropRectFromMargins, getBackgroundCropMargins, worldDistanceToImagePixels } from "../domain/background";
+import { boundsCenterM, getBackgroundBoundsM } from "../domain/bounds";
+import { clearGroup, createNamedGroup, distributeObjects, transformObjectAroundPivot } from "../domain/grouping";
+import type { CatalogItem } from "../domain/catalog";
 import { duplicateObjects } from "../domain/clipboard";
-import { getSelectionBoundsM, toggleSelection } from "../domain/selection";
-import { calibrationFromKnownDistance } from "../domain/calibration";
-import { createSheet } from "../domain/sheets";
-import { getDefaultTargetLayer, sortLayersByOrder } from "../domain/layers";
+import { calibrationFromKnownDistance, calibrationFromKnownScale } from "../domain/calibration";
+import { sortLayersByOrder } from "../domain/layers";
 import { nextObjectName } from "../domain/labels";
 import {
   createCircleObject,
@@ -14,51 +13,55 @@ import {
   createPolygonObject,
   createRectangleObject,
   createTextObject,
+  createImageObject,
 } from "../domain/objects";
 import {
-  addLayer,
   addObject,
   addObjects,
   applyCalibration,
-  assignObjectsToLayer,
   createEmptyProject,
-  moveLayer,
   patchBackground,
-  patchLayer,
   patchObject,
   patchObjects,
   removeBackground,
-  removeLayer,
   removeObjects,
-  renameLayer,
   setBackground,
 } from "../domain/project";
-import type { BackgroundImage, PlanObject, PlanObjectPatch, PointM, Project, Sheet } from "../domain/types";
-import { computePrintRaster, computeSheetLayout } from "../printing/sheetLayout";
+import type { BackgroundImage, PlanObjectPatch, PointM, Project } from "../domain/types";
 import { DEFAULT_SCREEN_PIXELS_PER_METER, screenToWorld } from "../rendering/viewport";
 import { CalibrationDialog } from "./components/CalibrationDialog";
+import { DeleteLayerDialog, LayerStyleDialog } from "./components/LayerDialogs";
 import { ExportDialog } from "./components/ExportDialog";
 import { LayersPanel } from "./components/LayersPanel";
 import { PlanCanvas } from "./components/PlanCanvas";
 import type { NewObjectSpec } from "./components/PlanCanvas";
 import { PrintCanvas } from "./components/PrintCanvas";
 import { PropertiesPanel } from "./components/PropertiesPanel";
+import { SheetPreview } from "./components/SheetPreview";
+import { ScaleCalibrationDialog } from "./components/ScaleCalibrationDialog";
 import { Toolbar } from "./components/Toolbar";
 import { ToolsPanel } from "./components/ToolsPanel";
-import { downloadPng, downloadSheetPdf } from "./exportSheet";
+import { ShortcutsDialog } from "./components/ShortcutsDialog";
+import { CommentsDialog } from "./components/CommentsDialog";
 import { useAutosave } from "./hooks/useAutosave";
 import { useEditorShortcuts } from "./hooks/useEditorShortcuts";
 import { useProjectHistory } from "./hooks/useProjectHistory";
+import { useLayerActions } from "./hooks/useLayerActions";
+import { useClipboard } from "./hooks/useClipboard";
+import { useSelection } from "./hooks/useSelection";
+import { CSS_PIXELS_PER_INCH, useSheetExport } from "./hooks/useSheetExport";
 import { useViewport } from "./hooks/useViewport";
 import { describeParseError, downloadProjectFile, readProjectFile } from "./projectFileActions";
 import type { ToolId } from "./tools";
+import { downloadDiagnosticReport } from "./diagnosticActions";
+import { loadShortcuts, saveShortcuts, type ShortcutMap } from "./shortcuts";
+import { deleteComponentTemplate, loadComponentTemplates, saveComponentTemplate, type ComponentTemplate } from "../persistence/componentStorage";
 import "./App.css";
 
-/** Screen CSS pixels per inch — the reference for turning a print DPI into a stroke/label multiplier. */
-const CSS_PIXELS_PER_INCH = 96;
-
-/** How far each successive paste is offset from the original, in metres, so copies fan out instead of stacking invisibly. */
-const PASTE_OFFSET_M = 0.5;
+const LibraryDialog = lazy(() => import("./components/LibraryDialog").then((module) => ({ default: module.LibraryDialog })));
+const ProjectsDialog = lazy(() => import("./components/ProjectsDialog").then((module) => ({ default: module.ProjectsDialog })));
+const ScheduleDialog = lazy(() => import("./components/ScheduleDialog").then((module) => ({ default: module.ScheduleDialog })));
+const ExchangeDialog = lazy(() => import("./components/ExchangeDialog").then((module) => ({ default: module.ExchangeDialog })));
 
 /**
  * Arrow-key presses closer together than this are folded into a single
@@ -71,7 +74,7 @@ const NUDGE_COALESCE_MS = 700;
 /** Builds the actual `PlanObject` (naming, layer assignment) from a gesture the canvas reports — see `PlanCanvas`'s `NewObjectSpec`. */
 function buildObjectFromSpec(project: Project, spec: NewObjectSpec, layerId: string) {
   const name = nextObjectName(project, spec.type);
-  const common = { layerId, name, xM: spec.xM, yM: spec.yM };
+  const common = { layerId, name, xM: spec.xM, yM: spec.yM, style: project.layers.find((layer) => layer.id === layerId)?.defaultStyle };
 
   switch (spec.type) {
     case "rectangle":
@@ -79,13 +82,24 @@ function buildObjectFromSpec(project: Project, spec: NewObjectSpec, layerId: str
     case "circle":
       return createCircleObject({ ...common, radiusM: spec.radiusM });
     case "line":
-      return createLineObject({ ...common, pointsM: spec.pointsM });
+      return createLineObject({ ...common, pointsM: spec.pointsM, measurement: spec.measurement });
     case "polygon":
-      return createPolygonObject({ ...common, pointsM: spec.pointsM });
+      return createPolygonObject({ ...common, pointsM: spec.pointsM, measurement: spec.measurement });
     case "text":
       return createTextObject({ ...common, text: "Texte" });
   }
 }
+
+/** The modal dialogs the editor can show. Exactly one at a time — see `openDialog`. */
+type DialogId =
+  | "scaleCalibration"
+  | "export"
+  | "library"
+  | "schedule"
+  | "projects"
+  | "exchange"
+  | "shortcuts"
+  | "comments";
 
 interface EditorProps {
   /** The project the session starts from — restored from storage, or a fresh one. Read once: from here on the editor owns the document. */
@@ -117,27 +131,33 @@ export default function Editor({
   } = useProjectHistory(initialProject);
 
   const [activeTool, setActiveTool] = useState<ToolId>("select");
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   /** The layer new objects land on. KL-002 always used the first unlocked layer; KL-006 makes it the user's choice. */
-  const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
-  const [isBackgroundSelected, setIsBackgroundSelected] = useState(false);
   const [calibrationPoints, setCalibrationPoints] = useState<{ pointA: PointM; pointB: PointM } | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
-  const [isExportOpen, setIsExportOpen] = useState(false);
-  const [printGrid, setPrintGrid] = useState(false);
+  // One state rather than eight booleans: these are all modal, so "which
+  // one is open" is a single fact. Eight independent flags could represent
+  // two dialogs stacked on top of each other — a state the app has no UI
+  // for and never wants to reach.
+  const [openDialog, setOpenDialog] = useState<DialogId | null>(null);
+  const closeDialog = useCallback(() => setOpenDialog(null), []);
+  const [shortcuts, setShortcuts] = useState<ShortcutMap>(() => loadShortcuts());
+  const [toolsCollapsed, setToolsCollapsed] = useState(false);
+  const [propertiesCollapsed, setPropertiesCollapsed] = useState(false);
+  const [componentTemplates, setComponentTemplates] = useState<ComponentTemplate[]>(() => loadComponentTemplates());
+  /** Snapping is on by default: a plan is drawn to fit together, and the people who don't want it find the switch faster than the people who need it find its absence. */
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [gridVisible, setGridVisible] = useState(true);
+  const [gridLimited, setGridLimited] = useState(true);
   /** Non-null while the off-screen print stage is mounted and we're waiting for it to be ready to rasterise. */
-  const [pendingExport, setPendingExport] = useState<"pdf" | "png" | null>(null);
   /** The editor's own clipboard. Copies live in memory: this is a single-window, offline app, so there is no system clipboard to round-trip through. */
-  const clipboardRef = useRef<PlanObject[]>([]);
   /** How many times the current clipboard has been pasted, so each paste lands a little further along instead of on top of the last. */
-  const pasteCountRef = useRef(0);
   /** Every selected object's position at the moment a drag started, so a group move is recomputed from the origin rather than accumulated. */
   const dragOriginRef = useRef<{ positions: Map<string, PointM> } | null>(null);
   /** When the last arrow-key nudge happened, for coalescing a burst into one undo step. */
   const lastNudgeAtRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const projectFileInputRef = useRef<HTMLInputElement>(null);
-  const printStageRef = useRef<Konva.Stage>(null);
+  const objectImageInputRef = useRef<HTMLInputElement>(null);
 
   const saveStatus = useAutosave(project, autosaveEnabled);
 
@@ -145,18 +165,22 @@ export default function Editor({
   // `DEFAULT_SCREEN_PIXELS_PER_METER`. Calibrating a background corrects
   // the background's real-world size, it doesn't change how big a meter is
   // drawn on screen.
-  const { viewport, containerRef, stageSize, zoomAt, pan } = useViewport(DEFAULT_SCREEN_PIXELS_PER_METER);
-
-  // Keep the active layer pointing at a layer that exists — after opening
-  // another project, or deleting the layer that was active. Adjusted during
-  // render rather than in an effect, the same pattern `NumberField` and
-  // `PlanCanvas` already use for "derive state from changed props".
-  const activeLayerIsValid = activeLayerId !== null && project.layers.some((layer) => layer.id === activeLayerId);
-  if (!activeLayerIsValid) {
-    const fallback = getDefaultTargetLayer(project.layers);
-    if (fallback && fallback.id !== activeLayerId) setActiveLayerId(fallback.id);
-  }
-  const effectiveLayerId = activeLayerIsValid ? activeLayerId : (getDefaultTargetLayer(project.layers)?.id ?? null);
+  const navigationBounds = useMemo(
+    () => (project.background?.visible ? getBackgroundBoundsM(project.background) : null),
+    [project.background],
+  );
+  const { viewport, containerRef, stageSize, zoomAt, pan, fitBounds } = useViewport(
+    DEFAULT_SCREEN_PIXELS_PER_METER,
+    navigationBounds,
+  );
+  const lastAutoFittedBackgroundIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const background = project.background;
+    if (!background?.visible || stageSize.widthPx <= 0 || stageSize.heightPx <= 0) return;
+    if (lastAutoFittedBackgroundIdRef.current === background.id) return;
+    lastAutoFittedBackgroundIdRef.current = background.id;
+    fitBounds(getBackgroundBoundsM(background));
+  }, [project.background, stageSize, fitBounds]);
 
   const objectCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -180,59 +204,75 @@ export default function Editor({
     () => new Set(project.layers.filter((layer) => layer.visible).map((layer) => layer.id)),
     [project.layers],
   );
-  const selectedObjects = useMemo(() => {
-    const wanted = new Set(selectedIds);
-    return project.objects.filter((object) => wanted.has(object.id));
-  }, [project.objects, selectedIds]);
-  /** The properties panel edits one object at a time; a group gets a summary instead. */
-  const selectedObject = selectedObjects.length === 1 ? (selectedObjects[0] ?? null) : null;
-  const selectionBounds = useMemo(
-    () => (selectedObjects.length > 1 ? getSelectionBoundsM(selectedObjects) : null),
-    [selectedObjects],
-  );
-  const isSelectedLocked = selectedObject !== null && lockedLayerIds.has(selectedObject.layerId);
+  const {
+    activeLayerId: effectiveLayerId,
+    setActiveLayerId,
+    prompt: layerPrompt,
+    cancelPrompt: cancelLayerPrompt,
+    toggleVisible: toggleLayerVisible,
+    toggleLocked: toggleLayerLocked,
+    add: addLayerAction,
+    rename: renameLayerAction,
+    move: moveLayerAction,
+    requestDelete: requestDeleteLayer,
+    confirmDelete: confirmDeleteLayer,
+    requestStyle: requestLayerStyle,
+    confirmStyle: confirmLayerStyle,
+    setFolder: setLayerFolder,
+    assignObjects: assignObjectsToLayerAction,
+  } = useLayerActions({ project, commitChange, setProjectDirect });
+
+  const {
+    selectedIds,
+    isBackgroundSelected,
+    selectedObjects,
+    selectedObject,
+    selectionBounds,
+    isSelectedLocked,
+    editableSelection,
+    selectObject,
+    selectMany,
+    selectAll,
+    selectBackground,
+    selectOnly,
+    deselectAll,
+  } = useSelection({ project, visibleLayerIds, lockedLayerIds });
+
+  const {
+    sheet,
+    availableSheets,
+    setActiveSheetId,
+    contentBounds,
+    sheetLayout,
+    printRaster,
+    printStageRef,
+    pendingExport,
+    rasterObjects,
+    printGrid,
+    setPrintGrid,
+    transparentPng,
+    setTransparentPng,
+    changeSheet,
+    addSheet,
+    duplicateSheet,
+    deleteSheet,
+    startExport,
+    startMultiPageExport,
+    handlePrintCanvasReady,
+  } = useSheetExport({
+    project,
+    orderedObjects,
+    visibleLayerIds,
+    commitChange,
+    onError: setFileError,
+  });
+
   const isBackgroundLocked = project.background?.locked === true;
 
   const handleSelectTool = useCallback((toolId: ToolId) => {
     setActiveTool(toolId);
-    if (toolId !== "select") {
-      setSelectedIds([]);
-      setIsBackgroundSelected(false);
-    }
-  }, []);
-
-  const handleSelectObject = useCallback((id: string, additive: boolean) => {
-    setSelectedIds((current) => (additive ? toggleSelection(current, id) : [id]));
-    setIsBackgroundSelected(false);
-  }, []);
-
-  const handleSelectMany = useCallback((ids: string[], additive: boolean) => {
-    if (!additive) {
-      setSelectedIds(ids);
-    } else if (ids.length > 0) {
-      setSelectedIds((current) => [...current, ...ids.filter((id) => !current.includes(id))]);
-    }
-    if (ids.length > 0) setIsBackgroundSelected(false);
-  }, []);
-
-  const handleSelectAll = useCallback(() => {
-    // Objects on a hidden layer aren't on screen; sweeping them into the
-    // selection would mean the next Delete removes things the user can't see.
-    setSelectedIds(
-      project.objects.filter((object) => visibleLayerIds.has(object.layerId)).map((object) => object.id),
-    );
-    setIsBackgroundSelected(false);
-  }, [project.objects, visibleLayerIds]);
-
-  const handleSelectBackground = useCallback(() => {
-    setIsBackgroundSelected(true);
-    setSelectedIds([]);
-  }, []);
-
-  const handleDeselectAll = useCallback(() => {
-    setSelectedIds([]);
-    setIsBackgroundSelected(false);
-  }, []);
+    if (toolId !== "select") deselectAll();
+  }, [deselectAll]);
 
   // The object is built *before* the state update, not read back out of
   // its updater: React may defer an updater to the next render, and
@@ -246,11 +286,11 @@ export default function Editor({
       const object = buildObjectFromSpec(project, spec, effectiveLayerId);
       if (object) {
         commitChange((currentProject) => addObject(currentProject, object));
-        setSelectedIds([object.id]);
+        selectOnly([object.id]);
       }
       setActiveTool("select");
     },
-    [project, effectiveLayerId, commitChange],
+    [project, effectiveLayerId, commitChange, selectOnly],
   );
 
   const handleBeginObjectEdit = useCallback(() => beginEdit(), [beginEdit]);
@@ -356,11 +396,10 @@ export default function Editor({
 
   const handleRequestCalibration = useCallback(() => {
     if (!project.background || isBackgroundLocked) return;
-    setSelectedIds([]);
-    setIsBackgroundSelected(false);
+    deselectAll();
     setCalibrationPoints(null);
     setActiveTool("calibrate");
-  }, [project.background, isBackgroundLocked]);
+  }, [project.background, isBackgroundLocked, deselectAll]);
 
   const handleCalibrationMeasured = useCallback((pointA: PointM, pointB: PointM) => {
     setCalibrationPoints({ pointA, pointB });
@@ -370,6 +409,13 @@ export default function Editor({
     setCalibrationPoints(null);
     setActiveTool("select");
   }, []);
+
+  const handleConfirmScaleCalibration = useCallback((scale: number, dpi: number) => {
+    commitChange((currentProject) => applyCalibration(currentProject, calibrationFromKnownScale(scale, dpi)));
+    closeDialog();
+    setActiveTool("select");
+    selectBackground();
+  }, [commitChange, closeDialog, selectBackground]);
 
   // Turns the two clicked points (in the project's current, possibly
   // still-approximate scale) plus the real distance the user just typed
@@ -386,16 +432,16 @@ export default function Editor({
       commitChange((currentProject) => applyCalibration(currentProject, calibration));
       setCalibrationPoints(null);
       setActiveTool("select");
-      setIsBackgroundSelected(true);
+      selectBackground();
     },
-    [calibrationPoints, project.background, commitChange],
+    [calibrationPoints, project.background, commitChange, selectBackground],
   );
 
   const handleDeleteSelected = useCallback(() => {
     if (isBackgroundSelected) {
       if (isBackgroundLocked) return;
       commitChange((currentProject) => removeBackground(currentProject));
-      setIsBackgroundSelected(false);
+      deselectAll();
       return;
     }
     // A locked layer's objects can be selected (to inspect them) but not
@@ -406,129 +452,92 @@ export default function Editor({
       .map((object) => object.id);
     if (deletable.length === 0) return;
     commitChange((currentProject) => removeObjects(currentProject, deletable));
-    setSelectedIds([]);
-  }, [isBackgroundSelected, isBackgroundLocked, selectedObjects, lockedLayerIds, commitChange]);
+    deselectAll();
+  }, [isBackgroundSelected, isBackgroundLocked, selectedObjects, lockedLayerIds, commitChange, deselectAll]);
 
-  /**
-   * Adds copies of `sources` to the project and selects them, as one undo
-   * step. `step` scales the offset so a repeated paste walks across the
-   * plan instead of hiding each copy under the previous one.
-   */
-  const pasteObjects = useCallback(
-    (sources: readonly PlanObject[], step: number) => {
-      if (sources.length === 0) return;
-      const fallbackLayer = getDefaultTargetLayer(project.layers);
-      if (!fallbackLayer) return;
-      const copies = duplicateObjects(sources, {
-        offsetM: { xM: PASTE_OFFSET_M * step, yM: PASTE_OFFSET_M * step },
-        existingLayerIds: new Set(project.layers.map((layer) => layer.id)),
-        fallbackLayerId: fallbackLayer.id,
-      });
-      commitChange((currentProject) => addObjects(currentProject, copies));
-      setSelectedIds(copies.map((copy) => copy.id));
-      setIsBackgroundSelected(false);
+  const { copy, paste, duplicate } = useClipboard({
+    project,
+    selectedObjects,
+    fallbackLayerId: effectiveLayerId,
+    commitChange,
+    onPasted: useCallback((ids: readonly string[]) => {
+      selectOnly(ids);
       setActiveTool("select");
-    },
-    [project.layers, commitChange],
-  );
-
-  const handleCopy = useCallback(() => {
-    if (selectedObjects.length === 0) return;
-    // Snapshot the objects as they are now: a later edit to the originals
-    // must not reach into what has already been copied.
-    clipboardRef.current = selectedObjects.map((object) => ({ ...object }));
-    pasteCountRef.current = 0;
-  }, [selectedObjects]);
-
-  const handlePaste = useCallback(() => {
-    pasteCountRef.current += 1;
-    pasteObjects(clipboardRef.current, pasteCountRef.current);
-  }, [pasteObjects]);
-
-  const handleDuplicate = useCallback(() => {
-    pasteObjects(selectedObjects, 1);
-  }, [pasteObjects, selectedObjects]);
+    }, [selectOnly]),
+  });
 
   useEditorShortcuts({
+    shortcuts,
     onUndo: undo,
     onRedo: redo,
     onDelete: handleDeleteSelected,
-    onDeselect: handleDeselectAll,
-    onSelectAll: handleSelectAll,
+    onDeselect: deselectAll,
+    onSelectAll: selectAll,
     onNudge: handleNudge,
-    onCopy: handleCopy,
-    onPaste: handlePaste,
-    onDuplicate: handleDuplicate,
+    onCopy: copy,
+    onPaste: paste,
+    onDuplicate: duplicate,
   });
 
-  // Visibility and lock stay outside the undo stack: they are a way of
-  // looking at the plan, not a change to it (unchanged since KL-002).
-  const handleToggleLayerVisible = useCallback(
-    (layerId: string) => {
-      setProjectDirect((currentProject) => {
-        const layer = currentProject.layers.find((candidate) => candidate.id === layerId);
-        return layer ? patchLayer(currentProject, layerId, { visible: !layer.visible }) : currentProject;
-      });
-    },
-    [setProjectDirect],
-  );
+  const handleCreateGroup = useCallback(() => {
+    if (editableSelection.length < 2) return;
+    const name = window.prompt("Nom du groupe", "Groupe")?.trim();
+    if (!name) return;
+    const grouped = createNamedGroup(editableSelection, name);
+    const patches = new Map(grouped.map((object) => [object.id, object]));
+    commitChange((currentProject) => patchObjects(currentProject, patches));
+  }, [editableSelection, commitChange]);
 
-  const handleToggleLayerLocked = useCallback(
-    (layerId: string) => {
-      setProjectDirect((currentProject) => {
-        const layer = currentProject.layers.find((candidate) => candidate.id === layerId);
-        return layer ? patchLayer(currentProject, layerId, { locked: !layer.locked }) : currentProject;
-      });
-    },
-    [setProjectDirect],
-  );
-
-  // Creating, renaming, reordering and deleting a layer *are* changes to
-  // the document, so unlike the two toggles above they go through the
-  // undo stack.
-  const handleAddLayer = useCallback(() => {
-    const { project: nextProject, layer } = addLayer(project);
-    commitChange(() => nextProject);
-    setActiveLayerId(layer.id);
-  }, [project, commitChange]);
-
-  const handleRenameLayer = useCallback(
-    (layerId: string, name: string) => {
-      commitChange((currentProject) => renameLayer(currentProject, layerId, name));
-    },
-    [commitChange],
-  );
-
-  const handleMoveLayer = useCallback(
-    (layerId: string, direction: -1 | 1) => {
-      commitChange((currentProject) => moveLayer(currentProject, layerId, direction));
-    },
-    [commitChange],
-  );
-
-  const handleDeleteLayer = useCallback(
-    (layerId: string) => {
-      const layer = project.layers.find((candidate) => candidate.id === layerId);
-      if (!layer || project.layers.length <= 1) return;
-      const count = project.objects.filter((object) => object.layerId === layerId).length;
-      const confirmed = window.confirm(
-        count === 0
-          ? `Supprimer le calque « ${layer.name} » ?`
-          : `Supprimer le calque « ${layer.name} » ? Ses ${count} objet(s) ne seront pas effacés : ils passeront sur le calque voisin.`,
+  // Ungrouping releases the *whole* group, not just the members that
+  // happen to be selected — a half-dissolved group is not a state the user
+  // asked for. Objects on a locked layer keep their membership.
+  const handleUngroup = useCallback(() => {
+    const groupIds = new Set(editableSelection.map((object) => object.groupId).filter((id): id is string => Boolean(id)));
+    if (groupIds.size === 0) return;
+    commitChange((currentProject) => {
+      const grouped = currentProject.objects.filter(
+        (object) => object.groupId && groupIds.has(object.groupId) && !lockedLayerIds.has(object.layerId),
       );
-      if (!confirmed) return;
-      commitChange((currentProject) => removeLayer(currentProject, layerId));
-    },
-    [project.layers, project.objects, commitChange],
-  );
+      const patches = new Map(clearGroup(grouped).map((object) => [object.id, object]));
+      return patchObjects(currentProject, patches);
+    });
+  }, [editableSelection, lockedLayerIds, commitChange]);
 
-  const handleAssignSelectionToLayer = useCallback(
-    (layerId: string) => {
-      if (selectedIds.length === 0) return;
-      commitChange((currentProject) => assignObjectsToLayer(currentProject, selectedIds, layerId));
-    },
-    [selectedIds, commitChange],
-  );
+  // The pivot is the *whole* selection's centre, not the editable part's:
+  // scaling a group around a moving pivot would shift it sideways as soon
+  // as one member happens to be locked.
+  const handleTransformSelection = useCallback((scale: number, rotationDeg: number) => {
+    if (!selectionBounds || selectedObjects.length < 2 || editableSelection.length === 0) return;
+    const pivot = boundsCenterM(selectionBounds);
+    const transformed = editableSelection.map((object) => transformObjectAroundPivot(object, pivot, scale, rotationDeg));
+    const patches = new Map(transformed.map((object) => [object.id, object]));
+    commitChange((currentProject) => patchObjects(currentProject, patches));
+  }, [selectionBounds, selectedObjects.length, editableSelection, commitChange]);
+
+  const handleDistributeSelection = useCallback((axis: "x" | "y") => {
+    if (editableSelection.length < 3) return;
+    const distributed = distributeObjects(editableSelection, axis);
+    commitChange((currentProject) => patchObjects(currentProject, new Map(distributed.map((object) => [object.id, object]))));
+  }, [editableSelection, commitChange]);
+
+  const handleSaveComponent = useCallback(() => {
+    if (selectedObjects.length === 0 || !selectionBounds) return;
+    const name = window.prompt("Nom du modèle réutilisable", selectedObjects[0]?.groupName ?? "Composant")?.trim();
+    if (!name) return;
+    const normalized = selectedObjects.map((object) => ({ ...object, xM: object.xM - selectionBounds.minXM, yM: object.yM - selectionBounds.minYM }));
+    const template = saveComponentTemplate(name, normalized);
+    setComponentTemplates((current) => [...current, template]);
+  }, [selectedObjects, selectionBounds]);
+
+  const handleInsertComponent = useCallback((template: ComponentTemplate) => {
+    if (!effectiveLayerId) return;
+    const center = screenToWorld({ x: stageSize.widthPx / 2, y: stageSize.heightPx / 2 }, viewport);
+    const copies = duplicateObjects(template.objects, { offsetM: center, existingLayerIds: new Set(project.layers.map((layer) => layer.id)), fallbackLayerId: effectiveLayerId });
+    const grouped = createNamedGroup(copies, template.name);
+    commitChange((currentProject) => addObjects(currentProject, grouped));
+    selectOnly(grouped.map((object) => object.id));
+    closeDialog();
+  }, [effectiveLayerId, stageSize, viewport, project.layers, commitChange, closeDialog, selectOnly]);
 
   const handleToggleBackgroundVisible = useCallback(() => {
     setProjectDirect((currentProject) =>
@@ -568,6 +577,16 @@ export default function Editor({
         img.onload = () => {
           const centerWorld = screenToWorld({ x: stageSize.widthPx / 2, y: stageSize.heightPx / 2 }, viewport);
           commitChange((currentProject) => {
+            if (currentProject.background) {
+              const margins = getBackgroundCropMargins(currentProject.background);
+              return setBackground(currentProject, {
+                ...currentProject.background,
+                url,
+                widthPx: img.naturalWidth,
+                heightPx: img.naturalHeight,
+                crop: cropRectFromMargins(img.naturalWidth, img.naturalHeight, margins),
+              });
+            }
             const placement = computeDefaultBackgroundPlacement(
               img.naturalWidth,
               img.naturalHeight,
@@ -582,15 +601,14 @@ export default function Editor({
             });
             return setBackground(currentProject, background);
           });
-          setIsBackgroundSelected(true);
-          setSelectedIds([]);
+          selectBackground();
           setActiveTool("select");
         };
         img.src = url;
       };
       reader.readAsDataURL(file);
     },
-    [commitChange, stageSize, viewport],
+    [commitChange, stageSize, viewport, selectBackground],
   );
 
   const handleFileInputChange = useCallback(
@@ -603,23 +621,43 @@ export default function Editor({
     [handleImportBackgroundFile],
   );
 
+  const handleObjectImageInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !effectiveLayerId) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = typeof reader.result === "string" ? reader.result : null; if (!url) return;
+      const image = new Image();
+      image.onload = () => {
+        const widthM = 10; const heightM = widthM * image.naturalHeight / image.naturalWidth;
+        const center = screenToWorld({ x: stageSize.widthPx / 2, y: stageSize.heightPx / 2 }, viewport);
+        const object = createImageObject({ layerId: effectiveLayerId, name: file.name.replace(/\.[^.]+$/, "") || "Image", url, widthPx: image.naturalWidth, heightPx: image.naturalHeight, widthM, heightM, xM: center.xM - widthM / 2, yM: center.yM - heightM / 2, style: { opacity: 1 } });
+        commitChange((currentProject) => addObject(currentProject, object));
+        selectOnly([object.id]);
+        setActiveTool("select");
+      };
+      image.src = url;
+    };
+    reader.readAsDataURL(file);
+  }, [effectiveLayerId, stageSize, viewport, commitChange, selectOnly]);
+
   // --- Project files -------------------------------------------------------
 
   /** Swaps in a different document: clears the selection (its ids belong to the old project) and drops the undo stack. */
   const replaceDocument = useCallback(
     (nextProject: Project) => {
       resetHistory(nextProject);
-      setSelectedIds([]);
+      deselectAll();
       // Cleared rather than remapped: the id belonged to the old document.
       // The render-time guard above picks the new project's default.
       setActiveLayerId(null);
-      setIsBackgroundSelected(false);
       setCalibrationPoints(null);
       setActiveTool("select");
       setFileError(null);
       onDismissRestoreNotice();
     },
-    [resetHistory, onDismissRestoreNotice],
+    [resetHistory, onDismissRestoreNotice, deselectAll, setActiveLayerId],
   );
 
   const handleSaveToFile = useCallback(() => {
@@ -660,71 +698,46 @@ export default function Editor({
     replaceDocument(createEmptyProject({ name: "Nouveau projet" }));
   }, [replaceDocument]);
 
-  // --- Export --------------------------------------------------------------
+  const handleRenameProject = useCallback(() => {
+    const name = window.prompt("Nom du projet", project.name)?.trim();
+    if (!name || name === project.name) return;
+    commitChange((current) => ({ ...current, name, updatedAt: new Date().toISOString() }));
+  }, [project.name, commitChange]);
 
-  // The project carries at most one sheet for now; it's created lazily on
-  // first export so existing projects don't need migrating, and stored on
-  // the project so the chosen paper and scale persist like any other
-  // setting rather than resetting every session.
-  const sheet = useMemo(() => project.sheets[0] ?? createSheet(), [project.sheets]);
-  const contentBounds = useMemo(() => getProjectBoundsM(project), [project]);
-  const sheetLayout = useMemo(() => computeSheetLayout(sheet, contentBounds), [sheet, contentBounds]);
-  const printRaster = useMemo(() => computePrintRaster(sheetLayout), [sheetLayout]);
+  // --- Material library ----------------------------------------------------
 
-  const handleSheetChange = useCallback(
-    (patch: Partial<Sheet>) => {
-      commitChange((currentProject) => {
-        const current = currentProject.sheets[0] ?? createSheet();
-        return {
-          ...currentProject,
-          sheets: [{ ...current, ...patch }, ...currentProject.sheets.slice(1)],
-          updatedAt: new Date().toISOString(),
-        };
-      });
-    },
-    [commitChange],
-  );
-
-  /**
-   * Rasterises the off-screen print stage and hands the result to the
-   * chosen writer. Called only from `PrintCanvas`'s `onReady`, so the
-   * background image is guaranteed to have decoded — capturing earlier
-   * would quietly produce a plan with a blank backdrop.
-   */
-  const handlePrintCanvasReady = useCallback(() => {
-    const target = pendingExport;
-    const stage = printStageRef.current;
-    if (!target || !stage) return;
-    // Clear first: whatever happens below, the off-screen stage must come
-    // down, or a failure would leave a huge canvas mounted forever.
-    setPendingExport(null);
-    try {
-      if (target === "png") {
-        downloadPng(stage.toDataURL({ mimeType: "image/png", pixelRatio: 1 }), project);
-        return;
-      }
-      downloadSheetPdf({
-        project,
-        sheet,
-        layout: sheetLayout,
-        drawingJpegDataUrl: stage.toDataURL({ mimeType: "image/jpeg", quality: 0.92, pixelRatio: 1 }),
-        pixelWidth: printRaster.pixelWidth,
-        pixelHeight: printRaster.pixelHeight,
-        now: new Date(),
-      });
-    } catch (error) {
-      setFileError(
-        `L'export a échoué : ${error instanceof Error ? error.message : String(error)}. Essayez un format de papier plus petit.`,
-      );
-    }
-  }, [pendingExport, project, sheet, sheetLayout, printRaster]);
-
-  const handleOpenExport = useCallback(() => {
-    setIsExportOpen(true);
-  }, []);
+  /** Drops a catalogue item at the centre of the current view, carrying its reference and unit so it shows up in the schedule. */
+  const handleInsertCatalogItem = useCallback((item: CatalogItem) => {
+    if (!effectiveLayerId) return;
+    const center = screenToWorld({ x: stageSize.widthPx / 2, y: stageSize.heightPx / 2 }, viewport);
+    const common = {
+      layerId: effectiveLayerId,
+      name: item.name,
+      label: item.name,
+      catalogId: item.id,
+      category: item.category,
+      reference: item.reference,
+      quantity: 1,
+      unit: item.unit,
+      xM: center.xM,
+      yM: center.yM,
+      style: item.style,
+    };
+    const object = item.shape === "circle"
+      ? createCircleObject({ ...common, radiusM: item.radiusM ?? 0.5 })
+      : item.shape === "line"
+        ? createLineObject({ ...common, pointsM: item.pointsM ?? [{ xM: 0, yM: 0 }, { xM: 1, yM: 0 }] })
+        : item.shape === "polygon"
+          ? createPolygonObject({ ...common, pointsM: item.pointsM ?? [{ xM: 0, yM: 0 }, { xM: 1, yM: 0 }, { xM: 0, yM: 1 }] })
+          : createRectangleObject({ ...common, widthM: item.widthM ?? 1, heightM: item.heightM ?? 1 });
+    commitChange((currentProject) => addObject(currentProject, object));
+    selectOnly([object.id]);
+    setActiveTool("select");
+    closeDialog();
+  }, [effectiveLayerId, stageSize, viewport, commitChange, closeDialog, selectOnly]);
 
   return (
-    <div className="app-layout">
+    <div className={`app-layout${toolsCollapsed ? " tools-collapsed" : ""}${propertiesCollapsed ? " properties-collapsed" : ""}`}>
       <input
         ref={fileInputRef}
         type="file"
@@ -739,8 +752,10 @@ export default function Editor({
         className="visually-hidden"
         onChange={handleProjectFileInputChange}
       />
+      <input ref={objectImageInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="visually-hidden" onChange={handleObjectImageInputChange} />
       <Toolbar
         projectName={project.name}
+        onRenameProject={handleRenameProject}
         zoom={viewport.zoom}
         canUndo={canUndo}
         canRedo={canRedo}
@@ -749,8 +764,18 @@ export default function Editor({
         saveStatus={saveStatus}
         onNewProject={handleNewProject}
         onOpenProject={handleRequestOpenProject}
+        onOpenRecentProjects={() => setOpenDialog("projects")}
         onSaveToFile={handleSaveToFile}
-        onExport={handleOpenExport}
+        onOpenLibrary={() => setOpenDialog("library")}
+        onOpenSchedule={() => setOpenDialog("schedule")}
+        onExport={() => setOpenDialog("export")}
+        onExportDiagnostic={() => downloadDiagnosticReport(project)}
+        onOpenExchange={() => setOpenDialog("exchange")}
+        onImportObjectImage={() => objectImageInputRef.current?.click()}
+        onOpenShortcuts={() => setOpenDialog("shortcuts")}
+        onOpenComments={() => setOpenDialog("comments")}
+        onFitPlan={() => navigationBounds && fitBounds(navigationBounds)}
+        canFitPlan={navigationBounds !== null}
       />
       {(restoreNotice || fileError) && (
         <div className="app-notice" role="status">
@@ -765,7 +790,19 @@ export default function Editor({
           </button>
         </div>
       )}
-      <ToolsPanel activeToolId={activeTool} onSelectTool={handleSelectTool} />
+      <ToolsPanel
+        activeToolId={activeTool}
+        onSelectTool={handleSelectTool}
+        snapEnabled={snapEnabled}
+        onSnapEnabledChange={setSnapEnabled}
+        gridVisible={gridVisible}
+        onGridVisibleChange={setGridVisible}
+        gridLimited={project.background?.visible ? true : gridLimited}
+        onGridLimitedChange={setGridLimited}
+        gridLimitForced={project.background?.visible === true}
+        collapsed={toolsCollapsed}
+        onToggleCollapsed={() => setToolsCollapsed((value) => !value)}
+      />
       <PlanCanvas
         containerRef={containerRef}
         stageSize={stageSize}
@@ -776,12 +813,15 @@ export default function Editor({
         layers={project.layers}
         background={project.background}
         activeTool={activeTool}
+        snapEnabled={snapEnabled}
+        gridVisible={gridVisible}
+        gridLimited={project.background?.visible ? true : gridLimited}
         selectedIds={selectedIds}
         isBackgroundSelected={isBackgroundSelected}
-        onSelectObject={handleSelectObject}
-        onSelectMany={handleSelectMany}
-        onSelectBackground={handleSelectBackground}
-        onDeselectAll={handleDeselectAll}
+        onSelectObject={selectObject}
+        onSelectMany={selectMany}
+        onSelectBackground={selectBackground}
+        onDeselectAll={deselectAll}
         onCreateObject={handleCreateObject}
         onBeginObjectEdit={handleBeginObjectEdit}
         onBeginObjectDrag={handleBeginObjectDrag}
@@ -792,6 +832,8 @@ export default function Editor({
         onBackgroundResizeLive={handleBackgroundResizeLive}
         onCalibrationMeasured={handleCalibrationMeasured}
         onCancelCalibration={handleCancelCalibration}
+        activeLayerLabel={project.layers.find((layer) => layer.id === effectiveLayerId)?.name ?? "Aucun"}
+        activeLayerLocked={project.layers.find((layer) => layer.id === effectiveLayerId)?.locked ?? false}
       />
       <PropertiesPanel
         selected={isBackgroundSelected ? null : selectedObject}
@@ -804,7 +846,7 @@ export default function Editor({
             ? (selectedObjects[0]?.layerId ?? null)
             : null
         }
-        onAssignLayer={handleAssignSelectionToLayer}
+        onAssignLayer={(layerId) => assignObjectsToLayerAction(selectedIds, layerId)}
         selectedBackground={isBackgroundSelected ? project.background : null}
         calibration={project.calibration}
         isLocked={isBackgroundSelected ? isBackgroundLocked : isSelectedLocked}
@@ -812,9 +854,17 @@ export default function Editor({
         onLiveUpdate={(patch) => selectedObject && handleObjectLiveUpdate(selectedObject.id, patch)}
         onBackgroundLiveUpdate={handleBackgroundLiveUpdate}
         onDelete={handleDeleteSelected}
-        onDuplicate={handleDuplicate}
+        onDuplicate={duplicate}
         onRequestReplaceBackground={handleRequestBackgroundImport}
         onRequestCalibration={handleRequestCalibration}
+        onRequestScaleCalibration={() => setOpenDialog("scaleCalibration")}
+        onCreateGroup={handleCreateGroup}
+        onUngroup={handleUngroup}
+        onTransformSelection={handleTransformSelection}
+        onDistributeSelection={handleDistributeSelection}
+        onSaveComponent={handleSaveComponent}
+        collapsed={propertiesCollapsed}
+        onToggleCollapsed={() => setPropertiesCollapsed((value) => !value)}
       />
       {calibrationPoints && (
         <CalibrationDialog
@@ -826,37 +876,81 @@ export default function Editor({
           onCancel={handleCancelCalibration}
         />
       )}
+      {openDialog === "scaleCalibration" && (
+        <ScaleCalibrationDialog
+          onConfirm={handleConfirmScaleCalibration}
+          onCancel={() => closeDialog()}
+        />
+      )}
+      {layerPrompt?.kind === "delete" && (
+        <DeleteLayerDialog
+          layer={layerPrompt.layer}
+          destinations={layerPrompt.destinations}
+          objectCount={layerPrompt.objectCount}
+          onConfirm={confirmDeleteLayer}
+          onCancel={cancelLayerPrompt}
+        />
+      )}
+      {layerPrompt?.kind === "style" && (
+        <LayerStyleDialog
+          layer={layerPrompt.layer}
+          onConfirm={confirmLayerStyle}
+          onCancel={cancelLayerPrompt}
+        />
+      )}
       <LayersPanel
         background={project.background}
         isBackgroundSelected={isBackgroundSelected}
         layers={project.layers}
+        objects={project.objects}
         objectCounts={objectCounts}
         activeLayerId={effectiveLayerId}
         onSetActiveLayer={setActiveLayerId}
-        onToggleVisible={handleToggleLayerVisible}
-        onToggleLocked={handleToggleLayerLocked}
-        onRenameLayer={handleRenameLayer}
-        onMoveLayer={handleMoveLayer}
-        onDeleteLayer={handleDeleteLayer}
-        onAddLayer={handleAddLayer}
-        onSelectBackground={handleSelectBackground}
+        onSelectObject={(id) => selectObject(id, false)}
+        onToggleVisible={toggleLayerVisible}
+        onToggleLocked={toggleLayerLocked}
+        onRenameLayer={renameLayerAction}
+        onMoveLayer={moveLayerAction}
+        onDeleteLayer={requestDeleteLayer}
+        onAddLayer={addLayerAction}
+        onSelectBackground={selectBackground}
         onToggleBackgroundVisible={handleToggleBackgroundVisible}
         onToggleBackgroundLocked={handleToggleBackgroundLocked}
         onRequestImportBackground={handleRequestBackgroundImport}
+        onAssignObjectToLayer={(objectId, layerId) => { assignObjectsToLayerAction([objectId], layerId); selectOnly([objectId]); }}
+        onSetLayerFolder={setLayerFolder}
+        onSetLayerDefaultStyle={requestLayerStyle}
       />
-      {isExportOpen && (
+      {openDialog === "export" && (
         <ExportDialog
           sheet={sheet}
+          sheets={availableSheets}
+          onSelectSheet={setActiveSheetId}
+          onAddSheet={addSheet}
+          onDuplicateSheet={duplicateSheet}
+          onDeleteSheet={deleteSheet}
+          preview={<SheetPreview project={project} sheet={sheet} layout={sheetLayout} objects={orderedObjects} layers={project.layers} background={project.background} showGrid={printGrid} />}
           contentBounds={contentBounds}
           busy={pendingExport !== null}
-          onChange={handleSheetChange}
+          onChange={changeSheet}
           showGrid={printGrid}
           onShowGridChange={setPrintGrid}
-          onExportPdf={() => setPendingExport("pdf")}
-          onExportPng={() => setPendingExport("png")}
-          onClose={() => setIsExportOpen(false)}
+          transparentPng={transparentPng}
+          onTransparentPngChange={setTransparentPng}
+          onExportPdf={() => startExport("pdf")}
+          onExportMultiPage={startMultiPageExport}
+          onExportPng={() => startExport("png")}
+          onClose={() => closeDialog()}
         />
       )}
+      <Suspense fallback={<div className="dialog-backdrop"><div className="dialog" role="status">Chargement…</div></div>}>
+        {openDialog === "library" && <LibraryDialog onInsert={handleInsertCatalogItem} templates={componentTemplates} onInsertTemplate={handleInsertComponent} onDeleteTemplate={(id) => setComponentTemplates(deleteComponentTemplate(id))} onClose={() => closeDialog()} />}
+        {openDialog === "schedule" && <ScheduleDialog project={project} objects={project.objects} onClose={() => closeDialog()} />}
+        {openDialog === "projects" && <ProjectsDialog currentProject={project} onOpen={(nextProject) => { replaceDocument(nextProject); closeDialog(); }} onClose={() => closeDialog()} />}
+        {openDialog === "exchange" && <ExchangeDialog project={project} objects={orderedObjects.filter((object) => visibleLayerIds.has(object.layerId))} selection={selectedObjects} targetLayerId={effectiveLayerId} onImportObjects={(objects) => { commitChange((current) => addObjects(current, objects)); selectOnly(objects.map((object) => object.id)); }} onSetGeoreference={(georeference) => commitChange((current) => ({ ...current, georeference, updatedAt: new Date().toISOString() }))} onClose={() => closeDialog()} />}
+      </Suspense>
+      {openDialog === "shortcuts" && <ShortcutsDialog shortcuts={shortcuts} onChange={(next) => setShortcuts(saveShortcuts(next))} onClose={() => closeDialog()} />}
+      {openDialog === "comments" && <CommentsDialog project={project} selectedObjectId={selectedIds.length === 1 ? selectedIds[0] : undefined} onChange={(comments) => commitChange((current) => ({ ...current, collaboration: { comments }, updatedAt: new Date().toISOString() }))} onClose={() => closeDialog()} />}
       {/*
         The print stage is mounted only for the instant it takes to
         rasterise, and kept out of the layout entirely — it is far larger
@@ -870,11 +964,12 @@ export default function Editor({
             pixelWidth={printRaster.pixelWidth}
             pixelHeight={printRaster.pixelHeight}
             viewport={printRaster.viewport}
-            objects={orderedObjects}
+            objects={rasterObjects}
             layers={project.layers}
             background={project.background}
             showGrid={printGrid}
             renderScale={printRaster.effectiveDpi / CSS_PIXELS_PER_INCH}
+            transparentBackground={pendingExport === "png" && transparentPng}
             onReady={handlePrintCanvasReady}
           />
         </div>

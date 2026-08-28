@@ -65,16 +65,6 @@ export function addObject(project: Project, object: PlanObject): Project {
   return { ...project, objects: [...project.objects, object], updatedAt: new Date().toISOString() };
 }
 
-/** Returns a new project with the object matching `id` removed. A no-op (same objects array) if no object matches. */
-export function removeObject(project: Project, id: string): Project {
-  if (!project.objects.some((object) => object.id === id)) return project;
-  return {
-    ...project,
-    objects: project.objects.filter((object) => object.id !== id),
-    updatedAt: new Date().toISOString(),
-  };
-}
-
 /**
  * Returns a new project with the object matching `id` patched. A no-op if
  * no object matches — callers may legitimately race with an object having
@@ -164,7 +154,7 @@ export function renameLayer(project: Project, layerId: string, name: string): Pr
 }
 
 /** Sets a layer's `visible` / `locked` flags. */
-export function patchLayer(project: Project, layerId: string, patch: Partial<Pick<Layer, "visible" | "locked">>): Project {
+export function patchLayer(project: Project, layerId: string, patch: Partial<Pick<Layer, "visible" | "locked" | "folder" | "defaultStyle">>): Project {
   if (!project.layers.some((layer) => layer.id === layerId)) return project;
   return touched(project, {
     layers: project.layers.map((layer) => (layer.id === layerId ? { ...layer, ...patch } : layer)),
@@ -190,15 +180,17 @@ export function moveLayer(project: Project, layerId: string, direction: -1 | 1):
  * and an empty `layers` array would leave the next created object
  * nowhere to go.
  */
-export function removeLayer(project: Project, layerId: string): Project {
+export function removeLayer(project: Project, layerId: string, options: { destinationLayerId?: string; deleteObjects?: boolean } = {}): Project {
   if (project.layers.length <= 1) return project;
-  const destination = getLayerAfterRemoval(project.layers, layerId);
+  const destination = options.destinationLayerId
+    ? project.layers.find((layer) => layer.id === options.destinationLayerId && layer.id !== layerId)
+    : getLayerAfterRemoval(project.layers, layerId);
   if (!destination) return project;
   return touched(project, {
     layers: normalizeLayerOrder(sortLayersByOrder(project.layers).filter((layer) => layer.id !== layerId)),
-    objects: project.objects.map((object) =>
-      object.layerId === layerId ? { ...object, layerId: destination.id } : object,
-    ),
+    objects: options.deleteObjects
+      ? project.objects.filter((object) => object.layerId !== layerId)
+      : project.objects.map((object) => object.layerId === layerId ? { ...object, layerId: destination.id } : object),
   });
 }
 

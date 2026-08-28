@@ -4,7 +4,9 @@ import {
   boundsContain,
   boundsFromCorners,
   boundsIntersect,
+  editableObjects,
   getSelectionBoundsM,
+  isSelectionLocked,
   objectIdsWithinBounds,
   toggleSelection,
 } from "./selection";
@@ -111,5 +113,29 @@ describe("getSelectionBoundsM", () => {
       ],
     });
     expect(getSelectionBoundsM([circle, polygon])).toEqual({ minXM: -3, minYM: -3, maxXM: 14, maxYM: 12 });
+  });
+});
+
+describe("editableObjects / isSelectionLocked (KL-audit)", () => {
+  const onLayer = (id: string, layerId: string) =>
+    createRectangleObject({ layerId, name: id, xM: 0, yM: 0, widthM: 1, heightM: 1 });
+
+  it("keeps only the objects whose layer is unlocked", () => {
+    const free = onLayer("a", "open");
+    const held = onLayer("b", "locked");
+    expect(editableObjects([free, held], new Set(["locked"]))).toEqual([free]);
+  });
+
+  it("reports a mixed selection as editable and a fully locked one as not", () => {
+    const free = onLayer("a", "open");
+    const held = onLayer("b", "locked");
+    const locked = new Set(["locked"]);
+    expect(isSelectionLocked([free, held], locked)).toBe(false);
+    expect(isSelectionLocked([held], locked)).toBe(true);
+  });
+
+  it("treats an empty selection as unlocked, so nothing reports itself read-only for lack of content", () => {
+    expect(isSelectionLocked([], new Set(["locked"]))).toBe(false);
+    expect(editableObjects([], new Set(["locked"]))).toEqual([]);
   });
 });

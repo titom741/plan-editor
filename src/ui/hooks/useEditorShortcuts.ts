@@ -1,6 +1,8 @@
 import { useEffect } from "react";
+import { keyboardEventSignature, type ShortcutMap } from "../shortcuts";
 
 interface EditorShortcutsHandlers {
+  shortcuts: ShortcutMap;
   onUndo: () => void;
   onRedo: () => void;
   onDelete: () => void;
@@ -39,6 +41,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
  * the plan.
  */
 export function useEditorShortcuts({
+  shortcuts,
   onUndo,
   onRedo,
   onDelete,
@@ -53,40 +56,16 @@ export function useEditorShortcuts({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) return;
 
+      const signature = keyboardEventSignature(event);
+      const configured: [keyof ShortcutMap, () => void][] = [
+        ["undo", onUndo], ["redo", onRedo], ["selectAll", onSelectAll], ["copy", onCopy],
+        ["paste", onPaste], ["duplicate", onDuplicate], ["delete", onDelete], ["deselect", onDeselect],
+      ];
+      const match = configured.find(([action]) => shortcuts[action] === signature);
+      if (match) { event.preventDefault(); match[1](); return; }
+
       const isModifier = event.metaKey || event.ctrlKey;
       if (isModifier) {
-        const key = event.key.toLowerCase();
-        if (key === "z") {
-          event.preventDefault();
-          if (event.shiftKey) onRedo();
-          else onUndo();
-          return;
-        }
-        if (key === "y") {
-          event.preventDefault();
-          onRedo();
-          return;
-        }
-        if (key === "a") {
-          event.preventDefault();
-          onSelectAll();
-          return;
-        }
-        if (key === "c") {
-          event.preventDefault();
-          onCopy();
-          return;
-        }
-        if (key === "v") {
-          event.preventDefault();
-          onPaste();
-          return;
-        }
-        if (key === "d") {
-          event.preventDefault();
-          onDuplicate();
-          return;
-        }
         return;
       }
 
@@ -101,17 +80,9 @@ export function useEditorShortcuts({
         return;
       }
 
-      if (event.key === "Delete" || event.key === "Backspace") {
-        event.preventDefault();
-        onDelete();
-        return;
-      }
-      if (event.key === "Escape") {
-        onDeselect();
-      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onUndo, onRedo, onDelete, onDeselect, onSelectAll, onNudge, onCopy, onPaste, onDuplicate]);
+  }, [shortcuts, onUndo, onRedo, onDelete, onDeselect, onSelectAll, onNudge, onCopy, onPaste, onDuplicate]);
 }

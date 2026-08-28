@@ -1,11 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { calibrationFromKnownDistance, createDefaultCalibration, DEFAULT_PIXELS_PER_METER } from "./calibration";
+import { calibrationFromKnownDistance, calibrationFromKnownScale, createDefaultCalibration, DEFAULT_PIXELS_PER_METER } from "./calibration";
 
 describe("createDefaultCalibration", () => {
   it("returns the default pixelsPerMeter with a 'default' source", () => {
     const calibration = createDefaultCalibration();
     expect(calibration.pixelsPerMeter).toBe(DEFAULT_PIXELS_PER_METER);
     expect(calibration.source).toEqual({ type: "default" });
+  });
+});
+
+describe("calibrationFromKnownScale", () => {
+  it("convertit une échelle papier et un DPI en pixels image par mètre réel", () => {
+    const calibration = calibrationFromKnownScale(100, 300);
+    expect(calibration.pixelsPerMeter).toBeCloseTo(118.110236, 6);
+    expect(calibration.source).toEqual({ type: "knownScale", scale: 100 });
+  });
+
+  it("refuse les valeurs physiques invalides", () => {
+    expect(() => calibrationFromKnownScale(0, 300)).toThrow(RangeError);
+    expect(() => calibrationFromKnownScale(100, -1)).toThrow(RangeError);
   });
 });
 
