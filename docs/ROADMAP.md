@@ -324,3 +324,13 @@ Still open, and deliberately not done here:
 - **`useSelection` / `useLayerActions` are untested**: exercising a hook
   needs a React test renderer, which the project does not have. The rules
   worth testing were moved into `domain/` instead.
+
+## KL-026 — Menus, barre configurable, liste des éléments *(done)*
+
+La barre du haut portait quinze boutons sur une ligne. Les actions vivent
+maintenant dans un registre (`ui/commands.ts`) lu par trois consommateurs :
+les menus « Fichier » et « Projet » du rail gauche, les boutons épinglés de
+la barre du haut, et le dialogue de personnalisation (⚙). Ajout de
+« Enregistrer sous… ». Nouveau panneau « Éléments » dans le rail droit :
+inventaire filtrable par calque, avec dimensions, sélection partagée avec
+le plan. Voir `docs/ARCHITECTURE.md`.

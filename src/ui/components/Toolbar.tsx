@@ -1,3 +1,4 @@
+import { getCommand, type CommandId } from "../commands";
 import type { SaveStatus } from "../hooks/useAutosave";
 
 interface ToolbarProps {
@@ -9,20 +10,11 @@ interface ToolbarProps {
   onUndo: () => void;
   onRedo: () => void;
   saveStatus: SaveStatus;
-  onNewProject: () => void;
-  onOpenProject: () => void;
-  onOpenRecentProjects: () => void;
-  onSaveToFile: () => void;
-  onOpenLibrary: () => void;
-  onOpenSchedule: () => void;
-  onExport: () => void;
-  onExportDiagnostic: () => void;
   onFitPlan: () => void;
   canFitPlan: boolean;
-  onOpenExchange: () => void;
-  onImportObjectImage: () => void;
-  onOpenShortcuts: () => void;
-  onOpenComments: () => void;
+  /** The commands the user chose to keep within one click. Everything else lives in the left-hand menus. */
+  pinnedIds: readonly CommandId[];
+  onRunCommand: (id: CommandId) => void;
 }
 
 function formatTime(iso: string): string {
@@ -77,6 +69,17 @@ function describeSaveStatus(status: SaveStatus): { label: string; title: string;
   }
 }
 
+/**
+ * The top bar: what the project is, what state it is in, and the few
+ * actions worth permanent space.
+ *
+ * It used to carry every action the app had — fifteen buttons in one row,
+ * none of them findable. The actions now live in the left-hand
+ * `CommandMenu`s, and this bar shows only what the user pinned (see
+ * `ui/commands.ts`). Undo, redo, fit and the zoom readout stay fixed:
+ * they are about the state of the editor rather than things to do with
+ * the document, and their enabled state has to be visible at all times.
+ */
 export function Toolbar({
   projectName,
   onRenameProject,
@@ -86,22 +89,13 @@ export function Toolbar({
   onUndo,
   onRedo,
   saveStatus,
-  onNewProject,
-  onOpenProject,
-  onOpenRecentProjects,
-  onSaveToFile,
-  onOpenLibrary,
-  onOpenSchedule,
-  onOpenExchange,
-  onImportObjectImage,
-  onOpenShortcuts,
-  onOpenComments,
-  onExport,
-  onExportDiagnostic,
   onFitPlan,
   canFitPlan,
+  pinnedIds,
+  onRunCommand,
 }: ToolbarProps) {
   const save = describeSaveStatus(saveStatus);
+  const pinned = pinnedIds.map(getCommand).filter((command) => command !== undefined);
 
   return (
     <header className="toolbar">
@@ -117,44 +111,26 @@ export function Toolbar({
         )}
       </div>
       <div className="toolbar__file">
-        <button type="button" className="toolbar__button" onClick={onNewProject} title="Nouveau projet">
-          Nouveau
-        </button>
-        <button type="button" className="toolbar__button" onClick={onOpenProject} title="Ouvrir un projet (.kl.json)">
-          Ouvrir…
-        </button>
-        <button type="button" className="toolbar__button" onClick={onOpenRecentProjects} title="Ouvrir un projet conservé dans ce navigateur">
-          Récents…
-        </button>
+        {pinned.map((command) => (
+          <button
+            key={command.id}
+            type="button"
+            className="toolbar__button"
+            onClick={() => onRunCommand(command.id)}
+            title={command.title}
+          >
+            <span aria-hidden="true">{command.icon}</span> {command.shortLabel}
+          </button>
+        ))}
         <button
           type="button"
-          className="toolbar__button"
-          onClick={onSaveToFile}
-          title="Enregistrer le projet dans un fichier"
+          className="toolbar__button toolbar__button--ghost"
+          onClick={() => onRunCommand("customizeToolbar")}
+          title="Choisir les boutons épinglés dans cette barre"
+          aria-label="Personnaliser la barre"
         >
-          Enregistrer un fichier
+          ⚙
         </button>
-        <button type="button" className="toolbar__button" onClick={onOpenLibrary} title="Insérer un élément de la bibliothèque métier">
-          Bibliothèque…
-        </button>
-        <button type="button" className="toolbar__button" onClick={onOpenSchedule} title="Afficher les quantités du plan">
-          Nomenclature…
-        </button>
-        <button type="button" className="toolbar__button" onClick={onOpenExchange} title="Exporter en SVG, DXF ou GeoJSON">Échanges…</button>
-        <button type="button" className="toolbar__button" onClick={onImportObjectImage} title="Importer une image ou un pictogramme comme objet">Image objet…</button>
-        <button
-          type="button"
-          className="toolbar__button"
-          onClick={onExport}
-          title="Exporter le plan en PDF ou PNG, à l'échelle"
-        >
-          🖨 Exporter…
-        </button>
-        <button type="button" className="toolbar__button" onClick={onExportDiagnostic} title="Exporter un rapport technique local sans contenu du plan">
-          Diagnostic
-        </button>
-        <button type="button" className="toolbar__button" onClick={onOpenShortcuts} title="Consulter et personnaliser les raccourcis clavier">Raccourcis…</button>
-        <button type="button" className="toolbar__button" onClick={onOpenComments} title="Commentaires persistants du projet">Commentaires…</button>
       </div>
       <div className="toolbar__history">
         <button type="button" className="toolbar__button" onClick={onUndo} disabled={!canUndo} title="Annuler (Ctrl+Z)">

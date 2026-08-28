@@ -37,9 +37,12 @@ import { PlanCanvas } from "./components/PlanCanvas";
 import type { NewObjectSpec } from "./components/PlanCanvas";
 import { PrintCanvas } from "./components/PrintCanvas";
 import { PropertiesPanel } from "./components/PropertiesPanel";
+import { ElementsPanel } from "./components/ElementsPanel";
 import { SheetPreview } from "./components/SheetPreview";
 import { ScaleCalibrationDialog } from "./components/ScaleCalibrationDialog";
 import { Toolbar } from "./components/Toolbar";
+import { ToolbarCustomizeDialog } from "./components/ToolbarCustomizeDialog";
+import { CommandMenu } from "./components/CommandMenu";
 import { ToolsPanel } from "./components/ToolsPanel";
 import { ShortcutsDialog } from "./components/ShortcutsDialog";
 import { CommentsDialog } from "./components/CommentsDialog";
@@ -55,6 +58,14 @@ import { describeParseError, downloadProjectFile, readProjectFile } from "./proj
 import type { ToolId } from "./tools";
 import { downloadDiagnosticReport } from "./diagnosticActions";
 import { loadShortcuts, saveShortcuts, type ShortcutMap } from "./shortcuts";
+import {
+  DEFAULT_PINNED_COMMANDS,
+  loadPinnedCommands,
+  savePinnedCommands,
+  togglePinnedCommand,
+  type CommandGroup,
+  type CommandId,
+} from "./commands";
 import { deleteComponentTemplate, loadComponentTemplates, saveComponentTemplate, type ComponentTemplate } from "../persistence/componentStorage";
 import "./App.css";
 
@@ -99,7 +110,8 @@ type DialogId =
   | "projects"
   | "exchange"
   | "shortcuts"
-  | "comments";
+  | "comments"
+  | "customizeToolbar";
 
 interface EditorProps {
   /** The project the session starts from — restored from storage, or a fresh one. Read once: from here on the editor owns the document. */
@@ -142,7 +154,17 @@ export default function Editor({
   const closeDialog = useCallback(() => setOpenDialog(null), []);
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(() => loadShortcuts());
   const [toolsCollapsed, setToolsCollapsed] = useState(false);
+  const [collapsedMenus, setCollapsedMenus] = useState<ReadonlySet<CommandGroup>>(new Set());
+  const toggleMenu = useCallback((group: CommandGroup) => {
+    setCollapsedMenus((current) => {
+      const next = new Set(current);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
+  }, []);
   const [propertiesCollapsed, setPropertiesCollapsed] = useState(false);
+  const [elementsCollapsed, setElementsCollapsed] = useState(false);
   const [componentTemplates, setComponentTemplates] = useState<ComponentTemplate[]>(() => loadComponentTemplates());
   /** Snapping is on by default: a plan is drawn to fit together, and the people who don't want it find the switch faster than the people who need it find its absence. */
   const [snapEnabled, setSnapEnabled] = useState(true);
@@ -664,6 +686,20 @@ export default function Editor({
     downloadProjectFile(project);
   }, [project]);
 
+  /**
+   * "Save as" asks for a file name and *renames the project to match*.
+   * A browser download can't tell us where the file went, so a project
+   * whose name no longer matches its file is the one thing we can avoid:
+   * next time, the suggested name is the one the user last chose.
+   */
+  const handleSaveToFileAs = useCallback(() => {
+    const name = window.prompt("Enregistrer sous — nom du projet et du fichier", project.name)?.trim();
+    if (!name) return;
+    const renamed = { ...project, name, updatedAt: new Date().toISOString() };
+    commitChange(() => renamed);
+    downloadProjectFile(renamed);
+  }, [project, commitChange]);
+
   const handleRequestOpenProject = useCallback(() => {
     projectFileInputRef.current?.click();
   }, []);
@@ -703,6 +739,38 @@ export default function Editor({
     if (!name || name === project.name) return;
     commitChange((current) => ({ ...current, name, updatedAt: new Date().toISOString() }));
   }, [project.name, commitChange]);
+
+  // --- Commands ------------------------------------------------------------
+
+  const [pinnedCommands, setPinnedCommands] = useState<CommandId[]>(() => loadPinnedCommands());
+
+  /**
+   * One place where a command id becomes an action. The left-hand menus,
+   * the pinned toolbar buttons and (later) any other entry point all go
+   * through here, so an action can never behave differently depending on
+   * where it was invoked from.
+   */
+  const runCommand = useCallback(
+    (id: CommandId) => {
+      switch (id) {
+        case "newProject": return handleNewProject();
+        case "openProject": return handleRequestOpenProject();
+        case "recentProjects": return setOpenDialog("projects");
+        case "saveFile": return handleSaveToFile();
+        case "saveFileAs": return handleSaveToFileAs();
+        case "export": return setOpenDialog("export");
+        case "library": return setOpenDialog("library");
+        case "importObjectImage": return objectImageInputRef.current?.click();
+        case "schedule": return setOpenDialog("schedule");
+        case "exchange": return setOpenDialog("exchange");
+        case "comments": return setOpenDialog("comments");
+        case "shortcuts": return setOpenDialog("shortcuts");
+        case "customizeToolbar": return setOpenDialog("customizeToolbar");
+        case "diagnostic": return downloadDiagnosticReport(project);
+      }
+    },
+    [project, handleNewProject, handleRequestOpenProject, handleSaveToFile, handleSaveToFileAs],
+  );
 
   // --- Material library ----------------------------------------------------
 
@@ -762,20 +830,10 @@ export default function Editor({
         onUndo={undo}
         onRedo={redo}
         saveStatus={saveStatus}
-        onNewProject={handleNewProject}
-        onOpenProject={handleRequestOpenProject}
-        onOpenRecentProjects={() => setOpenDialog("projects")}
-        onSaveToFile={handleSaveToFile}
-        onOpenLibrary={() => setOpenDialog("library")}
-        onOpenSchedule={() => setOpenDialog("schedule")}
-        onExport={() => setOpenDialog("export")}
-        onExportDiagnostic={() => downloadDiagnosticReport(project)}
-        onOpenExchange={() => setOpenDialog("exchange")}
-        onImportObjectImage={() => objectImageInputRef.current?.click()}
-        onOpenShortcuts={() => setOpenDialog("shortcuts")}
-        onOpenComments={() => setOpenDialog("comments")}
         onFitPlan={() => navigationBounds && fitBounds(navigationBounds)}
         canFitPlan={navigationBounds !== null}
+        pinnedIds={pinnedCommands}
+        onRunCommand={runCommand}
       />
       {(restoreNotice || fileError) && (
         <div className="app-notice" role="status">
@@ -790,6 +848,7 @@ export default function Editor({
           </button>
         </div>
       )}
+      <div className="side-rail">
       <ToolsPanel
         activeToolId={activeTool}
         onSelectTool={handleSelectTool}
@@ -803,6 +862,25 @@ export default function Editor({
         collapsed={toolsCollapsed}
         onToggleCollapsed={() => setToolsCollapsed((value) => !value)}
       />
+      {!toolsCollapsed && (
+        <>
+          <CommandMenu
+            group="file"
+            onRun={runCommand}
+            pinnedIds={pinnedCommands}
+            collapsed={collapsedMenus.has("file")}
+            onToggleCollapsed={() => toggleMenu("file")}
+          />
+          <CommandMenu
+            group="project"
+            onRun={runCommand}
+            pinnedIds={pinnedCommands}
+            collapsed={collapsedMenus.has("project")}
+            onToggleCollapsed={() => toggleMenu("project")}
+          />
+        </>
+      )}
+      </div>
       <PlanCanvas
         containerRef={containerRef}
         stageSize={stageSize}
@@ -835,6 +913,7 @@ export default function Editor({
         activeLayerLabel={project.layers.find((layer) => layer.id === effectiveLayerId)?.name ?? "Aucun"}
         activeLayerLocked={project.layers.find((layer) => layer.id === effectiveLayerId)?.locked ?? false}
       />
+      <div className="inspector-rail">
       <PropertiesPanel
         selected={isBackgroundSelected ? null : selectedObject}
         selectionCount={isBackgroundSelected ? 0 : selectedObjects.length}
@@ -866,6 +945,15 @@ export default function Editor({
         collapsed={propertiesCollapsed}
         onToggleCollapsed={() => setPropertiesCollapsed((value) => !value)}
       />
+      <ElementsPanel
+        layers={project.layers}
+        objects={orderedObjects}
+        selectedIds={selectedIds}
+        onSelectObject={selectObject}
+        collapsed={elementsCollapsed}
+        onToggleCollapsed={() => setElementsCollapsed((value) => !value)}
+      />
+      </div>
       {calibrationPoints && (
         <CalibrationDialog
           measuredDistanceM={Math.hypot(
@@ -949,6 +1037,14 @@ export default function Editor({
         {openDialog === "projects" && <ProjectsDialog currentProject={project} onOpen={(nextProject) => { replaceDocument(nextProject); closeDialog(); }} onClose={() => closeDialog()} />}
         {openDialog === "exchange" && <ExchangeDialog project={project} objects={orderedObjects.filter((object) => visibleLayerIds.has(object.layerId))} selection={selectedObjects} targetLayerId={effectiveLayerId} onImportObjects={(objects) => { commitChange((current) => addObjects(current, objects)); selectOnly(objects.map((object) => object.id)); }} onSetGeoreference={(georeference) => commitChange((current) => ({ ...current, georeference, updatedAt: new Date().toISOString() }))} onClose={() => closeDialog()} />}
       </Suspense>
+      {openDialog === "customizeToolbar" && (
+        <ToolbarCustomizeDialog
+          pinnedIds={pinnedCommands}
+          onToggle={(id) => setPinnedCommands((current) => savePinnedCommands(togglePinnedCommand(current, id)))}
+          onReset={() => setPinnedCommands(savePinnedCommands(DEFAULT_PINNED_COMMANDS))}
+          onClose={closeDialog}
+        />
+      )}
       {openDialog === "shortcuts" && <ShortcutsDialog shortcuts={shortcuts} onChange={(next) => setShortcuts(saveShortcuts(next))} onClose={() => closeDialog()} />}
       {openDialog === "comments" && <CommentsDialog project={project} selectedObjectId={selectedIds.length === 1 ? selectedIds[0] : undefined} onChange={(comments) => commitChange((current) => ({ ...current, collaboration: { comments }, updatedAt: new Date().toISOString() }))} onClose={() => closeDialog()} />}
       {/*

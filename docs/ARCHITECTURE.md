@@ -933,3 +933,58 @@ have proper forms now:
 
 A single free-text field (renaming a project, naming a group) still uses
 `window.prompt`, which is what it is for.
+
+## Commands, menus and the pinned toolbar (KL-026)
+
+The toolbar had grown to fifteen buttons in one row — every action the
+app had, none of them findable. The fix was not to shorten the labels but
+to stop hard-coding the list in a component.
+
+`ui/commands.ts` is now the single registry: id, menu label, short
+toolbar label, icon, group and tooltip. Three consumers read it and
+nothing has to be kept in step by hand:
+
+- **`CommandMenu`** renders one group ("Fichier", "Projet") in the left
+  rail, with the full label and a 📌 on whatever is currently pinned.
+- **`Toolbar`** renders only the pinned ids, plus a ⚙ that opens the
+  customisation dialog.
+- **`ToolbarCustomizeDialog`** offers exactly the registry, grouped.
+
+`Editor` has one `runCommand(id)` dispatcher, so an action cannot behave
+differently depending on where it was invoked from.
+
+Two things stay out of the registry on purpose. `undo`, `redo` and
+"Cadrer le plan" are permanent toolbar fixtures: they describe the state
+of the *editor* rather than things to do with the document, and their
+enabled state has to be readable at all times. And the drawing tools keep
+their own `ToolsPanel` — picking a tool changes what the canvas does with
+the next click, which is a mode, not a command.
+
+Pinned ids persist in `localStorage` under
+`kl-implantation/toolbar/v1`, and unknown ids are dropped on read so a
+preference written by a later build can't leave a dead button behind.
+
+### The two rails
+
+The layout's `tools` and `properties` grid areas are now *rails* — a
+flex column that owns the area and the scroll — rather than single
+panels. The left rail stacks `ToolsPanel` and the command menus; the
+right rail stacks `PropertiesPanel` (what is selected) and the new
+`ElementsPanel` (everything there is).
+
+`ElementsPanel` exists because the layers bar along the bottom, which can
+already expand a layer's contents, is one row high and horizontal: fine
+for finding *a* layer, useless for reading a plan of two hundred objects.
+The new panel is tall, filterable by name/reference/category, grouped by
+layer in drawing order, and shows each object's real dimensions. Its
+clicks go through the editor's own selection handler, so selecting there
+and selecting on the canvas are the same act — `Shift` extends, and a
+click on a grouped object still takes the whole group.
+
+### "Enregistrer sous" renames the project
+
+A browser download cannot report where the file went, so the one
+inconsistency worth preventing is a project whose name no longer matches
+its file. "Enregistrer sous…" asks for a name, renames the project to it
+(one undo step), and downloads — so the next suggested file name is the
+one the user last chose.
