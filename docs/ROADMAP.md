@@ -452,7 +452,8 @@ toute écriture — le cas « navigation privée / quota plein » que ces
 modules affirment tolérer et que personne ne vérifiait.
 
 Reste ouvert : les hooks React, faute d'un moteur de rendu de test que le
-projet évite volontairement.
+projet évite volontairement — voir KL-034 pour ce qui a pu être couvert
+sans.
 
 ## KL-033 — Tests de l'autosauvegarde *(done)*
 
@@ -478,3 +479,41 @@ sur la clé de version ne semait aucun enregistrement, donc le garde-fou
 pouvait disparaître sans rien casser ; celui sur l'intervalle des versions
 automatiques appelait trois fois la fonction dans la même milliseconde,
 donc les trois écritures partageaient une clé et s'écrasaient.
+
+## KL-034 — Le reste de ce qui est testable sans DOM *(done)*
+
+`ui/projectFileActions.ts`, `domain/objects.ts` et `domain/ids.ts`.
+507 tests.
+
+`projectFileActions.ts` est le plus important des trois : le fichier
+`.kl.json` est le seul exemplaire du projet que l'utilisateur **possède**
+— l'autosauvegarde vit dans le navigateur, qu'un cache vidé, un autre
+navigateur ou une autre machine n'auront pas. Les tests couvrent le
+nom de fichier proposé (accents pliés, ponctuation réduite, repli sur
+« projet » quand il ne reste rien d'utilisable, troncature à 60), les six
+messages d'erreur d'ouverture, la lecture d'un fichier illisible, et les
+trois chemins d'« Enregistrer sous » : dialogue natif, annulation (qui
+renvoie `false` et n'est pas une erreur), et repli sur le téléchargement
+là où il n'y a pas de dialogue natif — Safari et la coquille WKWebView.
+
+`src/testing/downloadCapture.ts` remplace les quatre morceaux de DOM que
+traverse un téléchargement (`URL.createObjectURL`, sa révocation,
+`document.createElement`, le clic) et retient le nom de fichier et les
+octets. Il vérifie aussi que l'URL blob est bien libérée au tick suivant
+et pas immédiatement — la révocation synchrone annule le téléchargement
+dans certains navigateurs.
+
+Suites validées par mutation, comme KL-033 : sept défauts introduits dans
+`projectFileActions.ts`, sept détectés.
+
+### Ce qui restera non testé, et pourquoi
+
+Les hooks de `ui/hooks/` sont du câblage React au-dessus de modules déjà
+couverts : `useSheetExport` délègue à `printing/sheetLayout.ts`,
+`useProjectHistory` à `history/`, `useSelection` à `domain/selection.ts`.
+Les tester demanderait un moteur de rendu de test pour vérifier
+essentiellement des `useMemo` — mauvais rapport. Les composants `.tsx`
+sont dans le même cas. Si un jour une décision non triviale s'installe
+dans un hook, la bonne réponse est de l'extraire dans un module pur et de
+tester celui-là, comme `panelSections.ts` l'a fait pour le pliage des
+panneaux.
