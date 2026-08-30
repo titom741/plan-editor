@@ -14,16 +14,46 @@ import {
 const set = (...ids: PanelSectionId[]) => new Set<PanelSectionId>(ids);
 
 describe("toggleSection", () => {
-  it("folds and unfolds one panel without touching the others", () => {
-    const folded = toggleSection(set("tools"), "file");
-    expect([...folded].sort()).toEqual(["file", "tools"]);
-    expect([...toggleSection(folded, "tools")]).toEqual(["file"]);
+  it("folds one panel without touching the others", () => {
+    // Folding is never contagious, in either rail: it says something about
+    // the panel it was clicked on and nothing about the rest.
+    expect([...toggleSection(set("file"), "elements")].sort()).toEqual(["elements", "file"]);
+    expect([...toggleSection(set("project", "tools"), "file")].sort()).toEqual([
+      "file",
+      "project",
+      "tools",
+    ]);
   });
 
-  it("lets a rail keep several panels open at once", () => {
-    // The rails stack rather than behaving as accordions: opening
-    // "project" must leave "tools" and "file" exactly as they were.
-    expect([...toggleSection(set("project"), "project")]).toEqual([]);
+  it("closes the menu that was open when another is opened", () => {
+    // The left rail is one menu at a time: Fichier, Projet, Outils are
+    // places you go to pick something and leave.
+    const onlyToolsOpen = set("file", "project");
+    expect([...toggleSection(onlyToolsOpen, "file")].sort()).toEqual(["project", "tools"]);
+  });
+
+  it("leaves the other rail alone when a menu is opened", () => {
+    expect([...toggleSection(set("file", "project", "elements"), "project")].sort()).toEqual([
+      "elements",
+      "file",
+      "tools",
+    ]);
+  });
+
+  it("lets the right rail keep both panels open", () => {
+    // Properties and Éléments are read *while* editing — the selected
+    // object's fields beside the inventory it sits in — so that rail
+    // stacks rather than switching.
+    expect([...toggleSection(set("properties"), "properties")]).toEqual([]);
+    expect([...toggleSection(set("elements"), "elements")]).toEqual([]);
+  });
+
+  it("allows a rail with nothing open, so the last menu can be folded away", () => {
+    expect([...toggleSection(set("file", "project"), "tools")].sort()).toEqual([
+      "file",
+      "project",
+      "tools",
+    ]);
   });
 });
 
@@ -32,23 +62,38 @@ describe("loadCollapsedSections", () => {
     installMemoryStorage();
   });
 
-  it("starts with everything unfolded", () => {
-    expect(loadCollapsedSections().size).toBe(0);
+  it("starts on the tools, with the two menus folded", () => {
+    // The palette is the panel used continuously; Fichier and Projet are
+    // visited and left.
+    expect([...loadCollapsedSections()].sort()).toEqual(["file", "project"]);
   });
 
   it("round-trips through save", () => {
-    saveCollapsedSections(set("file", "elements"));
-    expect([...loadCollapsedSections()].sort()).toEqual(["elements", "file"]);
+    saveCollapsedSections(set("file", "tools", "elements"));
+    expect([...loadCollapsedSections()].sort()).toEqual(["elements", "file", "tools"]);
   });
 
   it("drops ids this build cannot unfold", () => {
-    saveCollapsedSections(new Set(["tools", "fromTheFuture"] as PanelSectionId[]));
-    expect([...loadCollapsedSections()]).toEqual(["tools"]);
+    saveCollapsedSections(new Set(["tools", "file", "fromTheFuture"] as PanelSectionId[]));
+    expect([...loadCollapsedSections()].sort()).toEqual(["file", "tools"]);
+  });
+
+  it("folds a stored state that left several menus open at once", () => {
+    // Written by a build whose left rail stacked. Reopening in that state
+    // would show a layout this one has no way to reach again; whoever was
+    // in it was drawing, so they land on the palette.
+    saveCollapsedSections(set());
+    expect([...loadCollapsedSections()].sort()).toEqual(["file", "project"]);
+  });
+
+  it("keeps the one that was open when the stored state is already valid", () => {
+    saveCollapsedSections(set("tools", "project"));
+    expect([...loadCollapsedSections()].sort()).toEqual(["project", "tools"]);
   });
 
   it("survives a stored value that isn't an array", () => {
     localStorage.setItem("kl-implantation/panels/v1", "42");
-    expect(loadCollapsedSections().size).toBe(0);
+    expect([...loadCollapsedSections()].sort()).toEqual(["file", "project"]);
   });
 });
 

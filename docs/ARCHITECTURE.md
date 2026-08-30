@@ -1130,6 +1130,10 @@ folded ones is persisted (`kl-implantation/panels/v1`): a fold is a
 statement about how someone wants to work, and losing it on every reload
 would make folding pointless.
 
+*Independent* means no fold is contagious. It stopped meaning "any number
+open at once" in the left rail — see "One menu at a time on the left"
+below.
+
 A rail narrows to its 48 px icon width only once *everything* in it is
 folded; folding one section of three has to leave room for the two still
 open. Panel titles carry both an icon and a name, and CSS drops the name
@@ -1398,3 +1402,35 @@ storage from inside the page — `root=1`, `origin=planeditor://app`,
 `localStorage` and IndexedDB both working, four Konva canvases mounted.
 That check is a manual step, and the blank-page log line above exists
 because a manual step is not a guarantee.
+
+## One menu at a time on the left (KL-036)
+
+The left rail is ordered **Fichier, Projet, Outils**, and opening one
+folds whichever was open. The right rail is unchanged and still stacks.
+
+This reverses, for the left rail only, what KL-031 decided when it removed
+an accordion there. That removal was right about the bug it was made for —
+three open panels pushed the folded headers out of the rail because the
+*rail* scrolled instead of its panels, and an accordion only hid the
+symptom. The layout bug stayed fixed. What has changed is the reading of
+what these three panels are: Fichier, Projet and Outils are places you go
+to pick something and leave, not surfaces you read the plan against. The
+argument KL-031 made against the accordion — that it made the rail's size
+handle pointless, since two panels were never open together — is about the
+*right* rail, which has a height split to drag. The left rail has only a
+width, and one open menu needs it no less than three.
+
+The rule lives in `panelSections.ts` as a property of the rail, not of the
+panel: `PanelRail.exclusive`. Two consequences worth naming, both tested:
+
+- **Folding is still never contagious.** Only *opening* folds anything,
+  and only in its own rail. Folding the last open menu leaves the rail
+  with nothing open, which is a legitimate state — that is how you give
+  the whole width back to the plan.
+- **A stored preference is normalised on read.** A user arriving from a
+  build whose left rail stacked has all three recorded as open, a state
+  this build cannot otherwise reach. `loadCollapsedSections` keeps one:
+  the palette, since someone in that state was drawing.
+
+The panel that starts open on a fresh install is Outils for the same
+reason — it is used continuously, where the other two are visited.

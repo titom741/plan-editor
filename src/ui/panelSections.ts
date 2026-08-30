@@ -2,12 +2,15 @@
  * How the side rails are laid out: which panels are folded away, and how
  * much room each rail is given.
  *
- * The panels are independent and stack — several open at once is the
- * normal case, which is why each rail also has a size the user can drag.
- * An accordion was tried instead, to stop three open panels from pushing
- * the folded headers out of the rail; that symptom was a layout bug (the
- * rail scrolled instead of its panels), and folding one panel to reach
- * another is a poor trade for a plan you read against two panels at once.
+ * The two rails behave differently, on purpose:
+ *
+ * - **The left rail is a set of menus, one open at a time.** Fichier,
+ *   Projet and Outils are places you go to pick something and leave; you
+ *   do not read a plan against two of them at once, and opening one while
+ *   another stays open just pushes the third off the bottom.
+ * - **The right rail stacks.** Properties and Éléments are read *while*
+ *   editing — the selected object's fields next to the inventory it sits
+ *   in — which is also why that rail has a height split to drag.
  *
  * Everything here is persisted. A fold and a rail width are both
  * statements about how someone wants to work; losing them on every reload
@@ -16,13 +19,60 @@
 
 export type PanelSectionId = "tools" | "file" | "project" | "properties" | "elements";
 
-/** The panels of each rail, in the order they are stacked. */
-export const PANEL_RAILS: readonly (readonly PanelSectionId[])[] = [
-  ["tools", "file", "project"],
-  ["properties", "elements"],
+export interface PanelRail {
+  /**
+   * The panels of the rail, in the order they are stacked. It mirrors the
+   * order they are written in `Editor.tsx`; nothing enforces that, so the
+   * two are changed together.
+   */
+  readonly sections: readonly PanelSectionId[];
+  /** Whether opening one panel folds the others in the same rail. */
+  readonly exclusive: boolean;
+}
+
+export const PANEL_RAILS: readonly PanelRail[] = [
+  { sections: ["file", "project", "tools"], exclusive: true },
+  { sections: ["properties", "elements"], exclusive: false },
 ];
 
-const PANEL_SECTION_IDS: readonly PanelSectionId[] = PANEL_RAILS.flat();
+const PANEL_SECTION_IDS: readonly PanelSectionId[] = PANEL_RAILS.flatMap((rail) => rail.sections);
+
+/**
+ * What is open before anyone touches anything: the drawing tools, since
+ * that is the panel used continuously, while Fichier and Projet are
+ * visited and left.
+ */
+const DEFAULT_OPEN: PanelSectionId = "tools";
+
+function railOf(id: PanelSectionId): PanelRail | undefined {
+  return PANEL_RAILS.find((rail) => rail.sections.includes(id));
+}
+
+/**
+ * Folds all but one open panel of every exclusive rail, keeping
+ * {@link DEFAULT_OPEN} when it is among them and the first otherwise.
+ *
+ * Applied on read, because a preference stored by a build whose left rail
+ * stacked would otherwise reopen the app in a state this one has no way to
+ * reach again. Someone arriving from that build was drawing with all three
+ * open, so they land on the palette rather than on Fichier.
+ */
+function enforceExclusivity(collapsed: ReadonlySet<PanelSectionId>): Set<PanelSectionId> {
+  const next = new Set(collapsed);
+  for (const rail of PANEL_RAILS) {
+    if (!rail.exclusive) continue;
+    const open = rail.sections.filter((id) => !next.has(id));
+    if (open.length <= 1) continue;
+    const kept = open.includes(DEFAULT_OPEN) ? DEFAULT_OPEN : open[0];
+    for (const other of open) if (other !== kept) next.add(other);
+  }
+  return next;
+}
+
+/** Everything folded except {@link DEFAULT_OPEN}. */
+function defaultCollapsed(): Set<PanelSectionId> {
+  return new Set(PANEL_SECTION_IDS.filter((id) => id !== DEFAULT_OPEN && railOf(id)?.exclusive));
+}
 
 const STORAGE_KEY = "kl-implantation/panels/v1";
 const SIZES_KEY = "kl-implantation/panel-sizes/v1";
@@ -30,19 +80,21 @@ const SIZES_KEY = "kl-implantation/panel-sizes/v1";
 export function loadCollapsedSections(): Set<PanelSectionId> {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === null) return new Set();
+    if (stored === null) return defaultCollapsed();
     const parsed: unknown = JSON.parse(stored);
-    if (!Array.isArray(parsed)) return new Set();
+    if (!Array.isArray(parsed)) return defaultCollapsed();
     // Unknown ids are dropped: a preference written by a later build must
     // not fold away a panel this one cannot unfold.
-    return new Set(
-      parsed.filter(
-        (id): id is PanelSectionId =>
-          typeof id === "string" && (PANEL_SECTION_IDS as readonly string[]).includes(id),
+    return enforceExclusivity(
+      new Set(
+        parsed.filter(
+          (id): id is PanelSectionId =>
+            typeof id === "string" && (PANEL_SECTION_IDS as readonly string[]).includes(id),
+        ),
       ),
     );
   } catch {
-    return new Set();
+    return defaultCollapsed();
   }
 }
 
@@ -56,14 +108,27 @@ export function saveCollapsedSections(ids: ReadonlySet<PanelSectionId>): Set<Pan
   return next;
 }
 
-/** Folds or unfolds one panel, leaving every other panel as it was. */
+/**
+ * Folds or unfolds one panel.
+ *
+ * Folding never touches anything else. *Unfolding* folds the rest of the
+ * rail when that rail is exclusive — which is the whole point of the left
+ * one: opening a menu closes the menu that was open.
+ */
 export function toggleSection(
   current: ReadonlySet<PanelSectionId>,
   id: PanelSectionId,
 ): Set<PanelSectionId> {
   const next = new Set(current);
-  if (next.has(id)) next.delete(id);
-  else next.add(id);
+  if (!next.has(id)) {
+    next.add(id);
+    return next;
+  }
+  next.delete(id);
+  const rail = railOf(id);
+  if (rail?.exclusive) {
+    for (const other of rail.sections) if (other !== id) next.add(other);
+  }
   return next;
 }
 

@@ -594,3 +594,32 @@ précisément personne n'avait regardé.
 Reste ouvert : la coquille ne garde pas de `FileSystemFileHandle` dans les
 navigateurs qui en proposent, donc « Enregistrer » y redemande toujours ;
 et l'application n'est pas notarisée.
+
+## KL-036 — Un seul menu ouvert à la fois dans le rail gauche *(done)*
+
+Le rail gauche est réordonné en **Fichier, Projet, Outils**, et ouvrir un
+menu replie celui qui était ouvert. Le rail droit est inchangé : Propriétés
+et Éléments restent empilables, parce qu'ils se lisent *pendant* l'édition,
+côte à côte.
+
+C'est un retour en arrière assumé sur KL-031, qui avait retiré l'accordéon
+de ce rail. KL-031 avait raison sur le bug qu'il corrigeait — les en-têtes
+repliés sortaient du rail parce que le *rail* défilait au lieu de ses
+panneaux, et l'accordéon ne faisait que masquer le symptôme ; ce correctif
+de mise en page reste en place. Ce qui change est la lecture de ce que sont
+ces trois panneaux : des endroits où l'on va chercher quelque chose et d'où
+l'on repart. Et l'argument de KL-031 — l'accordéon rendait le curseur de
+taille inutile — porte sur le rail *droit*, qui a un partage de hauteur ;
+le rail gauche n'a qu'une largeur, dont un menu ouvert a autant besoin que
+trois.
+
+La règle est une propriété du rail (`PanelRail.exclusive`) et non du
+panneau. Replier ne reste jamais contagieux : seule l'ouverture replie, et
+seulement dans son propre rail ; replier le dernier menu ouvert laisse le
+rail vide, ce qui est un état légitime — c'est ainsi qu'on rend toute la
+largeur au plan. Un état enregistré par un build qui empilait les trois est
+normalisé à la lecture, en gardant la palette ouverte. Sur une installation
+neuve, c'est Outils qui est ouvert : c'est le panneau utilisé en continu.
+
+17 tests sur `panelSections.ts`, validés par mutation (six défauts
+introduits, six détectés).

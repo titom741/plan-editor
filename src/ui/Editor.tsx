@@ -244,9 +244,10 @@ export default function Editor({
   const [openDialog, setOpenDialog] = useState<DialogId | null>(null);
   const closeDialog = useCallback(() => setOpenDialog(null), []);
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(() => loadShortcuts());
-  // One set for every foldable side panel. Each rail is an accordion and
-  // both the folds and the rail sizes persist — see `panelSections.ts`,
-  // which owns those rules so they can be tested without a DOM.
+  // One set for every foldable side panel. The left rail opens one menu at
+  // a time, the right one stacks, and both the folds and the rail sizes
+  // persist — see `panelSections.ts`, which owns those rules so they can be
+  // tested without a DOM.
   const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<PanelSectionId>>(() =>
     loadCollapsedSections(),
   );
@@ -1343,6 +1344,20 @@ export default function Editor({
         </div>
       )}
       <div className="side-rail">
+        <CommandMenu
+          group="file"
+          onRun={runCommand}
+          pinnedIds={pinnedCommands}
+          collapsed={isCollapsed("file")}
+          onToggleCollapsed={() => toggleCollapsed("file")}
+        />
+        <CommandMenu
+          group="project"
+          onRun={runCommand}
+          pinnedIds={pinnedCommands}
+          collapsed={isCollapsed("project")}
+          onToggleCollapsed={() => toggleCollapsed("project")}
+        />
         <ToolsPanel
           activeToolId={activeTool}
           onSelectTool={handleSelectTool}
@@ -1357,20 +1372,6 @@ export default function Editor({
           onLabelDisplayChange={handleLabelDisplayChange}
           collapsed={isCollapsed("tools")}
           onToggleCollapsed={() => toggleCollapsed("tools")}
-        />
-        <CommandMenu
-          group="file"
-          onRun={runCommand}
-          pinnedIds={pinnedCommands}
-          collapsed={isCollapsed("file")}
-          onToggleCollapsed={() => toggleCollapsed("file")}
-        />
-        <CommandMenu
-          group="project"
-          onRun={runCommand}
-          pinnedIds={pinnedCommands}
-          collapsed={isCollapsed("project")}
-          onToggleCollapsed={() => toggleCollapsed("project")}
         />
         <div
           className="rail-resizer rail-resizer--tools"
