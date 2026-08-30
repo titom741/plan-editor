@@ -5,10 +5,14 @@ import { installDownloadCapture, type DownloadCapture } from "../testing/downloa
 import {
   describeParseError,
   downloadProjectFile,
+  openProjectFileNatively,
   readProjectFile,
+  saveProjectFile,
   saveProjectFileAs,
   suggestedFileName,
+  PROJECT_FILE_EXTENSIONS,
 } from "./projectFileActions";
+import { installNativeBridge } from "../testing/nativeBridgeStub";
 
 const named = (name: string) => createEmptyProject({ name });
 
@@ -17,33 +21,41 @@ let capture: DownloadCapture | null = null;
 afterEach(() => {
   capture?.restore();
   capture = null;
-  delete (globalThis as { window?: unknown }).window;
+  delete (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker;
+  delete (globalThis as { webkit?: unknown }).webkit;
 });
 
 describe("suggestedFileName", () => {
   it("folds accents rather than emitting them into a filename", () => {
     // A cross-platform filename with combining marks in it is a support
     // ticket waiting to happen.
-    expect(suggestedFileName(named("Aérodrome d'Aix"))).toBe("aerodrome-d-aix.kl.json");
-    expect(suggestedFileName(named("Fête à Noël"))).toBe("fete-a-noel.kl.json");
+    expect(suggestedFileName(named("Aérodrome d'Aix"))).toBe("aerodrome-d-aix.kli");
+    expect(suggestedFileName(named("Fête à Noël"))).toBe("fete-a-noel.kli");
   });
 
   it("collapses runs of punctuation into a single dash and trims the ends", () => {
-    expect(suggestedFileName(named("  Plan // 2027 — v2  "))).toBe("plan-2027-v2.kl.json");
+    expect(suggestedFileName(named("  Plan // 2027 — v2  "))).toBe("plan-2027-v2.kli");
   });
 
   it("falls back to a generic name when nothing usable survives", () => {
-    expect(suggestedFileName(named("🎪🎪🎪"))).toBe("projet.kl.json");
-    expect(suggestedFileName(named("   "))).toBe("projet.kl.json");
+    expect(suggestedFileName(named("🎪🎪🎪"))).toBe("projet.kli");
+    expect(suggestedFileName(named("   "))).toBe("projet.kli");
   });
 
   it("caps the slug so the name stays a filename", () => {
     const name = suggestedFileName(named("a".repeat(200)));
-    expect(name).toBe(`${"a".repeat(60)}.kl.json`);
+    expect(name).toBe(`${"a".repeat(60)}.kli`);
   });
 
   it("always carries the extension the open dialog filters on", () => {
-    expect(suggestedFileName(named("Test")).endsWith(".kl.json")).toBe(true);
+    expect(suggestedFileName(named("Test")).endsWith(".kli")).toBe(true);
+    expect(PROJECT_FILE_EXTENSIONS[0]).toBe(".kli");
+  });
+
+  it("still lists the pre-rename extension, so old files stay openable", () => {
+    // A project file is the only copy the user owns; an extension change
+    // must never be the reason one stops opening.
+    expect(PROJECT_FILE_EXTENSIONS).toContain(".kl.json");
   });
 });
 
@@ -53,7 +65,7 @@ describe("downloadProjectFile", () => {
     const project = named("Aérodrome");
     downloadProjectFile(project);
 
-    expect(capture.fileName).toBe("aerodrome.kl.json");
+    expect(capture.fileName).toBe("aerodrome.kli");
     expect(capture.blob?.type).toBe("application/json");
     const text = await capture.blob!.text();
     expect(JSON.parse(text).project.name).toBe("Aérodrome");
@@ -71,69 +83,188 @@ describe("downloadProjectFile", () => {
 });
 
 describe("saveProjectFileAs", () => {
-  it("writes through the native dialog when the browser has one", async () => {
+  it("writes through the browser's native dialog when it has one", async () => {
     let written = "";
     let closed = false;
     let suggested = "";
-    (globalThis as { window?: unknown }).window = {
-      showSaveFilePicker: (options: { suggestedName: string }) => {
-        suggested = options.suggestedName;
-        return Promise.resolve({
-          createWritable: () =>
-            Promise.resolve({
-              write: (data: string) => {
-                written = data;
-                return Promise.resolve();
-              },
-              close: () => {
-                closed = true;
-                return Promise.resolve();
-              },
-            }),
-        });
-      },
+    (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker = (options: {
+      suggestedName: string;
+    }) => {
+      suggested = options.suggestedName;
+      return Promise.resolve({
+        createWritable: () =>
+          Promise.resolve({
+            write: (data: string) => {
+              written = data;
+              return Promise.resolve();
+            },
+            close: () => {
+              closed = true;
+              return Promise.resolve();
+            },
+          }),
+      });
     };
 
-    expect(await saveProjectFileAs(named("Aérodrome"))).toBe(true);
-    expect(suggested).toBe("aerodrome.kl.json");
+    const outcome = await saveProjectFileAs(named("Aérodrome"));
+    expect(outcome).toEqual({ status: "saved", destination: null });
+    expect(suggested).toBe("aerodrome.kli");
     expect(JSON.parse(written).project.name).toBe("Aérodrome");
     // An unclosed writable never reaches the disk.
     expect(closed).toBe(true);
   });
 
-  it("reports a cancelled dialog as not-saved, not as a failure", async () => {
+  it("reports a cancelled dialog as cancelled, not as a failure", async () => {
     // The user dismissing the picker is a decision, and telling them
     // "l'enregistrement a échoué" for it is simply wrong.
-    (globalThis as { window?: unknown }).window = {
-      showSaveFilePicker: () => Promise.reject(new DOMException("abort", "AbortError")),
-    };
-    expect(await saveProjectFileAs(named("Test"))).toBe(false);
+    (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker = () =>
+      Promise.reject(new DOMException("abort", "AbortError"));
+    expect(await saveProjectFileAs(named("Test"))).toEqual({ status: "cancelled" });
   });
 
   it("lets a real failure through", async () => {
-    (globalThis as { window?: unknown }).window = {
-      showSaveFilePicker: () => Promise.reject(new Error("disk on fire")),
-    };
+    (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker = () =>
+      Promise.reject(new Error("disk on fire"));
     await expect(saveProjectFileAs(named("Test"))).rejects.toThrow("disk on fire");
   });
 
-  it("falls back to a download where there is no native dialog", async () => {
-    // Safari and the macOS WKWebView shell: a fallback, not an error path.
+  it("falls back to a download where there is no dialog at all", async () => {
+    // Safari and Firefox: a fallback, not an error path.
     capture = installDownloadCapture();
-    (globalThis as { window?: unknown }).window = {};
-    expect(await saveProjectFileAs(named("Aérodrome"))).toBe(true);
-    expect(capture.fileName).toBe("aerodrome.kl.json");
+    const outcome = await saveProjectFileAs(named("Aérodrome"));
+    expect(outcome).toEqual({ status: "saved", destination: null });
+    expect(capture.fileName).toBe("aerodrome.kli");
+  });
+});
+
+describe("saveProjectFileAs through the macOS bridge", () => {
+  it("prefers the system save panel over everything else", async () => {
+    // The bridge is the only route that yields a real path, which is the
+    // whole reason it exists: WKWebView has no File System Access, so
+    // every save in the app used to land in Downloads.
+    capture = installDownloadCapture();
+    let pickerCalled = false;
+    (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker = () => {
+      pickerCalled = true;
+      return Promise.reject(new Error("should not be reached"));
+    };
+    const bridge = installNativeBridge({
+      saveAs: () => ({ path: "/Users/tom/Plans/aerodrome.kli", name: "aerodrome.kli" }),
+    });
+
+    const outcome = await saveProjectFileAs(named("Aérodrome"));
+    expect(outcome).toEqual({
+      status: "saved",
+      destination: { path: "/Users/tom/Plans/aerodrome.kli", name: "aerodrome.kli" },
+    });
+    expect(pickerCalled).toBe(false);
+    expect(capture.fileName).toBeNull();
+    expect(JSON.parse(bridge.lastContents!).project.name).toBe("Aérodrome");
+    bridge.restore();
+  });
+
+  it("reports a dismissed panel as cancelled", async () => {
+    const bridge = installNativeBridge({ saveAs: () => ({ cancelled: true }) });
+    expect(await saveProjectFileAs(named("Test"))).toEqual({ status: "cancelled" });
+    bridge.restore();
+  });
+
+  it("reports a write that failed, with the reason the shell gave", async () => {
+    const bridge = installNativeBridge({ saveAs: () => ({ error: "Volume en lecture seule" }) });
+    expect(await saveProjectFileAs(named("Test"))).toEqual({
+      status: "failed",
+      message: "Volume en lecture seule",
+    });
+    bridge.restore();
+  });
+});
+
+describe("saveProjectFile", () => {
+  it("writes back to the known file without asking again", async () => {
+    const bridge = installNativeBridge({ save: () => ({ path: "/p/a.kli", name: "a.kli" }) });
+    const destination = { path: "/p/a.kli", name: "a.kli" };
+
+    const outcome = await saveProjectFile(named("Aérodrome"), destination);
+    expect(outcome).toEqual({ status: "saved", destination });
+    // The save panel must not appear on a plain save.
+    expect(bridge.actions).toEqual(["save"]);
+    bridge.restore();
+  });
+
+  it("asks where to save when nothing is known yet", async () => {
+    const bridge = installNativeBridge({ saveAs: () => ({ path: "/p/a.kli", name: "a.kli" }) });
+    await saveProjectFile(named("Aérodrome"), null);
+    expect(bridge.actions).toEqual(["saveAs"]);
+    bridge.restore();
+  });
+
+  it("falls through to a download in a browser, which has no path to write to", async () => {
+    capture = installDownloadCapture();
+    const outcome = await saveProjectFile(named("Aérodrome"), { path: "/p/a.kli", name: "a.kli" });
+    expect(outcome).toEqual({ status: "saved", destination: null });
+    expect(capture.fileName).toBe("aerodrome.kli");
+  });
+});
+
+describe("openProjectFileNatively", () => {
+  it("returns null in a browser, so the caller uses its file input", async () => {
+    expect(await openProjectFileNatively()).toBeNull();
+  });
+
+  it("reads the file the system panel returned", async () => {
+    const bridge = installNativeBridge({
+      open: () => ({
+        path: "/Users/tom/Plans/vieux.kl.json",
+        name: "vieux.kl.json",
+        contents: serializeProject(named("Ancien plan")),
+      }),
+    });
+    const opened = await openProjectFileNatively();
+    expect(opened).not.toBeNull();
+    if (opened === null || "cancelled" in opened) throw new Error("expected a file");
+    expect(opened.result.ok).toBe(true);
+    expect(opened.destination).toEqual({
+      path: "/Users/tom/Plans/vieux.kl.json",
+      name: "vieux.kl.json",
+    });
+    bridge.restore();
+  });
+
+  it("reports a dismissed panel without disturbing the open document", async () => {
+    const bridge = installNativeBridge({ open: () => ({ cancelled: true }) });
+    expect(await openProjectFileNatively()).toEqual({ cancelled: true });
+    bridge.restore();
+  });
+
+  it("treats an unreadable reply as bad input rather than crashing", async () => {
+    const bridge = installNativeBridge({ open: () => ({ error: "Fichier illisible" }) });
+    const opened = await openProjectFileNatively();
+    if (opened === null || "cancelled" in opened) throw new Error("expected a result");
+    expect(opened.result).toEqual({ ok: false, error: { code: "notJson" } });
+    bridge.restore();
   });
 });
 
 describe("readProjectFile", () => {
-  const asFile = (text: string) => new File([text], "plan.kl.json", { type: "application/json" });
+  const asFile = (text: string) => new File([text], "plan.kli", { type: "application/json" });
 
   it("opens a file this app wrote", async () => {
     const result = await readProjectFile(asFile(serializeProject(named("Aérodrome"))));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.file.project.name).toBe("Aérodrome");
+  });
+
+  it("opens a file written under the old extension", async () => {
+    // The extension is a label; what decides is the content. A rename
+    // must never orphan the files the user already has.
+    const legacy = new File([serializeProject(named("Ancien plan"))], "plan.kl.json", {
+      type: "application/json",
+    });
+    const result = await readProjectFile(legacy);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.file.project.name).toBe("Ancien plan");
   });
 
   it("reports bad input instead of throwing", async () => {

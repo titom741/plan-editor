@@ -11,6 +11,10 @@ let package = Package(
         .executableTarget(
             name: "PlanEditorMac",
             resources: [.copy("WebApp")]
+        ),
+        .testTarget(
+            name: "PlanEditorMacTests",
+            dependencies: ["PlanEditorMac"]
         )
     ]
 )

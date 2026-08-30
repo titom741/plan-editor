@@ -69,7 +69,7 @@ export const COMMANDS: readonly CommandDefinition[] = [
     shortLabel: "Ouvrir",
     icon: "📂",
     group: "file",
-    title: "Ouvrir un projet (.kl.json)",
+    title: "Ouvrir un projet (.kli)",
   },
   {
     id: "recentProjects",

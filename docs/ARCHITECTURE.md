@@ -717,9 +717,9 @@ deliberately different jobs:
 
 - **Autosave**, to browser storage, is the safety net. It costs the user
   nothing and asks nothing of them.
-- **A project file** (`.kl.json`) is the real, portable copy. It's the only
-  one the user *owns*: browser storage doesn't move to another machine and
-  doesn't survive clearing site data.
+- **A project file** (`.kli`, `.kl.json` before KL-035) is the real,
+  portable copy. It's the only one the user *owns*: browser storage doesn't
+  move to another machine and doesn't survive clearing site data.
 
 The UI never conflates the two — the save indicator says "Enregistré" but
 its tooltip says *where*, and every storage failure points at exporting a
@@ -882,7 +882,7 @@ Le modèle conserve facultativement une origine WGS84 et une rotation. Les
 conversions GeoJSON utilisent un repère tangent local en mètres, adapté à
 l'emprise d'un site événementiel ; les autres projections sont laissées à
 un SIG spécialisé. Les commentaires et versions sont entièrement locaux et
-portables dans `.kl.json`. Une collaboration simultanée demanderait un
+portables dans `.kli`. Une collaboration simultanée demanderait un
 service d'identité, de stockage et de résolution des conflits : aucun faux
 partage n'est activé sans ce choix d'infrastructure.
 
@@ -986,8 +986,10 @@ click on a grouped object still takes the whole group.
 A browser download cannot report where the file went, so the one
 inconsistency worth preventing is a project whose name no longer matches
 its file. "Enregistrer sous…" asks for a name, renames the project to it
-(one undo step), and downloads — so the next suggested file name is the
-one the user last chose.
+(one undo step), and saves — so the next suggested file name is the one
+the user last chose. KL-035 gave the macOS shell a real path back, but the
+rename stays: the file and the document are still meant to carry the same
+name, and that is the half of it a browser could never guarantee.
 
 ## What an object writes on the plan (KL-027)
 
@@ -1245,3 +1247,154 @@ Two things it deliberately does not do:
 
 The whole grid is one undo step: undoing a subdivision has to take back
 the eighty stands it made, not one of them.
+
+## The file the user owns, owned properly (KL-035)
+
+The macOS shell of KL-031 wrapped the web build in a `WKWebView` and
+stopped there: `WKWebView` implements no File System Access, so *inside
+the app* every save fell back to a download into `~/Downloads`. The
+desktop app was worse at the one thing a desktop app is for — no folder
+choice, no writing back to the file you opened, no double-clicking a
+project in the Finder. This mission closes that, and the web build is
+unchanged by it: the shell is one host among several, never the primary
+one.
+
+### The extension is a single component now
+
+`.kl.json` became `.kli`. Not cosmetics: macOS associates documents by
+extension through Launch Services, and it does not match a two-part one —
+`.kl.json` is seen as `.json`, and claiming *that* would make this app the
+handler for every JSON file on the machine. The contents are still JSON,
+which is the part that matters; a project file stays readable in any text
+editor.
+
+Files written before the rename open exactly as they did. That is not a
+compatibility gesture, it is the rule the whole persistence layer already
+follows — a project file is the only copy the user owns, so nothing this
+app writes may ever become unreadable by it. `PROJECT_FILE_EXTENSIONS`
+lists what the dialogs filter on, current one first, and the bundle
+declares plain JSON as a type it *opens* (`LSHandlerRank: None`) without
+owning it.
+
+### The web build is served, not opened as a file
+
+The shell as KL-031 left it called `loadFileURL` on the bundled
+`index.html`, and the window came up **blank** — in every build, from the
+first one. Nothing caught it because nothing looked: the process was
+alive, the navigation "finished", and a page whose scripts never ran looks
+exactly like one that has not painted yet.
+
+Two independent reasons, either of which is fatal on its own:
+
+1. **Vite emits root-absolute asset paths.** `/assets/index-….js` under
+   `file://` resolves to the *filesystem* root. The application's only
+   script 404s, React never mounts, and `<div id="root">` stays empty.
+2. **A `file://` page has an opaque origin**, and WebKit gives it neither
+   `localStorage` nor IndexedDB. Autosave, the material catalogue, saved
+   components, shortcuts and rail widths all live in one or the other. A
+   desktop app that silently forgets everything is a worse bug than a
+   blank one, because it looks like it works.
+
+`WebAppSchemeHandler` serves the bundle over `planeditor://app/` instead.
+That is a real origin: storage behaves as it does in a browser, and
+`/assets/…` resolves against it exactly as it does on a web server — so
+the web build is byte-identical on both hosts, which is the property worth
+protecting. Setting Vite's `base` to `./` would have fixed the paths and
+left the storage problem standing.
+
+Serving over `http://localhost` would also have worked. It was not chosen:
+it opens a listening socket, and "no backend, no network dependency" is a
+claim this app can afford to keep literally true.
+
+The handler is deliberately a router and nothing more — a path, a file, a
+MIME type — because that is the part that can be wrong. Two rules in it
+are load-bearing rather than tidy: a request may not climb out of the
+bundle with `..` (a page is not trusted to stay in the directory it was
+served from), and the MIME table is not cosmetic (WebKit refuses to
+execute a script served as `text/plain`).
+
+Reading is synchronous on the calling thread. The largest asset is a few
+hundred kilobytes off a local disk, and doing it inline removes every race
+between a read completing and WebKit stopping the task — calling back into
+a stopped `WKURLSchemeTask` is a crash, not an error.
+
+### A blank window now leaves a trace
+
+`didFinish` fires for a page whose scripts all failed, so "loaded" was
+never the question worth asking. The coordinator now asks the one that
+matters — is the React root still empty? — and logs it, along with any
+navigation failure. Nothing can be shown to the user from there, but the
+next occurrence is diagnosable in Console.app instead of silent, which is
+precisely what this one was not.
+
+### One channel, three actions
+
+`ui/nativeBridge.ts` (web) and `FileBridge.swift` (shell) are the two ends
+of a `WKScriptMessageHandlerWithReply` channel: `saveAs`, `save`, `open`.
+Reply-style is what makes it tractable — the page awaits the answer, so a
+cancelled panel is an ordinary resolved value rather than a timeout to
+guess at.
+
+Two rules hold the seam together:
+
+- **Nothing assumes the bridge exists.** `isNativeBridgeAvailable()` is
+  false in every browser, and each caller falls through to what the web
+  has: File System Access where there is a picker, a plain download in
+  Safari and Firefox. The fallback is not an error path.
+- **A reply that lost its way degrades to a reported failure.** The Swift
+  side is trusted to send the right shape, but `readResult` still checks
+  it — a bridge that answers nonsense must not take the editor down with
+  it.
+
+`saveProjectFileAs` therefore reads as the three routes in decreasing
+order of control they give the user (system panel → File System Access →
+download), and `cancelled` is a third outcome alongside saved and failed,
+because telling someone their save failed when they dismissed the dialog
+is a lie.
+
+### Where a plain save goes
+
+`saveDestination` is the file this session is working against: set by a
+native save, a native open, or a document handed over by the Finder;
+cleared by a new project or a file picked in a browser. Only the shell can
+ever fill it in — a browser is never told where a download went, and the
+File System Access handle is deliberately not kept either, so outside the
+shell every save asks. `saveProjectFile` writes back with no panel when a
+destination is known and falls through to `saveProjectFileAs` when it is
+not.
+
+### A document double-clicked in the Finder
+
+`AppDelegate.application(_:open:)` reads the file and calls
+`window.planEditorOpenFile?.(payload)` on the web view. The `?.` is the
+whole error handling: a page still loading, or a build that predates this,
+ignores the call instead of throwing inside a web view where nobody would
+see it. When the double-click is what *launched* the app there is no page
+yet, so the URL is held in `WebViewRegistry.pendingFileURL` and delivered
+on `didFinish`.
+
+From `onNativeFileOpened` inward it is the same door as any other open,
+refusal of a bad file included — the shell reads bytes, it does not decide
+what a project is. The payload is validated anyway: it arrives through a
+global that anything running in the page could call.
+
+### What is tested, and where
+
+The bridge is one `postMessage` returning a promise — small enough to
+reproduce exactly, which is what `src/testing/nativeBridgeStub.ts` does.
+The save, open and Finder paths are therefore covered without a Mac in the
+loop. On the Swift side, `handle` is separated from `WKScriptMessage` and
+the scheme handler's routing from `WKURLSchemeTask` for the same reason:
+what can be wrong silently is reachable from a test, and what is left is
+the AppKit call itself. Three suites, all checked by mutation as KL-033
+and KL-034 were: five defects introduced in each, fifteen detected.
+
+What stays untested is `NSOpenPanel`/`NSSavePanel`, the
+`NSApplicationDelegate` callback, and whether the assembled `.app` really
+renders. The first two are AppKit UI and a launch event, neither reachable
+from a test process. The third is the one that bit: it was verified by
+running the built app and reading back its origin, its React root and its
+storage from inside the page — `root=1`, `origin=planeditor://app`,
+`localStorage` and IndexedDB both working, four Konva canvases mounted.
+That check is a manual step, and the blank-page log line above exists
+because a manual step is not a guarantee.

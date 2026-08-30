@@ -42,7 +42,7 @@ export function ProjectsDialog({ currentProject, onOpen, onClose }: ProjectsDial
   const remove = async (project: StoredProjectSummary) => {
     if (
       !window.confirm(
-        `Supprimer la copie locale de « ${project.name} » ? Cette action n'efface pas les fichiers .kl.json déjà exportés.`,
+        `Supprimer la copie locale de « ${project.name} » ? Cette action n'efface pas les fichiers déjà exportés.`,
       )
     )
       return;

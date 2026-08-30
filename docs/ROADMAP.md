@@ -517,3 +517,80 @@ sont dans le même cas. Si un jour une décision non triviale s'installe
 dans un hook, la bonne réponse est de l'extraire dans un module pur et de
 tester celui-là, comme `panelSections.ts` l'a fait pour le pliage des
 panneaux.
+
+## KL-035 — Le fichier appartient vraiment à l'utilisateur *(done)*
+
+La coquille macOS de KL-031 enfermait le web dans un `WKWebView` et
+s'arrêtait là : `WKWebView` n'implémente aucun File System Access, donc
+**dans l'application** chaque enregistrement retombait sur un
+téléchargement vers `~/Téléchargements`. L'application de bureau était
+moins bonne que le navigateur sur la seule chose pour laquelle on installe
+une application de bureau : choisir le dossier, réécrire le fichier qu'on
+a ouvert, double-cliquer un projet dans le Finder.
+
+- **`.kl.json` devient `.kli`.** macOS associe les documents par extension
+  via Launch Services, et ne reconnaît pas une extension en deux morceaux :
+  `.kl.json` est vu comme `.json`, et revendiquer *celui-là* ferait de
+  l'application le gestionnaire de tous les fichiers JSON de la machine.
+  Le contenu reste du JSON. Les fichiers écrits avant le renommage
+  s'ouvrent exactement comme avant — rien de ce que cette application a
+  écrit ne doit devenir illisible par elle.
+- **La fenêtre était vide, dans tous les builds, depuis KL-031.** Le
+  `loadFileURL` sur `index.html` ne pouvait pas marcher : Vite émet des
+  chemins absolus (`/assets/…`), qui sous `file://` désignent la racine du
+  disque — le script de l'application ne se chargeait jamais. Et une page
+  `file://` a une origine opaque, donc ni `localStorage` ni IndexedDB :
+  l'autosauvegarde, la bibliothèque, les composants, les raccourcis et la
+  largeur des rails n'auraient rien retenu. `WebAppScheme.swift` sert
+  désormais le bundle sur `planeditor://app/` — une vraie origine, où les
+  chemins absolus et le stockage se comportent comme sur un serveur web,
+  sans toucher au build web. Un `base: "./"` côté Vite aurait réparé les
+  chemins et laissé le stockage cassé ; un serveur `http://localhost`
+  aurait ouvert une socket d'écoute, ce que « aucun backend, aucune
+  dépendance réseau » interdit de faire à la légère.
+- **Un pont `WKScriptMessageHandlerWithReply`** (`ui/nativeBridge.ts` /
+  `FileBridge.swift`) : `saveAs`, `save`, `open`. La page attend la
+  réponse, donc un panneau annulé est une valeur ordinaire et non un
+  délai d'attente à deviner. Rien ne suppose le pont présent : dans un
+  navigateur, `isNativeBridgeAvailable()` est faux et les chemins web
+  d'origine s'appliquent.
+- **Trois issues pour « Enregistrer sous », par ordre décroissant de
+  contrôle laissé à l'utilisateur** : `NSSavePanel`, File System Access,
+  téléchargement. `cancelled` devient un résultat à part entière : dire à
+  quelqu'un que son enregistrement a échoué parce qu'il a fermé le
+  dialogue est un mensonge.
+- **« Enregistrer » réécrit le fichier ouvert**, sans dialogue, quand la
+  session sait où il est. Seule la coquille peut le savoir ; ailleurs
+  chaque enregistrement redemande.
+- **Double-clic dans le Finder.** Un `.kli` ouvre l'application, ou est
+  livré à la page déjà chargée. Lancé *par* le double-clic, l'URL attend
+  que la page se déclare prête. À partir de là c'est la même porte que
+  n'importe quelle ouverture, refus d'un fichier invalide compris.
+- **Un vrai `.app`.** `scripts/build-macos.sh` assemble le bundle et son
+  `Info.plist` (un exécutable SwiftPM nu n'en a pas, donc pas d'icône ni
+  d'association de document) et le signe — ad hoc par défaut,
+  `SIGN_IDENTITY` pour distribuer.
+
+Tests : `src/testing/nativeBridgeStub.ts` reproduit le pont côté web, ce
+qui couvre enregistrement, ouverture et livraison Finder sans Mac dans la
+boucle ; `FileBridgeTests.swift` et `WebAppSchemeTests.swift`
+(`scripts/test-macos.sh`) couvrent la moitié Swift qui n'est pas de
+l'AppKit — routage, refus de sortir du bundle par `..`, types MIME.
+535 tests JS et 15 tests Swift, les trois suites validées par mutation
+(cinq défauts introduits dans chacune, quinze détectés).
+
+Reste non testé, et volontairement : `NSOpenPanel`/`NSSavePanel` et le
+rappel `NSApplicationDelegate` — de l'interface AppKit et un événement de
+lancement, hors d'atteinte d'un processus de test. La logique en a été
+sortie jusqu'à ce qu'il ne reste que l'appel au panneau.
+
+Le rendu de l'application assemblée, lui, a été vérifié en la lançant et
+en relisant depuis la page son origine, sa racine React et son stockage
+(`origin=planeditor://app`, `localStorage` et IndexedDB opérationnels,
+quatre canevas Konva montés). C'est une étape manuelle : d'où la ligne de
+journal ajoutée quand la page se charge en restant vide, puisque
+précisément personne n'avait regardé.
+
+Reste ouvert : la coquille ne garde pas de `FileSystemFileHandle` dans les
+navigateurs qui en proposent, donc « Enregistrer » y redemande toujours ;
+et l'application n'est pas notarisée.

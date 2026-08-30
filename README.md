@@ -134,9 +134,15 @@ page restores the project (background image included). That copy is local
 to this browser. **Récents…** lists every locally retained project and lets
 you open, rename, duplicate or delete it, create a dated version and restore
 an earlier version. Click the current project name in the toolbar to rename
-it. Use **Enregistrer un fichier** for a real, portable
-`.kl.json` copy you can back up or move to another machine, and **Ouvrir…**
-to load one back. **Nouveau** starts an empty project (it asks first). A
+it. Use **Enregistrer** for a real, portable
+`.kli` copy you can back up or move to another machine, and **Ouvrir…**
+to load one back. `.kli` files are JSON: the extension is what macOS
+associates the app with, and files written under the earlier `.kl.json`
+name still open. In the browser each save asks where the file goes — a
+page is never told where a download landed, so it cannot write back to it.
+In the macOS app it goes through the system panels, **Enregistrer** writes
+straight back to the file you opened, and double-clicking a `.kli` in the
+Finder opens it here. **Nouveau** starts an empty project (it asks first). A
 file that isn't a valid project is refused with an explanation and your
 current work is left untouched; opening or creating a project clears the
 undo history, since undo can't meaningfully cross from one document into
@@ -259,6 +265,24 @@ survive accented characters.
 npm run lint    # oxlint
 npm run build   # tsc -b && vite build
 ```
+
+## macOS app
+
+```bash
+scripts/build-macos.sh          # web bundle + Swift shell + a signed .app
+scripts/test-macos.sh           # the shell's own Swift tests
+```
+
+The shell is a `WKWebView` around the same web build, adding the two
+things a browser tab cannot do: real save/open panels, and documents that
+open by double-click. The build assembles a proper `.app` — a bare SwiftPM
+executable has no `Info.plist`, so it gets no document association — and
+signs it ad-hoc; set `SIGN_IDENTITY` to sign it for distribution.
+
+The bundle is served to the web view over a `planeditor://` scheme rather
+than opened from `file://`, which is what gives it a real origin: the same
+absolute asset paths as on the web, and working `localStorage`/IndexedDB.
+See `docs/ARCHITECTURE.md`.
 
 ## Project layout
 

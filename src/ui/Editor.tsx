@@ -101,10 +101,14 @@ import { CSS_PIXELS_PER_INCH, useSheetExport } from "./hooks/useSheetExport";
 import { useViewport } from "./hooks/useViewport";
 import {
   describeParseError,
-  downloadProjectFile,
   readProjectFile,
+  readProjectText,
+  openProjectFileNatively,
+  saveProjectFile,
   saveProjectFileAs,
+  type SaveDestination,
 } from "./projectFileActions";
+import { onNativeFileOpened } from "./nativeBridge";
 import type { ToolId } from "./tools";
 import { downloadDiagnosticReport } from "./diagnosticActions";
 import { loadShortcuts, saveShortcuts, type ShortcutMap } from "./shortcuts";
@@ -1023,15 +1027,34 @@ export default function Editor({
     [resetHistory, onDismissRestoreNotice, deselectAll, setActiveLayerId],
   );
 
+  /**
+   * The file this session is working against, once one is known. Only the
+   * macOS shell can tell us — a browser download never says where it went
+   * — so everywhere else this stays `null` and every save asks.
+   */
+  const [saveDestination, setSaveDestination] = useState<SaveDestination>(null);
+
+  const reportSaveOutcome = useCallback((outcome: Awaited<ReturnType<typeof saveProjectFile>>) => {
+    // Cancelling is a decision, not a failure, and says nothing.
+    if (outcome.status === "failed") setFileError(`L'enregistrement a échoué : ${outcome.message}`);
+    else if (outcome.status === "saved") setSaveDestination(outcome.destination);
+  }, []);
+
   const handleSaveToFile = useCallback(() => {
-    downloadProjectFile(project);
-  }, [project]);
+    void saveProjectFile(project, saveDestination)
+      .then(reportSaveOutcome)
+      .catch((error: unknown) =>
+        setFileError(
+          `L'enregistrement a échoué : ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      );
+  }, [project, saveDestination, reportSaveOutcome]);
 
   /**
-   * "Save as" asks for a file name and *renames the project to match*.
-   * A browser download can't tell us where the file went, so a project
-   * whose name no longer matches its file is the one thing we can avoid:
-   * next time, the suggested name is the one the user last chose.
+   * "Save as" always asks where the file goes. It also renames the
+   * project to match the file, because a project whose name has drifted
+   * from its file is a document nobody can find again — and outside the
+   * macOS shell the file name is the only trace we are left with.
    */
   const handleSaveToFileAs = useCallback(() => {
     const name = window
@@ -1040,16 +1063,53 @@ export default function Editor({
     if (!name) return;
     const renamed = { ...project, name, updatedAt: new Date().toISOString() };
     commitChange(() => renamed);
-    void saveProjectFileAs(renamed).catch((error: unknown) =>
-      setFileError(
-        `L'enregistrement a échoué : ${error instanceof Error ? error.message : String(error)}`,
-      ),
-    );
-  }, [project, commitChange]);
+    void saveProjectFileAs(renamed)
+      .then(reportSaveOutcome)
+      .catch((error: unknown) =>
+        setFileError(
+          `L'enregistrement a échoué : ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      );
+  }, [project, commitChange, reportSaveOutcome]);
+
+  /**
+   * A `.kli` double-clicked in the Finder. The shell reads the file and
+   * calls in; from here it is the same path as any other open, refusal
+   * of a bad file included.
+   */
+  useEffect(
+    () =>
+      onNativeFileOpened(({ path, name, contents }) => {
+        const parsed = readProjectText(contents);
+        if (!parsed.ok) {
+          setFileError(describeParseError(parsed.error));
+          return;
+        }
+        replaceDocument(parsed.file.project);
+        setSaveDestination({ path, name });
+      }),
+    [replaceDocument],
+  );
 
   const handleRequestOpenProject = useCallback(() => {
-    projectFileInputRef.current?.click();
-  }, []);
+    void openProjectFileNatively()
+      .then((opened) => {
+        // No bridge: fall back to the hidden file input, which is what
+        // every browser has.
+        if (opened === null) {
+          projectFileInputRef.current?.click();
+          return;
+        }
+        if ("cancelled" in opened) return;
+        if (!opened.result.ok) {
+          setFileError(describeParseError(opened.result.error));
+          return;
+        }
+        replaceDocument(opened.result.file.project);
+        setSaveDestination(opened.destination);
+      })
+      .catch(() => projectFileInputRef.current?.click());
+  }, [replaceDocument]);
 
   const handleProjectFileInputChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1064,6 +1124,9 @@ export default function Editor({
         return;
       }
       replaceDocument(result.file.project);
+      // A browser gives us the bytes, never the path: the next plain save
+      // has to ask again rather than guess.
+      setSaveDestination(null);
     },
     [replaceDocument],
   );
@@ -1079,6 +1142,7 @@ export default function Editor({
     // racing over one record, and losing that race would wipe the project
     // the user just started.
     replaceDocument(createEmptyProject({ name: "Nouveau projet" }));
+    setSaveDestination(null);
   }, [replaceDocument]);
 
   const handleRenameProject = useCallback(
@@ -1240,7 +1304,7 @@ export default function Editor({
       <input
         ref={projectFileInputRef}
         type="file"
-        accept=".json,application/json"
+        accept=".kli,.kl.json,.json,application/json"
         className="visually-hidden"
         onChange={handleProjectFileInputChange}
       />

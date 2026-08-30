@@ -1,6 +1,7 @@
 import { deserializeProject, serializeProject } from "../persistence/projectFile";
 import type { ParseError, ParseResult } from "../persistence/projectFile";
 import type { Project } from "../domain/types";
+import { isNativeBridgeAvailable, nativeOpen, nativeSave, nativeSaveAs } from "./nativeBridge";
 
 /**
  * Saving a project to, and opening one from, a file the user picks —
@@ -13,7 +14,27 @@ import type { Project } from "../domain/types";
  * hidden one.
  */
 
-const FILE_EXTENSION = ".kl.json";
+/**
+ * The extension new files are written with.
+ *
+ * A single component, not `.kl.json`: macOS associates documents by
+ * extension through Launch Services, and it does not reliably match a
+ * two-part one — `.kl.json` is seen as `.json`, and claiming *that* would
+ * mean claiming every JSON file on the machine. The contents are still
+ * JSON, which is the part that matters: a project file is the only copy
+ * the user owns, and it stays readable in any text editor.
+ */
+const FILE_EXTENSION = ".kli";
+
+/** Still opened, and always will be: files written before the rename must not become unreadable. */
+const LEGACY_FILE_EXTENSION = ".kl.json";
+
+/** Extensions an open dialog accepts, current one first. */
+export const PROJECT_FILE_EXTENSIONS: readonly string[] = [
+  FILE_EXTENSION,
+  LEGACY_FILE_EXTENSION,
+  ".json",
+];
 
 /** Builds a filename from the project's name — accents folded, punctuation collapsed — falling back to a generic name if nothing usable is left. */
 export function suggestedFileName(project: Project): string {
@@ -27,7 +48,7 @@ export function suggestedFileName(project: Project): string {
   return `${slug || "projet"}${FILE_EXTENSION}`;
 }
 
-/** Triggers a download of the project as a `.kl.json` file. */
+/** Triggers a download of the project as a `.kli` file. */
 export function downloadProjectFile(project: Project): void {
   const blob = new Blob([serializeProject(project)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -56,36 +77,107 @@ interface SaveFilePicker {
 }
 
 /**
- * Saves through the browser's native save dialog when it has one, so the
- * user picks the folder and the name instead of the file landing in
- * Downloads. Falls back to a plain download everywhere else — Safari and
- * the macOS WKWebView shell included, which is why the fallback isn't
- * an error path.
- *
- * Returns `false` when the user dismissed the dialog. Cancelling is not a
- * failure and must not be reported as one, which is the whole reason this
- * doesn't simply let the `AbortError` escape.
+ * Where a save went, so a later plain "Enregistrer" can go back to the
+ * same place without asking again. `null` means nothing has been chosen
+ * yet and a save must ask.
  */
-export async function saveProjectFileAs(project: Project): Promise<boolean> {
-  const picker = (window as Window & { showSaveFilePicker?: SaveFilePicker }).showSaveFilePicker;
+export type SaveDestination = { path: string; name: string } | null;
+
+export type SaveOutcome =
+  | { status: "saved"; destination: SaveDestination }
+  | { status: "cancelled" }
+  | { status: "failed"; message: string };
+
+/**
+ * Saves where the user says, by whichever of three routes the host
+ * offers, in decreasing order of how much control it gives them:
+ *
+ * 1. **The macOS shell's `NSSavePanel`.** A real file path, and the one
+ *    reason this bridge exists: `WKWebView` has no File System Access, so
+ *    inside the app every save used to land in Downloads.
+ * 2. **File System Access.** Chrome and Edge; the user picks the folder.
+ * 3. **A plain download.** Safari and Firefox. Not an error path — it is
+ *    simply all those browsers can do.
+ *
+ * A dismissed dialog reports `cancelled`. Cancelling is a decision, and
+ * telling the user their save failed for it would be a lie.
+ */
+export async function saveProjectFileAs(project: Project): Promise<SaveOutcome> {
+  const contents = serializeProject(project);
+  const suggestedName = suggestedFileName(project);
+
+  if (isNativeBridgeAvailable()) {
+    const result = await nativeSaveAs(suggestedName, contents);
+    if (result.status === "cancelled") return { status: "cancelled" };
+    if (result.status === "failed") return { status: "failed", message: result.message };
+    return { status: "saved", destination: { path: result.path, name: result.name } };
+  }
+
+  const picker = (globalThis as { showSaveFilePicker?: SaveFilePicker }).showSaveFilePicker;
   if (!picker) {
     downloadProjectFile(project);
-    return true;
+    return { status: "saved", destination: null };
   }
   let writable;
   try {
     const handle = await picker({
-      suggestedName: suggestedFileName(project),
-      types: [{ description: "Projet KL", accept: { "application/json": [".kl.json"] } }],
+      suggestedName,
+      types: [
+        {
+          description: "Projet d'implantation",
+          accept: { "application/json": [FILE_EXTENSION, LEGACY_FILE_EXTENSION] },
+        },
+      ],
     });
     writable = await handle.createWritable();
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") return false;
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return { status: "cancelled" };
+    }
     throw error;
   }
-  await writable.write(serializeProject(project));
+  await writable.write(contents);
   await writable.close();
-  return true;
+  return { status: "saved", destination: null };
+}
+
+/**
+ * Writes back to the file this session already saved to, with no dialog.
+ * Falls through to `saveProjectFileAs` when there is nowhere known to
+ * write — the first save of a session, or a host that never gave us a
+ * path in the first place.
+ */
+export async function saveProjectFile(
+  project: Project,
+  destination: SaveDestination,
+): Promise<SaveOutcome> {
+  if (destination && isNativeBridgeAvailable()) {
+    const result = await nativeSave(destination.path, serializeProject(project));
+    if (result.status === "cancelled") return { status: "cancelled" };
+    if (result.status === "failed") return { status: "failed", message: result.message };
+    return { status: "saved", destination };
+  }
+  return saveProjectFileAs(project);
+}
+
+/**
+ * Opens through the system panel when the shell provides one. Returns
+ * `null` when there is no bridge, so the caller falls back to its hidden
+ * `<input type="file">`.
+ */
+export async function openProjectFileNatively(): Promise<
+  { result: ParseResult; destination: SaveDestination } | { cancelled: true } | null
+> {
+  if (!isNativeBridgeAvailable()) return null;
+  const opened = await nativeOpen();
+  if (opened.status === "cancelled") return { cancelled: true };
+  if (opened.status === "failed" || opened.contents === undefined) {
+    return { result: { ok: false, error: { code: "notJson" } }, destination: null };
+  }
+  return {
+    result: deserializeProject(opened.contents),
+    destination: { path: opened.path, name: opened.name },
+  };
 }
 
 /** Reads a picked file and validates it. Rejects nothing — an unreadable file comes back as a `ParseError` like any other bad input. */
@@ -99,6 +191,15 @@ export async function readProjectFile(file: File): Promise<ParseResult> {
   return deserializeProject(text);
 }
 
+/**
+ * Validates text that already came from a file. The macOS shell hands
+ * over the contents rather than a `File`, so this is the same door as
+ * `readProjectFile` with the reading already done.
+ */
+export function readProjectText(contents: string): ParseResult {
+  return deserializeProject(contents);
+}
+
 /** French, user-facing explanation of why a file couldn't be opened. The persistence layer emits codes; the wording lives here, with the rest of the UI's copy. */
 export function describeParseError(error: ParseError): string {
   switch (error.code) {
@@ -107,7 +208,7 @@ export function describeParseError(error: ParseError): string {
     case "notAnObject":
       return "Ce fichier ne contient pas un projet.";
     case "unknownFormat":
-      return "Ce fichier n'est pas un projet d'implantation (extension attendue : .kl.json).";
+      return `Ce fichier n'est pas un projet d'implantation (extension attendue : ${FILE_EXTENSION}).`;
     case "unsupportedVersion":
       return `Ce fichier a été enregistré par une version plus récente de l'application (format ${error.found}, cette version lit jusqu'au format ${error.supported}). Mettez l'application à jour pour l'ouvrir.`;
     case "invalidField":
