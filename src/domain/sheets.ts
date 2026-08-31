@@ -136,3 +136,44 @@ export function formatPaper(sheet: Pick<Sheet, "paperSize" | "orientation">): st
 }
 
 export const ORIENTATIONS: Orientation[] = ["landscape", "portrait"];
+
+/** The range a hand-typed scale is held to. 1:1 is a floor plan at life size; past 1:20000 a site is a dot. */
+export const MIN_SCALE_DENOMINATOR = 1;
+export const MAX_SCALE_DENOMINATOR = 20000;
+
+/** Holds a typed denominator inside the usable range, and to whole numbers — 1:137.4 is not a scale anyone writes. */
+export function clampScaleDenominator(value: number): number | null {
+  if (!Number.isFinite(value)) return null;
+  const rounded = Math.round(value);
+  if (rounded < MIN_SCALE_DENOMINATOR) return MIN_SCALE_DENOMINATOR;
+  if (rounded > MAX_SCALE_DENOMINATOR) return MAX_SCALE_DENOMINATOR;
+  return rounded;
+}
+
+/**
+ * The scale at which the plan fills the sheet — the largest it can be
+ * printed without running off the paper.
+ *
+ * `fitScaleDenominator` rounds *up* the standard ladder, which is right
+ * when the number has to be readable off a ruler and wrong when the point
+ * is to use the whole page: at 1:200 instead of the 1:137 the content
+ * actually needs, a third of the paper stays white. Both exist, and the
+ * dialog offers both, because they answer different questions.
+ *
+ * Rounded up to a whole number so the content still clears the margin —
+ * rounding down would push it just past the edge.
+ */
+export function exactFitScaleDenominator(
+  contentM: { widthM: number; heightM: number },
+  sheet: Pick<Sheet, "paperSize" | "orientation" | "marginMm">,
+): number | null {
+  const printable = getPrintableAreaMm(sheet);
+  if (printable.widthMm <= 0 || printable.heightMm <= 0) return null;
+  if (contentM.widthM <= 0 && contentM.heightM <= 0) return null;
+
+  const required = Math.max(
+    (contentM.widthM * 1000) / printable.widthMm,
+    (contentM.heightM * 1000) / printable.heightMm,
+  );
+  return clampScaleDenominator(Math.ceil(required));
+}

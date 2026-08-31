@@ -1,9 +1,13 @@
 import { boundsSizeM } from "../../domain/bounds";
 import type { BoundsM } from "../../domain/bounds";
 import {
+  MAX_SCALE_DENOMINATOR,
+  MIN_SCALE_DENOMINATOR,
   ORIENTATIONS,
   PAPER_SIZE_ORDER,
   STANDARD_SCALE_DENOMINATORS,
+  clampScaleDenominator,
+  exactFitScaleDenominator,
   fitScaleDenominator,
   formatScale,
   getCoveredAreaM,
@@ -99,6 +103,13 @@ export function ExportDialog({
     contentSize === null ||
     (contentSize.widthM <= covered.widthM && contentSize.heightM <= covered.heightM);
   const suggested = contentSize ? fitScaleDenominator(contentSize, sheet) : null;
+  /**
+   * The scale that fills the paper, as opposed to the nearest standard one
+   * above it. Both are offered because they answer different questions:
+   * a plan read with a ruler on site wants the ladder, a plan meant to use
+   * the whole page wants this.
+   */
+  const exactFit = contentSize ? exactFitScaleDenominator(contentSize, sheet) : null;
 
   return (
     <div className="calibration-dialog__backdrop">
@@ -249,19 +260,55 @@ export function ExportDialog({
           </select>
         </label>
 
-        <label className="calibration-dialog__field">
-          <span>Échelle</span>
-          <select
-            value={sheet.scaleDenominator}
-            onChange={(e) => onChange({ scaleDenominator: Number(e.target.value) })}
+        <div className="export-dialog__scale">
+          <label className="calibration-dialog__field">
+            <span>Échelle courante</span>
+            <select
+              value={
+                (STANDARD_SCALE_DENOMINATORS as readonly number[]).includes(sheet.scaleDenominator)
+                  ? sheet.scaleDenominator
+                  : ""
+              }
+              onChange={(e) => onChange({ scaleDenominator: Number(e.target.value) })}
+            >
+              {/* An empty option, not a missing one: a hand-typed or
+                  fitted scale is off the ladder, and a select that snapped
+                  back to 1:200 would silently undo what was just chosen. */}
+              {!(STANDARD_SCALE_DENOMINATORS as readonly number[]).includes(
+                sheet.scaleDenominator,
+              ) && <option value="">{formatScale(sheet.scaleDenominator)} (personnalisée)</option>}
+              {STANDARD_SCALE_DENOMINATORS.map((denominator) => (
+                <option key={denominator} value={denominator}>
+                  {formatScale(denominator)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="calibration-dialog__field">
+            <span>Ou 1: exactement</span>
+            <input
+              type="number"
+              min={MIN_SCALE_DENOMINATOR}
+              max={MAX_SCALE_DENOMINATOR}
+              step="1"
+              value={sheet.scaleDenominator}
+              onChange={(event) => {
+                const denominator = clampScaleDenominator(Number(event.target.value));
+                if (denominator !== null) onChange({ scaleDenominator: denominator });
+              }}
+            />
+          </label>
+        </div>
+        {exactFit !== null && (
+          <button
+            type="button"
+            className="properties-panel__button"
+            disabled={exactFit === sheet.scaleDenominator}
+            onClick={() => onChange({ scaleDenominator: exactFit })}
           >
-            {STANDARD_SCALE_DENOMINATORS.map((denominator) => (
-              <option key={denominator} value={denominator}>
-                {formatScale(denominator)}
-              </option>
-            ))}
-          </select>
-        </label>
+            ⤢ Remplir la feuille — {formatScale(exactFit)}
+          </button>
+        )}
 
         <label className="export-dialog__check">
           <input

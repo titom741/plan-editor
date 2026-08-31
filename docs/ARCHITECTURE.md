@@ -1531,3 +1531,68 @@ so it is full-bleed square with the artwork inside the 80 % safe zone;
 the rounded corners of `app-icon.svg` would be clipped a second time.
 Declaring one file as `"any maskable"`, as the manifest did, gets one of
 the two wrong whichever way the platform reads it.
+
+## The export tells the truth (KL-039)
+
+Three things the export and save flow promised and did not deliver.
+
+### The print preview was 23 pixels tall
+
+`.export-dialog` is a flex column capped at `92vh`. Every child of a flex
+container is shrinkable by default, and `.sheet-preview` carried
+`overflow: auto` — which made it the cheapest thing in the dialog to
+shrink. It collapsed to a sliver while the page inside it was still a
+full 562 × 398: nothing was broken, the preview was simply squeezed to
+nothing by its own siblings. `flex: 0 0 auto` on it, and the dialog
+scrolls instead.
+
+It also rendered at a fixed 34 DPI, which fits A4 and shows a corner of
+anything larger. `previewDpiToFit` derives the resolution from the paper
+so the whole sheet lands inside the preview box, A0 included. It is
+deliberately unclamped: a minimum DPI was the first attempt and put A0
+back at 374 px in a 320 px box — a floor defending against an input no
+paper size in `PAPER_SIZES_MM` can produce, at the cost of the case that
+actually happens.
+
+### The scale ladder was the only scale
+
+`STANDARD_SCALE_DENOMINATORS` exists for a good reason, written down in
+`domain/sheets.ts`: a plan marked 1:137 is one nobody can check with a
+ruler. But it is not the only thing a scale is for. A plan meant to use
+the whole page wants the scale that fills it, and rounding up the ladder
+from the 1:137 the content needs to the 1:200 the ladder offers leaves a
+third of the paper white.
+
+So there are two functions, and the dialog offers both:
+`fitScaleDenominator` rounds up the ladder, `exactFitScaleDenominator`
+gives the scale that fills the sheet. The exact one rounds *up* to a
+whole number, so the content clears the margin rather than straddling it.
+A typed denominator goes through `clampScaleDenominator` — whole numbers,
+inside a usable range, and `null` rather than letting `NaN` into the
+layout.
+
+The select keeps an explicit "(personnalisée)" entry for a value off the
+ladder. Without it the select would snap back to its first match and
+silently undo the scale the user had just chosen.
+
+### "Enregistrer sous" never said where
+
+`SaveDestination` was recorded and displayed nowhere — including in the
+macOS shell, which is the one host that *has* a real path, obtained from
+`NSSavePanel`, and the reason the bridge was built at all. So the answer
+to "where did my file go" was the same everywhere: silence.
+
+The type now names its three routes rather than flattening them:
+
+- `path` — the macOS panel. A real location on disk, and it is shown.
+- `picked` — File System Access. The user chose a folder and **the
+  browser does not tell the page which one**. That is a deliberate
+  boundary, not a gap to engineer around, so the file is named and the
+  reason is given.
+- `downloaded` — Safari and Firefox. The folder is knowable here, because
+  it is always the browser's downloads folder.
+
+`describeSaveDestination` turns each into what the toolbar shows.
+Distinguishing them is the whole point: a bare file name in all three
+cases would leave the user unable to tell which host they are in, and
+quietly imply the web build could do something it cannot.

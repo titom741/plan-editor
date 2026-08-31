@@ -106,6 +106,7 @@ import {
   openProjectFileNatively,
   saveProjectFile,
   saveProjectFileAs,
+  describeSaveDestination,
   type SaveDestination,
 } from "./projectFileActions";
 import { onNativeFileOpened } from "./nativeBridge";
@@ -1087,7 +1088,7 @@ export default function Editor({
           return;
         }
         replaceDocument(parsed.file.project);
-        setSaveDestination({ path, name });
+        setSaveDestination({ kind: "path", path, name });
       }),
     [replaceDocument],
   );
@@ -1321,6 +1322,7 @@ export default function Editor({
       />
       <Toolbar
         projectName={project.name}
+        savedFile={describeSaveDestination(saveDestination)}
         onRenameProject={handleRenameProject}
         zoom={viewport.zoom}
         canUndo={canUndo}

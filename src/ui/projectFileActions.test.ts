@@ -7,6 +7,7 @@ import {
   downloadProjectFile,
   openProjectFileNatively,
   readProjectFile,
+  describeSaveDestination,
   saveProjectFile,
   saveProjectFileAs,
   suggestedFileName,
@@ -92,6 +93,7 @@ describe("saveProjectFileAs", () => {
     }) => {
       suggested = options.suggestedName;
       return Promise.resolve({
+        name: "aerodrome.kli",
         createWritable: () =>
           Promise.resolve({
             write: (data: string) => {
@@ -107,7 +109,12 @@ describe("saveProjectFileAs", () => {
     };
 
     const outcome = await saveProjectFileAs(named("Aérodrome"));
-    expect(outcome).toEqual({ status: "saved", destination: null });
+    // The file is named back, and only the file: a browser never tells the
+    // page which folder the panel landed in.
+    expect(outcome).toEqual({
+      status: "saved",
+      destination: { kind: "picked", name: "aerodrome.kli" },
+    });
     expect(suggested).toBe("aerodrome.kli");
     expect(JSON.parse(written).project.name).toBe("Aérodrome");
     // An unclosed writable never reaches the disk.
@@ -132,8 +139,26 @@ describe("saveProjectFileAs", () => {
     // Safari and Firefox: a fallback, not an error path.
     capture = installDownloadCapture();
     const outcome = await saveProjectFileAs(named("Aérodrome"));
-    expect(outcome).toEqual({ status: "saved", destination: null });
+    expect(outcome).toEqual({
+      status: "saved",
+      destination: { kind: "downloaded", name: "aerodrome.kli" },
+    });
     expect(capture.fileName).toBe("aerodrome.kli");
+  });
+
+  it("reports the name the user actually settled on, not the one suggested", async () => {
+    // Renaming the file in the panel is ordinary, and reporting the
+    // suggestion back would name a file that does not exist.
+    (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker = () =>
+      Promise.resolve({
+        name: "virade-2026.kli",
+        createWritable: () =>
+          Promise.resolve({ write: () => Promise.resolve(), close: () => Promise.resolve() }),
+      });
+    expect(await saveProjectFileAs(named("Aérodrome"))).toEqual({
+      status: "saved",
+      destination: { kind: "picked", name: "virade-2026.kli" },
+    });
   });
 });
 
@@ -155,7 +180,7 @@ describe("saveProjectFileAs through the macOS bridge", () => {
     const outcome = await saveProjectFileAs(named("Aérodrome"));
     expect(outcome).toEqual({
       status: "saved",
-      destination: { path: "/Users/tom/Plans/aerodrome.kli", name: "aerodrome.kli" },
+      destination: { kind: "path", path: "/Users/tom/Plans/aerodrome.kli", name: "aerodrome.kli" },
     });
     expect(pickerCalled).toBe(false);
     expect(capture.fileName).toBeNull();
@@ -182,7 +207,7 @@ describe("saveProjectFileAs through the macOS bridge", () => {
 describe("saveProjectFile", () => {
   it("writes back to the known file without asking again", async () => {
     const bridge = installNativeBridge({ save: () => ({ path: "/p/a.kli", name: "a.kli" }) });
-    const destination = { path: "/p/a.kli", name: "a.kli" };
+    const destination = { kind: "path" as const, path: "/p/a.kli", name: "a.kli" };
 
     const outcome = await saveProjectFile(named("Aérodrome"), destination);
     expect(outcome).toEqual({ status: "saved", destination });
@@ -200,8 +225,15 @@ describe("saveProjectFile", () => {
 
   it("falls through to a download in a browser, which has no path to write to", async () => {
     capture = installDownloadCapture();
-    const outcome = await saveProjectFile(named("Aérodrome"), { path: "/p/a.kli", name: "a.kli" });
-    expect(outcome).toEqual({ status: "saved", destination: null });
+    const outcome = await saveProjectFile(named("Aérodrome"), {
+      kind: "path",
+      path: "/p/a.kli",
+      name: "a.kli",
+    });
+    expect(outcome).toEqual({
+      status: "saved",
+      destination: { kind: "downloaded", name: "aerodrome.kli" },
+    });
     expect(capture.fileName).toBe("aerodrome.kli");
   });
 });
@@ -224,6 +256,7 @@ describe("openProjectFileNatively", () => {
     if (opened === null || "cancelled" in opened) throw new Error("expected a file");
     expect(opened.result.ok).toBe(true);
     expect(opened.destination).toEqual({
+      kind: "path",
       path: "/Users/tom/Plans/vieux.kl.json",
       name: "vieux.kl.json",
     });
@@ -319,5 +352,32 @@ describe("describeParseError", () => {
     expect(message).toContain("3");
     expect(message).toContain("2");
     expect(message).toContain("plus récente");
+  });
+});
+
+describe("describeSaveDestination", () => {
+  it("shows the real path when the macOS panel gave one", () => {
+    expect(
+      describeSaveDestination({ kind: "path", path: "/Users/tom/Plans/a.kli", name: "a.kli" }),
+    ).toEqual({ label: "/Users/tom/Plans/a.kli", detail: null });
+  });
+
+  it("names the file, and says why there is no folder, after a browser panel", () => {
+    // Not a gap to work around: a page is never told where the panel
+    // landed. Showing a bare file name and letting the user wonder why is
+    // worse than saying so.
+    const described = describeSaveDestination({ kind: "picked", name: "virade.kli" });
+    expect(described?.label).toBe("virade.kli");
+    expect(described?.detail).toMatch(/dossier/);
+  });
+
+  it("says a download went to the downloads folder, which is knowable", () => {
+    const described = describeSaveDestination({ kind: "downloaded", name: "virade.kli" });
+    expect(described?.label).toBe("virade.kli");
+    expect(described?.detail).toMatch(/télécharg/i);
+  });
+
+  it("has nothing to say before the first save", () => {
+    expect(describeSaveDestination(null)).toBeNull();
   });
 });

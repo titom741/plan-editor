@@ -168,6 +168,13 @@ actually is, and warns you *before* you print if it won't fit at the
 chosen scale (with a one-click "Ajuster" to the nearest standard scale
 that does). The scale is never changed for you — a sheet labelled 1:200
 is at 1:200.
+
+Scale is set three ways, because they answer different questions: the
+ladder of standard scales, for a plan that will be read with a ruler on
+site; a typed denominator, when the ladder is too coarse; and **Remplir
+la feuille**, which picks the scale that fills the paper — rounding up
+the ladder from the 1:137 the content needs to the 1:200 the ladder
+offers leaves a third of the page white.
 The dialog previews the actual rendered sheet and lets each sheet carry a
 client, author, revision, plan number, comments, logo and custom fields in
 its title block.
@@ -258,6 +265,19 @@ pins the property the whole export rests on: a metre is the right number
 of millimetres on paper at every scale and resolution, the scale bar is
 always exactly as long as its label claims, and the PDF's byte offsets
 survive accented characters.
+
+## Where a saved file goes
+
+"Enregistrer sous" takes the best route the host offers, and says which
+one it took — the file it wrote is shown in the top bar.
+
+| Host | What you get |
+| --- | --- |
+| macOS app | A real `NSSavePanel`, and the **full path** is displayed. |
+| Chrome, Edge | A folder picker. The file name is shown; **no browser tells a page which folder was chosen** — that is a security boundary, not a missing feature. |
+| Safari, Firefox | A plain download, into that browser's downloads folder. |
+
+If you need the path on screen, that is what the macOS app is for.
 
 ## Lint & build
 

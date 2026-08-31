@@ -730,3 +730,51 @@ refait avec un cercle portant une grille parasite, comme un fichier
 Vérifié dans le navigateur, pas seulement construit : grille saisie,
 libellés dessinés à leur place, case vide muette, nom du chapiteau remonté
 au-dessus, et retour au centre dès que la case « Stands » est décochée.
+
+## KL-039 — L'export dit la vérité *(done)*
+
+Trois promesses de l'export et de l'enregistrement qui n'étaient pas
+tenues, remontées à l'usage.
+
+- **L'aperçu avant impression ne s'affichait pas.** Il n'était pas cassé,
+  il était écrasé : `.export-dialog` est un flex colonne borné à `92vh`,
+  tous ses enfants sont compressibles par défaut, et `.sheet-preview`
+  portait `overflow: auto` — ce qui en faisait le moins cher à compresser.
+  Il tombait à 23 px de haut pendant que la page qu'il contenait faisait
+  toujours 562 × 398. `flex: 0 0 auto`, et c'est le dialogue qui défile.
+  Au passage, il rendait à 34 DPI fixes : tout ce qui dépasse l'A4 était
+  montré par un coin. `previewDpiToFit` déduit la résolution du papier,
+  A0 compris.
+- **L'échelle n'existait que par paliers.** L'échelle libre reste
+  discutable — un plan marqué 1:137 ne se vérifie pas à la règle, et
+  `domain/sheets.ts` le dit toujours — mais ce n'est pas le seul usage :
+  un plan fait pour occuper la page veut l'échelle qui la remplit, et
+  arrondir du 1:137 nécessaire au 1:200 du palier laisse un tiers de
+  papier blanc. Les deux coexistent : un champ « 1: exactement » borné et
+  arrondi à l'entier, et un bouton **« Remplir la feuille »**. Le menu
+  déroulant garde une entrée « (personnalisée) » explicite, sinon il
+  reviendrait sur le premier palier et annulerait en silence le choix
+  qu'on vient de faire.
+- **« Enregistrer sous » ne disait jamais où.** `SaveDestination` était
+  bien mémorisé et affiché **nulle part** — y compris dans l'app macOS,
+  le seul hôte qui obtient un vrai chemin, par `NSSavePanel`, et la raison
+  même d'être du pont. Le type nomme maintenant ses trois routes :
+  `path` (panneau macOS — le chemin est affiché), `picked` (File System
+  Access — le navigateur **ne communique pas** le dossier à la page ;
+  c'est une barrière de sécurité, pas un trou à contourner, donc on nomme
+  le fichier et on dit pourquoi) et `downloaded` (Safari, Firefox — là le
+  dossier est connu, ce sont les téléchargements). Le chemin ou le nom
+  s'affiche dans la barre du haut.
+
+**À retenir, sans détour : aucun navigateur ne donnera jamais le chemin
+complet.** Pour l'avoir dans l'application, c'est la coquille macOS — qui
+le récupérait déjà et se contentait de ne pas le montrer.
+
+610 tests, dont 19 nouveaux, validés par mutation : dix défauts
+introduits, dix détectés.
+
+Vérifié dans le navigateur : feuille A3 entière visible dans l'aperçu avec
+son cadre et son cartouche, « Remplir la feuille » qui passe le plan de
+démonstration de 1:200 à 1:25 (la feuille couvre alors 10 m × 6,9 m pour
+un plan de 10 × 5 m), et 1:137 saisi à la main correctement signalé comme
+personnalisé.

@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_SCALE_DENOMINATOR,
+  MIN_SCALE_DENOMINATOR,
   PAPER_SIZES_MM,
   STANDARD_SCALE_DENOMINATORS,
+  clampScaleDenominator,
   createSheet,
+  exactFitScaleDenominator,
   fitScaleDenominator,
   formatScale,
   getCoveredAreaM,
@@ -160,5 +164,60 @@ describe("createSheet", () => {
 describe("formatScale", () => {
   it("writes the conventional 1:S form", () => {
     expect(formatScale(200)).toBe("1:200");
+  });
+});
+
+describe("exactFitScaleDenominator", () => {
+  const a3 = createSheet({ paperSize: "A3", orientation: "landscape", marginMm: 10 });
+
+  it("gives the scale at which the plan fills the sheet, not the next one up the ladder", () => {
+    // A3 landscape less 10 mm each side is 400 × 277 mm. A 60 m plan needs
+    // 1:150, which the ladder does not have — it would jump to 1:200 and
+    // leave a quarter of the paper white.
+    expect(exactFitScaleDenominator({ widthM: 60, heightM: 20 }, a3)).toBe(150);
+    expect(fitScaleDenominator({ widthM: 60, heightM: 20 }, a3)).toBe(200);
+  });
+
+  it("fits on whichever side runs out first", () => {
+    // The same plan turned on its side is limited by the paper's height.
+    expect(exactFitScaleDenominator({ widthM: 20, heightM: 60 }, a3)).toBe(217);
+  });
+
+  it("rounds up, so the content clears the margin instead of straddling it", () => {
+    const denominator = exactFitScaleDenominator({ widthM: 60, heightM: 20 }, a3);
+    const covered = getCoveredAreaM({ ...a3, scaleDenominator: denominator ?? 1 });
+    expect(covered.widthM).toBeGreaterThanOrEqual(60);
+  });
+
+  it("has no answer for a plan with nothing in it", () => {
+    expect(exactFitScaleDenominator({ widthM: 0, heightM: 0 }, a3)).toBeNull();
+  });
+
+  it("stays inside the usable range for a plan the size of a county", () => {
+    expect(exactFitScaleDenominator({ widthM: 5_000_000, heightM: 1 }, a3)).toBe(
+      MAX_SCALE_DENOMINATOR,
+    );
+  });
+});
+
+describe("clampScaleDenominator", () => {
+  it("keeps a hand-typed scale whole — 1:137.4 is not a scale anyone writes", () => {
+    expect(clampScaleDenominator(137.4)).toBe(137);
+    expect(clampScaleDenominator(137.6)).toBe(138);
+  });
+
+  it("holds it inside the usable range at both ends", () => {
+    expect(clampScaleDenominator(0)).toBe(MIN_SCALE_DENOMINATOR);
+    expect(clampScaleDenominator(-50)).toBe(MIN_SCALE_DENOMINATOR);
+    expect(clampScaleDenominator(1e9)).toBe(MAX_SCALE_DENOMINATOR);
+  });
+
+  it("refuses what is not a number at all, rather than passing NaN into the layout", () => {
+    expect(clampScaleDenominator(NaN)).toBeNull();
+    expect(clampScaleDenominator(Infinity)).toBeNull();
+  });
+
+  it("leaves an ordinary scale exactly as typed", () => {
+    expect(clampScaleDenominator(137)).toBe(137);
   });
 });

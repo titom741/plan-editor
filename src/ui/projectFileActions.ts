@@ -69,6 +69,8 @@ interface SaveFilePicker {
     suggestedName: string;
     types: { description: string; accept: Record<string, string[]> }[];
   }): Promise<{
+    /** The file the user settled on — which may not be `suggestedName`, and is all a browser will name. */
+    name: string;
     createWritable: () => Promise<{
       write: (data: string) => Promise<void>;
       close: () => Promise<void>;
@@ -81,7 +83,14 @@ interface SaveFilePicker {
  * same place without asking again. `null` means nothing has been chosen
  * yet and a save must ask.
  */
-export type SaveDestination = { path: string; name: string } | null;
+export type SaveDestination =
+  /** The macOS shell's save panel: a real path on disk, which is the point of the shell. */
+  | { kind: "path"; path: string; name: string }
+  /** File System Access: the user picked the folder, but the browser does not name it to us. */
+  | { kind: "picked"; name: string }
+  /** The download fallback: it went wherever this browser puts downloads. */
+  | { kind: "downloaded"; name: string }
+  | null;
 
 export type SaveOutcome =
   | { status: "saved"; destination: SaveDestination }
@@ -110,15 +119,18 @@ export async function saveProjectFileAs(project: Project): Promise<SaveOutcome> 
     const result = await nativeSaveAs(suggestedName, contents);
     if (result.status === "cancelled") return { status: "cancelled" };
     if (result.status === "failed") return { status: "failed", message: result.message };
-    return { status: "saved", destination: { path: result.path, name: result.name } };
+    return { status: "saved", destination: { kind: "path", path: result.path, name: result.name } };
   }
 
   const picker = (globalThis as { showSaveFilePicker?: SaveFilePicker }).showSaveFilePicker;
   if (!picker) {
     downloadProjectFile(project);
-    return { status: "saved", destination: null };
+    return { status: "saved", destination: { kind: "downloaded", name: suggestedName } };
   }
   let writable;
+  // Held outside the try so the saved file can be named afterwards; the
+  // picker's own rejection is the only thing that block is guarding.
+  let savedName = suggestedName;
   try {
     const handle = await picker({
       suggestedName,
@@ -129,6 +141,7 @@ export async function saveProjectFileAs(project: Project): Promise<SaveOutcome> 
         },
       ],
     });
+    savedName = handle.name;
     writable = await handle.createWritable();
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
@@ -138,7 +151,9 @@ export async function saveProjectFileAs(project: Project): Promise<SaveOutcome> 
   }
   await writable.write(contents);
   await writable.close();
-  return { status: "saved", destination: null };
+  // `handle.name` is the file, and all of it a browser will say: the
+  // folder the user just picked is deliberately never exposed to a page.
+  return { status: "saved", destination: { kind: "picked", name: savedName } };
 }
 
 /**
@@ -151,7 +166,7 @@ export async function saveProjectFile(
   project: Project,
   destination: SaveDestination,
 ): Promise<SaveOutcome> {
-  if (destination && isNativeBridgeAvailable()) {
+  if (destination?.kind === "path" && isNativeBridgeAvailable()) {
     const result = await nativeSave(destination.path, serializeProject(project));
     if (result.status === "cancelled") return { status: "cancelled" };
     if (result.status === "failed") return { status: "failed", message: result.message };
@@ -176,7 +191,7 @@ export async function openProjectFileNatively(): Promise<
   }
   return {
     result: deserializeProject(opened.contents),
-    destination: { path: opened.path, name: opened.name },
+    destination: { kind: "path", path: opened.path, name: opened.name },
   };
 }
 
@@ -215,5 +230,36 @@ export function describeParseError(error: ParseError): string {
       return `Ce fichier est incomplet ou endommagé : le champ « ${error.path} » est absent ou invalide.`;
     case "danglingLayerRef":
       return `Ce fichier est incohérent : l'objet « ${error.objectId} » référence un calque absent (« ${error.layerId} »).`;
+  }
+}
+
+/**
+ * What to show the user about the file they are editing.
+ *
+ * The honest part is the second half. A browser never tells the page which
+ * folder a save panel landed in — that is a deliberate boundary, not a
+ * gap to work around — so the web build can name the file and no more.
+ * The macOS shell goes through `NSSavePanel` and gets the real path, which
+ * is the whole reason it exists; saying so is better than showing a bare
+ * file name in both and letting the user wonder which one they are in.
+ */
+export function describeSaveDestination(destination: SaveDestination): {
+  label: string;
+  detail: string | null;
+} | null {
+  if (!destination) return null;
+  switch (destination.kind) {
+    case "path":
+      return { label: destination.path, detail: null };
+    case "picked":
+      return {
+        label: destination.name,
+        detail: "Le navigateur ne communique pas le dossier choisi à la page.",
+      };
+    case "downloaded":
+      return {
+        label: destination.name,
+        detail: "Enregistré dans les téléchargements de ce navigateur.",
+      };
   }
 }

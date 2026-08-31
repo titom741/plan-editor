@@ -296,3 +296,36 @@ export function computePrintRaster(
     },
   };
 }
+
+/**
+ * The box the export dialog gives the print preview, in CSS pixels.
+ *
+ * Fixed rather than measured: the preview has to be laid out before it can
+ * be measured, and a preview that reflows once on open is worse than one
+ * sized from the paper it is showing.
+ */
+export const PREVIEW_BOX_PX = { widthPx: 620, heightPx: 320 };
+
+/** Used only for a page with no size, which no paper in `PAPER_SIZES_MM` has. */
+export const FALLBACK_PREVIEW_DPI = 8;
+
+/**
+ * The resolution at which a whole sheet fits inside the preview box.
+ *
+ * The preview used to render at a fixed 34 DPI and scroll whatever did not
+ * fit, which for anything above A4 meant showing a corner of the page. A
+ * print preview that crops the page answers the one question it exists to
+ * answer — "what will come out of the printer" — with a guess.
+ *
+ * Derived from the paper, so A0 and A5 both come out whole.
+ */
+export function previewDpiToFit(
+  layout: Pick<SheetLayout, "pageWidthPt" | "pageHeightPt">,
+  box: { widthPx: number; heightPx: number } = PREVIEW_BOX_PX,
+): number {
+  if (layout.pageWidthPt <= 0 || layout.pageHeightPt <= 0) return FALLBACK_PREVIEW_DPI;
+  // 72 pt to the inch, so DPI is just points-per-inch times the fit ratio.
+  // Deliberately unclamped: a floor here would push the paper back out of
+  // the box on the largest sizes, which is the bug this replaces.
+  return Math.min(box.widthPx / layout.pageWidthPt, box.heightPx / layout.pageHeightPt) * 72;
+}

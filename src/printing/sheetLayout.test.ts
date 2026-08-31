@@ -8,10 +8,12 @@ import {
 import { metersToPixels, worldToScreen } from "../rendering/viewport";
 import {
   MAX_EXPORT_PIXELS,
+  FALLBACK_PREVIEW_DPI,
   chooseScaleBarLengthM,
   computePrintRaster,
   computeSheetLayout,
   computeTiledSheetLayouts,
+  previewDpiToFit,
 } from "./sheetLayout";
 import { mmToPt, ptToMm } from "./pdf";
 
@@ -285,5 +287,53 @@ describe("computeTiledSheetLayouts", () => {
     );
     expect(pages.length).toBeGreaterThan(1);
     expect(pages[0]?.drawingCenterM).not.toEqual(pages.at(-1)?.drawingCenterM);
+  });
+});
+
+describe("previewDpiToFit", () => {
+  const a3 = computeSheetLayout(createSheet({ paperSize: "A3", orientation: "landscape" }), null);
+  const a0 = computeSheetLayout(createSheet({ paperSize: "A0", orientation: "portrait" }), null);
+  const box = { widthPx: 620, heightPx: 320 };
+
+  const pageSize = (layout: { pageWidthPt: number; pageHeightPt: number }, dpi: number) => ({
+    widthPx: (layout.pageWidthPt * dpi) / 72,
+    heightPx: (layout.pageHeightPt * dpi) / 72,
+  });
+
+  it("fits a whole sheet inside the box, whatever the paper", () => {
+    // The bug this replaces: a fixed DPI showed a corner of anything
+    // bigger than A4, which is a preview that answers its own question
+    // with a guess.
+    for (const layout of [a3, a0]) {
+      const size = pageSize(layout, previewDpiToFit(layout, box));
+      expect(size.widthPx).toBeLessThanOrEqual(box.widthPx + 0.5);
+      expect(size.heightPx).toBeLessThanOrEqual(box.heightPx + 0.5);
+    }
+  });
+
+  it("fills the box on its tighter side, rather than shrinking further than it must", () => {
+    const size = pageSize(a3, previewDpiToFit(a3, box));
+    const touches =
+      Math.abs(size.widthPx - box.widthPx) < 0.5 || Math.abs(size.heightPx - box.heightPx) < 0.5;
+    expect(touches).toBe(true);
+  });
+
+  it("keeps the paper's proportions — a preview that lies about the shape is worthless", () => {
+    const dpi = previewDpiToFit(a0, box);
+    const size = pageSize(a0, dpi);
+    expect(size.widthPx / size.heightPx).toBeCloseTo(a0.pageWidthPt / a0.pageHeightPt, 6);
+  });
+
+  it("falls back rather than dividing by a page with no size", () => {
+    expect(previewDpiToFit({ pageWidthPt: 0, pageHeightPt: 0 }, box)).toBe(FALLBACK_PREVIEW_DPI);
+    expect(previewDpiToFit({ pageWidthPt: -1, pageHeightPt: 100 }, box)).toBe(FALLBACK_PREVIEW_DPI);
+  });
+
+  it("shrinks the biggest paper down rather than clamping it back out of the box", () => {
+    // A floor was the first attempt and put A0 back at 374 px in a 320 px
+    // box — it defended against an input no paper size can produce, at the
+    // cost of the case that actually happens.
+    const dpi = previewDpiToFit(a0, box);
+    expect((a0.pageHeightPt * dpi) / 72).toBeLessThanOrEqual(box.heightPx + 0.5);
   });
 });

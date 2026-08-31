@@ -1271,10 +1271,16 @@
 }
 .sheet-preview {
   display: flex;
+  align-items: center;
   justify-content: center;
-  max-height: 19rem;
+  /* The dialog is a flex column capped at 92vh, so every child is
+     shrinkable by default. This one has `overflow`, which made it the
+     cheapest thing to shrink: it collapsed to a 23 px sliver while the
+     page inside it was still a full 562 × 398. The preview keeps its
+     size and the dialog scrolls instead. */
+  flex: 0 0 auto;
+  min-height: 0;
   margin-bottom: 1rem;
-  overflow: auto;
   padding: 0.75rem;
   background: #cbd5e1;
   border-radius: 7px;
@@ -1577,4 +1583,28 @@
 .stands-dialog__cell:focus {
   outline: 2px solid var(--accent-border);
   outline-offset: -1px;
+}
+
+/* The ladder and the exact value sit side by side: one is for a plan read
+   with a ruler on site, the other for one meant to fill the page. */
+.export-dialog__scale {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+/* The file being written to. It can be a long path in the macOS app, so
+   it takes the space that is left and gives up first. */
+.toolbar__file-path {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Not `direction: rtl` to ellipsize from the left: it relocates a
+     leading "/" to the end, so a path would read "Users/tom/a.kli/". The
+     tooltip carries the whole thing. */
+  font-size: 0.75rem;
+  color: var(--text);
+  opacity: 0.75;
 }

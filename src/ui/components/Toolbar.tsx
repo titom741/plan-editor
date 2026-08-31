@@ -4,6 +4,11 @@ import type { SaveStatus } from "../hooks/useAutosave";
 
 interface ToolbarProps {
   projectName: string;
+  /**
+   * The file this session is writing to, already described for display.
+   * `null` before the first save — there is genuinely nothing to name.
+   */
+  savedFile: { label: string; detail: string | null } | null;
   onRenameProject: (name?: string) => void;
   zoom: number;
   canUndo: boolean;
@@ -95,6 +100,7 @@ function describeSaveStatus(status: SaveStatus): {
  */
 export function Toolbar({
   projectName,
+  savedFile,
   onRenameProject,
   zoom,
   canUndo,
@@ -149,6 +155,18 @@ export function Toolbar({
         {save.label && (
           <span className={`toolbar__save toolbar__save--${save.modifier}`} title={save.title}>
             {save.label}
+          </span>
+        )}
+        {savedFile && (
+          // The path when the host can give one — which only the macOS
+          // shell's save panel does. A browser names the file and stops
+          // there, so the tooltip says why rather than leaving the user
+          // to wonder which of the two they are looking at.
+          <span
+            className="toolbar__file-path"
+            title={savedFile.detail ? `${savedFile.label} — ${savedFile.detail}` : savedFile.label}
+          >
+            {savedFile.label}
           </span>
         )}
       </div>
