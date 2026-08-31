@@ -5,24 +5,24 @@ import os
 /// Serves the bundled web build to the web view over `planeditor://app/`.
 ///
 /// The obvious route — `loadFileURL` on `index.html` — is the one that
-/// does not work, and it shipped blank because nothing checked. Two
-/// independent reasons:
+/// does not work, and it shipped blank because nothing checked.
 ///
-/// 1. **Vite emits root-absolute asset paths** (`/assets/index-….js`).
-///    Under `file://` those resolve to the *filesystem* root, so the
-///    application's only script never loads and the page renders an empty
-///    `<div id="root">`. A blank window, no error anywhere.
-/// 2. **A `file://` page has an opaque origin**, and WebKit gives it no
-///    `localStorage` and no IndexedDB. Autosave, the material catalogue,
-///    the saved components, the shortcuts and the rail widths all live in
-///    one or the other — so even a page that rendered would forget
-///    everything, which is a worse bug than a blank window because it
-///    looks like it works.
+/// The asset paths were half of it: Vite emitted root-absolute ones
+/// (`/assets/index-….js`), which under `file://` resolve to the
+/// *filesystem* root, so the application's only script never loaded and
+/// the page rendered an empty `<div id="root">`. KL-037 made the web build
+/// relative for deployment reasons of its own, which happens to fix that
+/// half — but not the half that matters here.
 ///
-/// A custom scheme fixes both at once: it is a real origin, so storage
-/// behaves as it does in a browser, and `/assets/…` resolves against it
-/// exactly as it does on a web server. The web build is left untouched —
-/// the same bytes are deployed to both hosts, which is the point.
+/// **A `file://` page has an opaque origin**, and WebKit gives it no
+/// `localStorage` and no IndexedDB. Autosave, the material catalogue, the
+/// saved components, the shortcuts and the rail widths all live in one or
+/// the other — so a page that now renders would still forget everything,
+/// which is a worse bug than a blank window because it looks like it works.
+///
+/// A custom scheme is a real origin, so storage behaves as it does in a
+/// browser, and the web build is left untouched — the same bytes are
+/// deployed to both hosts, which is the point.
 ///
 /// Serving over `http://localhost` would also work and was not chosen: it
 /// opens a listening socket, and "no backend, no network dependency" is a

@@ -16,7 +16,9 @@ createRoot(rootElement).render(
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
-    void navigator.serviceWorker.register("/sw.js").catch(() => {
+    // Relative, so the worker is found — and scoped — wherever the build
+    // is deployed: "./sw.js" resolves against the page, not the domain root.
+    void navigator.serviceWorker.register("./sw.js").catch(() => {
       // L'application reste pleinement utilisable en ligne si le navigateur
       // refuse les service workers (contexte non sécurisé, politique locale).
     });

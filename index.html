@@ -2,9 +2,13 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/app-icon.svg" />
+    <!-- Every path here is relative: the same build is served from a domain
+         root, from /plan-editor/ on GitHub Pages, and from planeditor://app/
+         inside the macOS shell. -->
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <!-- iOS ignores an SVG here, so this one is the PNG. -->
+    <link rel="apple-touch-icon" href="./icon-192.png" />
     <meta name="theme-color" content="#0f172a" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Plan Editor</title>

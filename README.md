@@ -263,8 +263,35 @@ survive accented characters.
 
 ```bash
 npm run lint    # oxlint
-npm run build   # tsc -b && vite build
+npm run build   # tsc -b, then the app bundle and the service worker
+npm run serve   # serve dist/ on the local network, to try the real build
 ```
+
+## Web deployment
+
+The build is **path-independent**: `dist/` runs wherever it is dropped —
+at the root of a domain, in a sub-directory, or from a folder served on
+the venue's own network. Every path it emits is relative, the manifest's
+`start_url` and `scope` resolve against wherever the manifest itself
+lands, and the service worker derives its shell from `registration.scope`
+rather than assuming `/`. One build, every host; there is no base URL to
+configure and no second build for the sub-directory case.
+
+Pushing to `main` deploys it to GitHub Pages —
+<https://titom741.github.io/plan-editor/> — through
+`.github/workflows/deploy.yml`, which runs lint, format check, tests and
+build first: a bundle that fails a check never reaches the page.
+
+To host it anywhere else, serve `dist/` as static files. The only
+requirement is HTTPS (or `localhost`), without which the browser refuses
+to register the service worker and the app simply loses its offline
+shell.
+
+### Icons
+
+`public/*.svg` are the sources; `scripts/build-icons.sh` rasterises the
+PNGs an installed app needs, and the PNGs are committed so the web build
+never depends on macOS to produce them. Run it only when an SVG changes.
 
 ## macOS app
 

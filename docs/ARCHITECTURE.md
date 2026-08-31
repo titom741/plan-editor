@@ -1434,3 +1434,86 @@ panel: `PanelRail.exclusive`. Two consequences worth naming, both tested:
 
 The panel that starts open on a fresh install is Outils for the same
 reason — it is used continuously, where the other two are visited.
+
+## One build, every host (KL-037)
+
+The app used to emit root-absolute paths: `/assets/index-….js` in the
+HTML, `"/"` for the manifest's `start_url` and `scope`, a hard-coded
+`["/", "/index.html", …]` shell in the service worker, and
+`register("/sw.js")`. That works at the root of a domain and nowhere
+else. Served from `/plan-editor/` — which is what a GitHub Pages project
+site is — the page asks the host for `/assets/…`, gets the 404 page, and
+renders an empty `<div id="root">`. It is the same failure mode as the
+blank macOS window of KL-031, from the same cause, and it would have
+shipped for the same reason: nothing loads the built bundle and looks at
+it.
+
+Everything is relative now, and each piece resolves against a different
+anchor, which is the part worth writing down:
+
+- **`base: "./"` in `vite.config.ts`** — asset URLs resolve against the
+  document.
+- **`start_url` and `scope` of `"./"`** — resolved against the manifest's
+  own URL, so a manifest at `/plan-editor/manifest.webmanifest` scopes the
+  app to `/plan-editor/`.
+- **`register("./sw.js")`** — resolved against the document, which puts
+  the worker at the deployment root and gives it that directory as its
+  scope. A worker's URL *is* its scope; this is why it must be a
+  fixed name at the top of `dist/` and not a hashed chunk.
+- **The worker's own paths** — derived at runtime from
+  `registration.scope`, never written down.
+
+The alternative was `base: "/plan-editor/"`, hard-coded. It ties the
+bundle to one host, makes the macOS shell and any local serving a second
+build, and turns a change of hosting into a code change. Relative costs
+nothing here because the app has no router: there is one page, so there
+is no deep link whose depth could break relative resolution.
+
+### The service worker became a built module
+
+`public/sw.js` was hand-written and shipped verbatim, which meant the one
+piece of code that can permanently serve a user the wrong file was also
+the one piece with no tests. It is now `src/pwa/sw.ts`, built by
+`vite.sw.config.ts` into `dist/sw.js` — an IIFE, classic script, unhashed
+name, `emptyOutDir: false` so it joins the app build rather than replacing
+it.
+
+That split buys what KL-034 recommends for hooks: the decisions moved
+into a pure module, `src/pwa/swCore.ts`, and the event wiring left in
+`sw.ts` is thin enough to read in one pass. `swCore.ts` knows which files
+form the shell, which caches to drop, whether a response is worth keeping
+and what answers a request the network refused — all as functions over
+plain strings, all tested, none of them needing a
+`ServiceWorkerGlobalScope` to exist.
+
+`sw.ts` declares the six worker globals it touches instead of adding
+`WebWorker` to `lib`: next to `DOM`, that lib makes TypeScript report
+every shared global twice.
+
+Two rules changed on the way:
+
+- **Cacheable is measured against the scope, not the origin.**
+  `titom741.github.io` carries every project page of the account, so the
+  origin is not this app — the sub-directory is. It also sidesteps
+  `URL.origin` reporting the string `"null"` for a non-special scheme.
+- **The shell is seeded file by file, not with `addAll`.** `addAll` is
+  atomic: one missing file fails the install, the worker never activates,
+  and the app loses offline support entirely — silently, for a favicon.
+
+Network-first is unchanged, and still for the reason KL-031 gave: the app
+is code-split, and a cache-first worker happily pairs a fresh
+`index.html` with a chunk that no longer exists.
+
+### Icons
+
+An installed web app needs PNGs — no browser rasterises an SVG for the
+system's app list. `scripts/build-icons.sh` renders them with `sips`, and
+the results are committed rather than generated during the build, so that
+the web build does not require a Mac.
+
+`app-icon-maskable.svg` is a second source, not a second size of the
+first. A maskable icon is cropped to whatever shape the launcher wants,
+so it is full-bleed square with the artwork inside the 80 % safe zone;
+the rounded corners of `app-icon.svg` would be clipped a second time.
+Declaring one file as `"any maskable"`, as the manifest did, gets one of
+the two wrong whichever way the platform reads it.

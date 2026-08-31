@@ -623,3 +623,56 @@ neuve, c'est Outils qui est ouvert : c'est le panneau utilisé en continu.
 
 17 tests sur `panelSections.ts`, validés par mutation (six défauts
 introduits, six détectés).
+
+## KL-037 — Un build déployable partout *(done)*
+
+L'application n'avait jamais été déployée : `dist/` est ignoré par git,
+aucun hébergeur n'était choisi, et le build ne pouvait de toute façon
+servir qu'à la racine d'un domaine. Chemins absolus dans le HTML,
+`start_url`/`scope` à `"/"`, coquille du service worker écrite en dur en
+`["/", "/index.html", …]`, `register("/sw.js")`. Servi depuis
+`/plan-editor/`, tout cela demande à l'hôte des fichiers qui n'y sont pas
+et rend un `<div id="root">` vide — le symptôme exact de la fenêtre
+blanche de KL-031, et pour la même raison de fond : personne ne charge le
+bundle construit pour le regarder.
+
+- **Le build devient relatif** (`base: "./"`, manifeste et worker résolus
+  contre leur propre URL). Un seul build tourne à la racine d'un domaine,
+  sous `/plan-editor/`, depuis un dossier servi sur le réseau du site, et
+  derrière le schéma `planeditor://app/` de la coquille macOS. Un
+  `base: "/plan-editor/"` en dur aurait lié le bundle à un hôte et fait de
+  chaque autre cas un second build.
+- **Le service worker devient un module construit et testé.**
+  `public/sw.js`, écrit à la main et livré tel quel, était le seul code
+  capable de servir durablement le mauvais fichier à un utilisateur, et le
+  seul sans test. Il est découpé en `src/pwa/swCore.ts` (les décisions,
+  pures) et `src/pwa/sw.ts` (le câblage), construit par
+  `vite.sw.config.ts` vers `dist/sw.js` — nom fixe et non haché, puisque
+  l'URL d'un worker *est* sa portée. Deux règles ont changé au passage :
+  ce qui est mis en cache se mesure à la portée et non à l'origine
+  (`titom741.github.io` héberge toutes les pages du compte), et la
+  coquille est semée fichier par fichier — `addAll` est atomique, un
+  favicon manquant supprimerait tout le hors-ligne en silence.
+- **Icônes PWA en PNG** (192, 512) plus une variante *maskable* à part,
+  pleine page et dessin dans la zone sûre à 80 % : déclarer un seul
+  fichier `"any maskable"` comme le faisait le manifeste donne
+  nécessairement tort à l'un des deux usages. `scripts/build-icons.sh` les
+  rend avec `sips` ; les PNG sont committés pour que le build web ne
+  dépende pas de macOS.
+- **GitHub Pages** (`.github/workflows/deploy.yml`) : lint, format,
+  tests et build avant le déploiement — un bundle qui échoue à un contrôle
+  n'atteint pas la page. C'est aussi la première fois que ces contrôles
+  tournent ailleurs que sur la machine de développement.
+
+560 tests, dont 20 nouveaux sur `swCore.ts`, validés par mutation (sept
+défauts introduits, sept détectés).
+
+Le build assemblé a été **vérifié servi depuis un sous-répertoire**, pas
+seulement construit : racine React montée, quatre canevas Konva, worker
+enregistré sur la portée `/plan-editor/`, coquille en cache aux bonnes
+URL, `localStorage` opérationnel, aucune erreur de console. C'est
+manuel — l'automatiser reste le sujet de KL-039.
+
+Reste ouvert : la distribution du `.app` macOS (binaire universel, icône,
+version réelle, notarisation, DMG) est KL-038, et un smoke test du bundle
+en intégration continue KL-039.

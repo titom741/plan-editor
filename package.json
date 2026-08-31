@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && vite build --config vite.sw.config.ts",
     "lint": "oxlint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "preview": "vite preview",
+    "serve": "vite preview --host --port 4173",
     "test": "vitest run"
   },
   "dependencies": {

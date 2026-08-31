@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#1e293b"/><stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#38bdf8"/><stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <!-- Full bleed, square: the launcher applies its own mask, and the
+       rounded corners of app-icon.svg would be clipped a second time. -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- The artwork sits inside the 80% safe zone a maskable icon is
+       guaranteed to keep, whatever shape the platform crops to. -->
+  <g transform="translate(51.2 51.2) scale(0.8)">
+    <path d="M88 108h336v296H88z" fill="none" stroke="#64748b" stroke-width="10" opacity=".65"/>
+    <path d="M88 182h336M88 256h336M88 330h336M162 108v296M256 108v296M350 108v296" fill="none" stroke="#475569" stroke-width="6" opacity=".65"/>
+    <path d="M136 356V156h48v78l72-78h62l-82 91 91 109h-64l-60-76-19 21v55z" fill="url(#mark)"/>
+    <path d="M330 156h48v200h-48z" fill="#f8fafc"/>
+    <circle cx="354" cy="132" r="14" fill="#fbbf24"/>
+  </g>
+</svg>
