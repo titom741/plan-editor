@@ -1,10 +1,11 @@
 import { formatPaper, formatScale } from "../domain/sheets";
-import type { PlanObject, Project, Sheet } from "../domain/types";
+import type { PlanObject, Project, RectangleObject, Sheet, StandGrid } from "../domain/types";
 import { buildMultiPagePdf, buildPdf, mmToPt, toPdfDate } from "../printing/pdf";
 import type { PdfLineItem, PdfPage, PdfPathItem, PdfTextItem } from "../printing/pdf";
 import { objectLocalToWorld } from "../domain/geometry";
 import { boundsCenterM, getObjectBoundsM } from "../domain/bounds";
 import { getObjectDisplayLabel } from "../domain/labels";
+import { labelledStandCells, standGridToDraw } from "../domain/stands";
 import { DEFAULT_LABEL_DISPLAY, resolveLabelDisplay, type LabelDisplay } from "../domain/display";
 import { worldToScreen, type Viewport } from "../rendering/viewport";
 import type { SheetLayout } from "../printing/sheetLayout";
@@ -194,24 +195,65 @@ function labelText(
   point: (world: { xM: number; yM: number }) => { x: number; y: number },
 ): PdfTextItem[] {
   const display = resolveLabelDisplay(object, content.labelDisplay ?? DEFAULT_LABEL_DISPLAY);
+  const grid = standGridToDraw(object, display);
+  const stands = grid && object.type === "rectangle" ? standLabels(object, grid, point) : [];
+
   const lines = getObjectDisplayLabel(object, display)
     .split("\n")
     .filter((line) => line.length > 0);
-  if (lines.length === 0) return [];
+  if (lines.length === 0) return stands;
 
   const bounds = getObjectBoundsM(object);
-  if (!bounds) return [];
+  if (!bounds) return stands;
   const center = point(boundsCenterM(bounds));
   // PDF y grows upward, so the first line sits above the centre and each
   // following one steps down.
   const firstBaseline = center.y + ((lines.length - 1) * LABEL_SIZE_PT) / 2;
+  // A marquee that writes stand names has none of its middle left, so its
+  // own name moves above the shape — the same rule the screen applies, or
+  // the two would print on top of each other.
+  const topOffset = grid ? point({ xM: bounds.minXM, yM: bounds.minYM }).y - center.y : 0;
 
-  return lines.map((line, index) => ({
-    text: line,
-    xPt: center.x - (line.length * LABEL_CHAR_WIDTH_PT) / 2,
-    yPt: firstBaseline - index * LABEL_SIZE_PT,
-    sizePt: LABEL_SIZE_PT,
-  }));
+  return [
+    ...stands,
+    ...lines.map((line, index) => ({
+      text: line,
+      xPt: center.x - (line.length * LABEL_CHAR_WIDTH_PT) / 2,
+      yPt:
+        firstBaseline +
+        topOffset +
+        (grid ? LABEL_SIZE_PT * lines.length : 0) -
+        index * LABEL_SIZE_PT,
+      sizePt: LABEL_SIZE_PT,
+    })),
+  ];
+}
+
+/**
+ * One text item per named stand, centred on its own cell.
+ *
+ * The cells come out of `domain/stands.ts` in the marquee's local frame,
+ * so they are rotated with it here exactly as the shape outlines are.
+ */
+function standLabels(
+  object: RectangleObject,
+  grid: StandGrid,
+  point: (world: { xM: number; yM: number }) => { x: number; y: number },
+): PdfTextItem[] {
+  return labelledStandCells(object, grid).map((cell) => {
+    const center = point(
+      objectLocalToWorld(object, {
+        xM: cell.xM + cell.widthM / 2,
+        yM: cell.yM + cell.heightM / 2,
+      }),
+    );
+    return {
+      text: cell.text,
+      xPt: center.x - (cell.text.length * LABEL_CHAR_WIDTH_PT) / 2,
+      yPt: center.y - LABEL_SIZE_PT / 2,
+      sizePt: LABEL_SIZE_PT,
+    };
+  });
 }
 
 /** Lays out the frame, title block and scale bar around the drawing, and returns the finished PDF bytes. */

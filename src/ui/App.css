@@ -1516,3 +1516,65 @@
   opacity: 0.55;
   border-style: dashed;
 }
+
+/* The stands dialog carries a grid of text inputs, so it needs more room
+   than a dialog that asks for two numbers. */
+.calibration-dialog--wide {
+  width: min(720px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.stands-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-h);
+}
+
+.stands-dialog__header-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+/* Columns side by side, each one a stack of its own rows: the form has
+   the shape of the plan, so a box's position tells you which stand it is. */
+.stands-dialog__grid {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.stands-dialog__column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 8.5rem;
+  flex: 1 1 0;
+}
+
+.stands-dialog__column-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.stands-dialog__cell {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  min-width: 0;
+}
+
+.stands-dialog__cell:focus {
+  outline: 2px solid var(--accent-border);
+  outline-offset: -1px;
+}

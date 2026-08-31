@@ -457,3 +457,117 @@ describe("schema version 1 → 2 migration (KL-029)", () => {
     expect(result.file.project.backgrounds[0]?.name).toBe("Fond de plan");
   });
 });
+
+describe("stand grids (KL-038)", () => {
+  /** A marquee carrying a grid, in a project ready to round-trip. */
+  function marqueeWithStands(stands: unknown): Project {
+    const project = createEmptyProject({ name: "Virade" });
+    const layer = getDefaultTargetLayer(project.layers);
+    if (!layer) throw new Error("no default layer");
+    const marquee = createRectangleObject({
+      layerId: layer.id,
+      name: "Chapiteau",
+      xM: 0,
+      yM: 0,
+      widthM: 20,
+      heightM: 10,
+    });
+    return addObject(project, { ...marquee, stands } as typeof marquee);
+  }
+
+  const validGrid = {
+    columns: 2,
+    rows: 2,
+    gapM: 0.8,
+    marginM: 0,
+    labels: ["Boulanger", "", "Fromager", "Bar"],
+  };
+
+  it("keeps a grid and its labels through a save and a reload", () => {
+    const project = marqueeWithStands(validGrid);
+    const reloaded = roundTrip(project);
+    expect(reloaded.objects[0]).toMatchObject({ stands: validGrid });
+  });
+
+  it("keeps an empty cell empty rather than dropping it", () => {
+    // The blank is meaningful: it is how a technical corner is expressed.
+    const reloaded = roundTrip(marqueeWithStands(validGrid));
+    const stands = reloaded.objects[0]?.type === "rectangle" ? reloaded.objects[0].stands : null;
+    expect(stands?.labels).toEqual(["Boulanger", "", "Fromager", "Bar"]);
+  });
+
+  it("reads a rectangle that has no grid, which is nearly all of them", () => {
+    const project = createEmptyProject({ name: "Nu" });
+    const layer = getDefaultTargetLayer(project.layers);
+    if (!layer) throw new Error("no default layer");
+    const bare = addObject(
+      project,
+      createRectangleObject({
+        layerId: layer.id,
+        name: "Caisse",
+        xM: 0,
+        yM: 0,
+        widthM: 1,
+        heightM: 1,
+      }),
+    );
+    expect(roundTrip(bare)).toEqual(bare);
+  });
+
+  it("refuses a labels array that does not match the grid", () => {
+    // Padding it would silently move the user's text into the wrong
+    // squares, which is worse than saying where the file is wrong.
+    const result = parseProjectFile(
+      toProjectFile(marqueeWithStands({ ...validGrid, labels: ["A1", "A2"] })),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("invalidField");
+  });
+
+  it("refuses a fractional or empty grid", () => {
+    for (const broken of [
+      { ...validGrid, columns: 2.5 },
+      { ...validGrid, columns: 0 },
+      { ...validGrid, rows: -1 },
+    ]) {
+      expect(parseProjectFile(toProjectFile(marqueeWithStands(broken))).ok).toBe(false);
+    }
+  });
+
+  it("refuses a negative aisle or walkway", () => {
+    for (const broken of [
+      { ...validGrid, gapM: -1 },
+      { ...validGrid, marginM: -0.5 },
+    ]) {
+      expect(parseProjectFile(toProjectFile(marqueeWithStands(broken))).ok).toBe(false);
+    }
+  });
+
+  it("refuses a label that is not text", () => {
+    const result = parseProjectFile(
+      toProjectFile(marqueeWithStands({ ...validGrid, labels: ["A1", 2, "A3", "A4"] })),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("defaults the stands switch on a labelDisplay written before KL-038", () => {
+    // Every file up to KL-037 lacks the key. Missing is not corrupt.
+    const file = JSON.parse(JSON.stringify(toProjectFile(createDemoProject())));
+    file.project.labelDisplay = { name: true, dimensions: true, reference: false, quantity: false };
+    const result = parseProjectFile(file);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.file.project.labelDisplay?.stands).toBe(true);
+  });
+
+  it("still refuses a labelDisplay whose stands key is present but not a boolean", () => {
+    const file = JSON.parse(JSON.stringify(toProjectFile(createDemoProject())));
+    file.project.labelDisplay = {
+      name: true,
+      dimensions: true,
+      reference: false,
+      quantity: false,
+      stands: "oui",
+    };
+    expect(parseProjectFile(file).ok).toBe(false);
+  });
+});

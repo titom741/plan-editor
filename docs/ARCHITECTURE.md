@@ -1212,45 +1212,59 @@ heavy goods vehicles should not scroll past one forever, and hiding a
 built-in is reversible in a way that editing the built-in list would not
 be.
 
-## Subdividing a surface into stands (KL-030)
+## Stands inside a marquee: text, not objects (KL-030, redone in KL-038)
 
-A chapiteau divided into numbered stands produces **real objects**, one
-per cell — not a grid drawn inside the parent. That was the design
-decision, and it is the expensive one: a `columns`/`rows` property on the
-rectangle would have been a fraction of the work and would have produced
-cells nobody could name, select, colour, delete or count. A stand is a
-thing: it is allocated to an exhibitor, priced, and it appears in the
-schedule.
+KL-030 divided a chapiteau into **real objects**, one per cell, on the
+reasoning that a stand is a thing: allocated to an exhibitor, priced,
+counted in the schedule. That reasoning was sound and the result was
+still wrong in use. A tent of thirty stands became thirty objects to
+select around, drag by accident and scroll past in the elements panel,
+for a grid nobody edits cell by cell once it is drawn. Changing "4
+columns" to "5" meant deleting twenty rectangles and starting again.
 
-`domain/subdivision.ts` is pure. `measureSubdivision` answers "what size
-would the cells come out at" without building anything, because that is
-the number the user is actually choosing — "4 columns" means nothing,
-"4,40 × 4,60 m each" means everything — and it returns `null` for a
-request that doesn't fit, which is what disables the dialog's confirm
-button. `subdivideRectangle` then lays the cells out in the parent's
-**local frame** and gives them the parent's `rotationDeg`, so a rotated
-tent produces stands rotated with it rather than a grid lying flat under
-a tilted roof.
+KL-038 replaced it: the grid is a property of the marquee
+(`RectangleObject.stands`) and it draws **text only**. One free label per
+cell, shown or hidden by the same switches as every other label. Nothing
+is created, so nothing has to be cleaned up.
 
-Cells are named by grid reference — rows are letters, columns are
-numbers, so the top-left is `A1`, the convention every exhibition floor
-plan already uses, doubling up past the 26th row like a spreadsheet
-rather than running out. The reference also lands in each cell's
-`reference` field, so the schedule can group by it.
+What that costs, stated plainly: stands no longer appear in the
+schedule, and a stand can no longer be coloured or deleted on its own.
+That was the deliberate trade — see the mission entry in `ROADMAP.md`.
 
-Two things it deliberately does not do:
+`domain/stands.ts` is pure, and the geometry survives the rewrite
+unchanged, aisles and perimeter walkway included: the point of a scale
+plan is that the text lands where the stand will be.
 
-- **It does not group the cells with the parent.** Grouping would mean a
-  click on one stand selects the tent and all its neighbours, which
-  defeats naming them one by one — the reason they are objects at all.
-  The trade-off is real and worth knowing: moving the tent afterwards
-  does not move its stands. A marquee picks up the lot.
-- **It covers rectangles only.** A grid inside a polygon needs clipping,
-  which is a different problem, and offering the button for a shape it
-  could not honour would be worse than not offering it.
+- `measureStandGrid` answers "what size would the cells come out at"
+  without building anything. It matters *more* now than when cells were
+  drawn — with text only, this number is the sole indication that the
+  stands actually fit. It returns `null` for a request that doesn't fit,
+  which is what disables the dialog's confirm button.
+- `standCells` lays the cells out in the marquee's **local frame**; the
+  caller applies the rotation, exactly as it already does for the shape
+  itself — the Konva group on screen, `objectLocalToWorld` on paper.
+- `standGridToDraw` is the one decision both renderers ask, so screen and
+  PDF cannot drift: "what prints is what was on screen" holds only while
+  both ask the same question.
 
-The whole grid is one undo step: undoing a subdivision has to take back
-the eighty stands it made, not one of them.
+Three rules worth keeping in mind:
+
+- **An empty cell writes nothing.** That is how a technical corner or a
+  bar is expressed, without inventing a second concept for "no stand
+  here".
+- **The labels are stored row by row, and resizing re-lays them by (row,
+  column).** Padding the flat array would be shorter and would silently
+  move the user's text into the wrong squares the moment a column is
+  added — `resizeStandLabels` exists for exactly that, and is tested for
+  exactly that.
+- **A marquee that writes stand names moves its own name above its top
+  edge.** Both were centred, so both landed in the middle cell. The rule
+  lives in the two renderers but the condition that triggers it does
+  not — it is `standGridToDraw` again.
+
+It covers rectangles only. A grid inside a polygon needs clipping, which
+is a different problem, and offering the button for a shape it could not
+honour would be worse than not offering it.
 
 ## The file the user owns, owned properly (KL-035)
 

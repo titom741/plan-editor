@@ -19,6 +19,7 @@
  * on disk for them to keep or send on.
  */
 
+import { DEFAULT_LABEL_DISPLAY } from "../domain/display";
 import { PAPER_SIZE_ORDER } from "../domain/sheets";
 import type {
   Background,
@@ -32,6 +33,7 @@ import type {
   PointM,
   Project,
   Sheet,
+  StandGrid,
 } from "../domain/types";
 
 /**
@@ -352,6 +354,13 @@ function readMeasurement(value: unknown, path: string): PlanObject["measurement"
 }
 
 /** Label display settings, all four flags required once the object is present at all. */
+/**
+ * `stands` arrived with KL-038, so every file written before it lacks the
+ * key. Missing means the default rather than a refusal: an absent switch
+ * is not a corrupt one, and the alternative would make every plan written
+ * up to KL-037 unreadable to gain nothing. A *present* value is still
+ * validated strictly.
+ */
 function readLabelDisplay(value: unknown, path: string): LabelDisplay {
   const record = readRecord(value, path);
   return {
@@ -359,7 +368,39 @@ function readLabelDisplay(value: unknown, path: string): LabelDisplay {
     dimensions: readBoolean(record.dimensions, `${path}.dimensions`),
     reference: readBoolean(record.reference, `${path}.reference`),
     quantity: readBoolean(record.quantity, `${path}.quantity`),
+    stands:
+      record.stands === undefined
+        ? DEFAULT_LABEL_DISPLAY.stands
+        : readBoolean(record.stands, `${path}.stands`),
   };
+}
+
+/**
+ * The stand grid of a marquee (KL-038).
+ *
+ * `labels` has to hold exactly one entry per cell. A mismatch is a broken
+ * file, not a grid to be patched up: padding it would silently move the
+ * user's text into the wrong squares, which is worse than saying where
+ * the file is wrong — the same rule KL-032 settled for the catalogue.
+ */
+function readStandGrid(value: unknown, path: string): StandGrid {
+  const record = readRecord(value, path);
+  const columns = readFiniteNumber(record.columns, `${path}.columns`);
+  const rows = readFiniteNumber(record.rows, `${path}.rows`);
+  if (!Number.isInteger(columns) || columns < 1) fail(`${path}.columns`);
+  if (!Number.isInteger(rows) || rows < 1) fail(`${path}.rows`);
+
+  const gapM = readFiniteNumber(record.gapM, `${path}.gapM`);
+  const marginM = readFiniteNumber(record.marginM, `${path}.marginM`);
+  if (gapM < 0) fail(`${path}.gapM`);
+  if (marginM < 0) fail(`${path}.marginM`);
+
+  const labels = readArray(record.labels, `${path}.labels`).map((label, i) =>
+    readString(label, `${path}.labels[${i}]`),
+  );
+  if (labels.length !== columns * rows) fail(`${path}.labels`);
+
+  return { columns, rows, gapM, marginM, labels };
 }
 
 function readObject(value: unknown, path: string): PlanObject {
@@ -408,6 +449,9 @@ function readObject(value: unknown, path: string): PlanObject {
         type: "rectangle",
         widthM: readPositiveNumber(record.widthM, `${path}.widthM`),
         heightM: readPositiveNumber(record.heightM, `${path}.heightM`),
+        ...(record.stands !== undefined
+          ? { stands: readStandGrid(record.stands, `${path}.stands`) }
+          : {}),
       };
     case "circle":
       return {

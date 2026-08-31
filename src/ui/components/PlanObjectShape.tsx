@@ -1,12 +1,13 @@
 import { Arrow, Circle, Group, Image as KonvaImage, Line, Rect, Text } from "react-konva";
 import type Konva from "konva";
 import { getObjectDisplayLabel } from "../../domain/labels";
+import { labelledStandCells, standGridToDraw } from "../../domain/stands";
 import {
   DEFAULT_LABEL_DISPLAY,
   resolveLabelDisplay,
   type LabelDisplay,
 } from "../../domain/display";
-import type { PlanObject } from "../../domain/types";
+import type { PlanObject, RectangleObject, StandGrid } from "../../domain/types";
 import { metersToPixels, screenToWorld, worldToScreen } from "../../rendering/viewport";
 import type { Viewport } from "../../rendering/viewport";
 import { useHtmlImage } from "../hooks/useHtmlImage";
@@ -72,6 +73,9 @@ export function PlanObjectShape({
   const display = resolveLabelDisplay(object, labelDisplay);
   const labelText = getObjectDisplayLabel(object, display);
   const showLabel = !simplified && labelText.length > 0;
+  // The stands written inside a marquee (KL-038). Text only — there is no
+  // shape to draw, which is the whole point of the feature.
+  const standGrid = simplified ? null : standGridToDraw(object, display);
   const anchor = worldToScreen({ xM: object.xM, yM: object.yM }, viewport);
   /** A width given in screen pixels, converted to this render target's pixels. */
   const px = (screenPx: number) => screenPx * renderScale;
@@ -146,13 +150,20 @@ export function PlanObjectShape({
             opacity={object.style?.opacity ?? 1}
             dash={dash}
           />
+          {standGrid && (
+            <StandLabels object={object} grid={standGrid} viewport={viewport} px={px} />
+          )}
           {showLabel && (
             <Text
               text={labelText}
               width={widthPx}
-              height={heightPx}
+              /* A marquee full of stand names has no room left in the
+                 middle for its own, so it moves above its top edge —
+                 where it reads as the title of what is under it. */
+              y={standGrid ? -px(6) - px(14) * labelText.split("\n").length : 0}
+              height={standGrid ? undefined : heightPx}
               align="center"
-              verticalAlign="middle"
+              verticalAlign={standGrid ? undefined : "middle"}
               fontSize={px(14)}
               fill="#0f172a"
               listening={false}
@@ -308,4 +319,57 @@ export function PlanObjectShape({
       );
     }
   }
+}
+
+/** Smallest cell, in screen pixels, still worth writing a stand name in. Below it the grid is a smudge, not a plan. */
+const MIN_READABLE_CELL_PX = 26;
+
+/**
+ * The stand names inside a marquee.
+ *
+ * Drawn at a fixed *screen* size like every other label, so zooming out
+ * does not shrink the text into a line of dots — and hidden entirely once
+ * a cell is too small to hold it, which is the same thing said the other
+ * way round. Each name is centred in its own cell, so it lands where the
+ * stand will be rather than in a list.
+ */
+function StandLabels({
+  object,
+  grid,
+  viewport,
+  px,
+}: {
+  object: RectangleObject;
+  grid: StandGrid;
+  viewport: Viewport;
+  px: (screenPx: number) => number;
+}) {
+  const cells = labelledStandCells(object, grid);
+  if (cells.length === 0) return null;
+
+  const firstCell = cells[0];
+  if (!firstCell) return null;
+  const cellWidthPx = metersToPixels(firstCell.widthM, viewport);
+  const cellHeightPx = metersToPixels(firstCell.heightM, viewport);
+  if (cellWidthPx < MIN_READABLE_CELL_PX || cellHeightPx < MIN_READABLE_CELL_PX / 2) return null;
+
+  return (
+    <>
+      {cells.map((cell) => (
+        <Text
+          key={`${cell.rowIndex}-${cell.columnIndex}`}
+          text={cell.text}
+          x={metersToPixels(cell.xM, viewport)}
+          y={metersToPixels(cell.yM, viewport)}
+          width={cellWidthPx}
+          height={cellHeightPx}
+          align="center"
+          verticalAlign="middle"
+          fontSize={px(12)}
+          fill="#0f172a"
+          listening={false}
+        />
+      ))}
+    </>
+  );
 }

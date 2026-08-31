@@ -108,7 +108,13 @@ describe("getObjectDisplayLabel", () => {
   });
 
   it("writes nothing when every part is off", () => {
-    const display = { name: false, dimensions: false, reference: false, quantity: false };
+    const display = {
+      name: false,
+      dimensions: false,
+      reference: false,
+      quantity: false,
+      stands: false,
+    };
     expect(getObjectDisplayLabel(rectangle(5, 5), display)).toBe("");
   });
 
@@ -121,7 +127,13 @@ describe("getObjectDisplayLabel", () => {
   });
 
   it("adds the reference only when one is set", () => {
-    const display = { name: true, dimensions: false, reference: true, quantity: false };
+    const display = {
+      name: true,
+      dimensions: false,
+      reference: true,
+      quantity: false,
+      stands: false,
+    };
     expect(getObjectDisplayLabel(rectangle(5, 5), display)).toBe("Chapiteau");
     expect(getObjectDisplayLabel({ ...rectangle(5, 5), reference: "CHP-5X5" }, display)).toBe(
       "Chapiteau\nCHP-5X5",
@@ -131,7 +143,13 @@ describe("getObjectDisplayLabel", () => {
   it("stays quiet about a quantity of one", () => {
     // Every object is one of itself; printing "× 1" on each of them says
     // nothing and clutters the plan.
-    const display = { name: false, dimensions: false, reference: false, quantity: true };
+    const display = {
+      name: false,
+      dimensions: false,
+      reference: false,
+      quantity: true,
+      stands: true,
+    };
     expect(getObjectDisplayLabel({ ...rectangle(5, 5), quantity: 1 }, display)).toBe("");
     expect(getObjectDisplayLabel(rectangle(5, 5), display)).toBe("");
     expect(getObjectDisplayLabel({ ...rectangle(5, 5), quantity: 12 }, display)).toBe("× 12");
@@ -198,7 +216,13 @@ describe("getObjectDisplayLabel", () => {
     });
 
     it("says nothing extra when dimensions are switched off", () => {
-      const display = { name: true, dimensions: false, reference: false, quantity: false };
+      const display = {
+        name: true,
+        dimensions: false,
+        reference: false,
+        quantity: false,
+        stands: false,
+      };
       const area = { ...rectangle(5, 5), measurement: { kind: "area" as const } };
       expect(getObjectDisplayLabel(area, display)).toBe("Chapiteau");
     });

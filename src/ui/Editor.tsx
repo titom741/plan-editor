@@ -25,7 +25,7 @@ import {
   distributeObjects,
   transformObjectAroundPivot,
 } from "../domain/grouping";
-import { subdivideRectangle, type SubdivisionOptions } from "../domain/subdivision";
+import type { StandGrid } from "../domain/stands";
 import type { CatalogItem } from "../domain/catalog";
 import { duplicateObjects } from "../domain/clipboard";
 import { calibrationFromKnownDistance, calibrationFromKnownScale } from "../domain/calibration";
@@ -64,7 +64,7 @@ import type {
 import { DEFAULT_SCREEN_PIXELS_PER_METER, screenToWorld } from "../rendering/viewport";
 import { CalibrationDialog } from "./components/CalibrationDialog";
 import { DeleteLayerDialog, LayerStyleDialog } from "./components/LayerDialogs";
-import { SubdivideDialog } from "./components/SubdivideDialog";
+import { StandsDialog } from "./components/StandsDialog";
 import { ExportDialog } from "./components/ExportDialog";
 import { LayersPanel } from "./components/LayersPanel";
 import { PlanCanvas } from "./components/PlanCanvas";
@@ -1156,30 +1156,33 @@ export default function Editor({
   );
 
   /**
-   * Cutting a surface into stands. The object being subdivided is held in
-   * state rather than read from the selection when the dialog confirms:
-   * the plan can change under an open dialog, and the cells must be laid
-   * out against the rectangle the user was looking at.
+   * The stands written inside a marquee. The object is held in state
+   * rather than read back from the selection when the dialog confirms:
+   * the plan can change under an open dialog, and the grid has to be
+   * measured against the rectangle the user was looking at.
    */
-  const [subdividing, setSubdividing] = useState<RectangleObject | null>(null);
+  const [editingStands, setEditingStands] = useState<RectangleObject | null>(null);
 
-  const handleRequestSubdivide = useCallback(() => {
-    if (selectedObject?.type === "rectangle") setSubdividing(selectedObject);
+  const handleRequestStands = useCallback(() => {
+    if (selectedObject?.type === "rectangle") setEditingStands(selectedObject);
   }, [selectedObject]);
 
-  const handleConfirmSubdivide = useCallback(
-    (options: SubdivisionOptions) => {
-      if (!subdividing) return;
-      const cells = subdivideRectangle(subdividing, options);
-      setSubdividing(null);
-      if (cells.length === 0) return;
-      // One undo step for the whole grid: undoing a subdivision has to
-      // take back the eighty stands it made, not one of them.
-      commitChange((current) => addObjects(current, cells));
-      selectOnly(cells.map((cell) => cell.id));
+  const handleConfirmStands = useCallback(
+    (stands: StandGrid) => {
+      if (!editingStands) return;
+      const id = editingStands.id;
+      setEditingStands(null);
+      commitChange((current) => patchObject(current, id, { stands }));
     },
-    [subdividing, commitChange, selectOnly],
+    [editingStands, commitChange],
   );
+
+  const handleRemoveStands = useCallback(() => {
+    if (!editingStands) return;
+    const id = editingStands.id;
+    setEditingStands(null);
+    commitChange((current) => patchObject(current, id, { stands: undefined }));
+  }, [editingStands, commitChange]);
 
   // --- Commands ------------------------------------------------------------
 
@@ -1457,7 +1460,7 @@ export default function Editor({
           onTransformSelection={handleTransformSelection}
           onDistributeSelection={handleDistributeSelection}
           onSaveComponent={handleSaveComponent}
-          onSubdivide={handleRequestSubdivide}
+          onEditStands={handleRequestStands}
           collapsed={isCollapsed("properties")}
           onToggleCollapsed={() => toggleCollapsed("properties")}
         />
@@ -1493,11 +1496,12 @@ export default function Editor({
           onCancel={() => closeDialog()}
         />
       )}
-      {subdividing && (
-        <SubdivideDialog
-          object={subdividing}
-          onConfirm={handleConfirmSubdivide}
-          onCancel={() => setSubdividing(null)}
+      {editingStands && (
+        <StandsDialog
+          object={editingStands}
+          onConfirm={handleConfirmStands}
+          onRemove={handleRemoveStands}
+          onCancel={() => setEditingStands(null)}
         />
       )}
       {layerPrompt?.kind === "delete" && (

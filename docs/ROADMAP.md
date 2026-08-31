@@ -671,8 +671,62 @@ Le build assemblé a été **vérifié servi depuis un sous-répertoire**, pas
 seulement construit : racine React montée, quatre canevas Konva, worker
 enregistré sur la portée `/plan-editor/`, coquille en cache aux bonnes
 URL, `localStorage` opérationnel, aucune erreur de console. C'est
-manuel — l'automatiser reste le sujet de KL-039.
+manuel — l'automatiser reste à faire.
 
-Reste ouvert : la distribution du `.app` macOS (binaire universel, icône,
-version réelle, notarisation, DMG) est KL-038, et un smoke test du bundle
-en intégration continue KL-039.
+Restent ouverts, sans numéro réservé : la distribution du `.app` macOS
+(binaire universel, icône, version réelle, notarisation, DMG) et un smoke
+test du bundle en intégration continue.
+
+## KL-038 — Les stands redeviennent du texte *(done)*
+
+KL-030 découpait un chapiteau en **vrais objets**, un par case. Le
+raisonnement tenait — un stand est une chose : attribuée à un exposant,
+tarifée, comptée dans la nomenclature — et le résultat était quand même
+mauvais à l'usage. Un chapiteau de trente stands devenait trente objets
+qu'il fallait éviter de sélectionner, qu'on déplaçait par mégarde, et qui
+noyaient le panneau Éléments ; passer de « 4 colonnes » à « 5 » voulait
+dire supprimer vingt rectangles et recommencer.
+
+La grille est désormais une **propriété du chapiteau**
+(`RectangleObject.stands`) et n'écrit que du **texte** : un libellé libre
+par case, saisi colonne par colonne, affiché ou masqué par la case
+« Stands » qui rejoint Nom, Dimensions, Référence et Quantité — au niveau
+du plan comme objet par objet. Rien n'est créé, donc rien n'est à
+nettoyer.
+
+Ce que ça coûte, dit franchement : **les stands ne sont plus comptés dans
+la nomenclature**, et un stand ne peut plus être coloré ni supprimé
+individuellement. C'est le compromis assumé ; les plans déjà subdivisés
+gardent leurs objets, rien ne casse et rien ne devient illisible.
+
+- **Une case vide n'écrit rien** — c'est ainsi qu'on réserve un coin
+  technique ou une buvette, sans inventer un second concept.
+- **Les libellés sont stockés rangée par rangée, et le redimensionnement
+  les repose par (rangée, colonne).** Compléter le tableau à plat aurait
+  été plus court et aurait déplacé en silence le texte de l'utilisateur
+  dans les mauvaises cases dès l'ajout d'une colonne.
+- **Un chapiteau qui écrit des stands remonte son propre nom au-dessus de
+  son bord.** Les deux étaient centrés, donc les deux atterrissaient dans
+  la case du milieu. Écran et PDF posent la même question à
+  `standGridToDraw`, sinon l'un des deux dérive.
+- **Format de fichier inchangé.** `stands` est un champ optionnel, ce que
+  la règle du parseur admet sans bump de `SCHEMA_VERSION` ; l'interrupteur
+  absent d'un `labelDisplay` écrit avant cette mission vaut « activé »,
+  car un réglage manquant n'est pas un réglage corrompu. Une grille
+  *présente* reste validée strictement — un tableau de libellés qui ne
+  correspond pas à la grille est refusé, pas rafistolé.
+
+La géométrie de KL-030 survit intacte, allée et retrait au pourtour
+compris : l'intérêt d'un plan à l'échelle est que le texte tombe là où le
+stand sera.
+
+590 tests, dont 29 nouveaux sur `stands.ts`, validés par mutation : douze
+défauts introduits, douze détectés. L'un d'eux est passé au premier
+essai — retirer le garde-fou « seulement un rectangle » ne cassait rien,
+puisqu'un cercle n'a de toute façon pas de champ `stands`. Le test a été
+refait avec un cercle portant une grille parasite, comme un fichier
+édité à la main peut en produire.
+
+Vérifié dans le navigateur, pas seulement construit : grille saisie,
+libellés dessinés à leur place, case vide muette, nom du chapiteau remonté
+au-dessus, et retour au centre dès que la case « Stands » est décochée.

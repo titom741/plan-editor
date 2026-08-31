@@ -8,7 +8,13 @@ import {
 import { getObjectDisplayLabel } from "./labels";
 import { createLineObject, createRectangleObject } from "./objects";
 
-const ALL_OFF: LabelDisplay = { name: false, dimensions: false, reference: false, quantity: false };
+const ALL_OFF: LabelDisplay = {
+  name: false,
+  dimensions: false,
+  reference: false,
+  quantity: false,
+  stands: false,
+};
 
 function crate(overrides: Partial<Parameters<typeof createRectangleObject>[0]> = {}) {
   return createRectangleObject({
@@ -50,6 +56,7 @@ describe("getObjectDisplayLabel with display settings", () => {
         dimensions: true,
         reference: true,
         quantity: true,
+        stands: true,
       }),
     ).toBe("Caisse\n2 × 1 m\nCR-2X1\n× 4");
   });
@@ -65,15 +72,18 @@ describe("getObjectDisplayLabel with display settings", () => {
         dimensions: false,
         reference: true,
         quantity: true,
+        stands: true,
       }),
     ).toBe("Caisse");
   });
 
   it("treats a quantity of 1 as nothing worth saying", () => {
-    expect(getObjectDisplayLabel(crate({ quantity: 1 }), { ...ALL_OFF, quantity: true })).toBe("");
-    expect(getObjectDisplayLabel(crate({ quantity: 2 }), { ...ALL_OFF, quantity: true })).toBe(
-      "× 2",
-    );
+    expect(
+      getObjectDisplayLabel(crate({ quantity: 1 }), { ...ALL_OFF, quantity: true, stands: true }),
+    ).toBe("");
+    expect(
+      getObjectDisplayLabel(crate({ quantity: 2 }), { ...ALL_OFF, quantity: true, stands: true }),
+    ).toBe("× 2");
   });
 
   it("lets a measurement state what it measures in place of a size", () => {

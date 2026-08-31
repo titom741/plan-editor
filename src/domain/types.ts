@@ -21,6 +21,9 @@ export type Units = "m";
 import type { LabelDisplay } from "./display";
 export type { LabelDisplay };
 
+import type { StandGrid } from "./stands";
+export type { StandGrid };
+
 /** A point expressed in world (meter) coordinates. */
 export interface PointM {
   xM: Meters;
@@ -200,6 +203,12 @@ export interface RectangleObject extends PlanObjectBase {
   type: "rectangle";
   widthM: Meters;
   heightM: Meters;
+  /**
+   * Stands laid out inside this surface, drawn as text only. Absent on a
+   * plain rectangle, which is nearly all of them. See `domain/stands.ts`
+   * for why this is a property rather than the objects KL-030 created.
+   */
+  stands?: StandGrid;
 }
 
 export interface CircleObject extends PlanObjectBase {

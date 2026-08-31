@@ -51,7 +51,7 @@ interface PropertiesPanelProps {
   onDistributeSelection: (axis: "x" | "y") => void;
   onSaveComponent: () => void;
   /** Offered for rectangles only: a grid inside a polygon needs clipping, which is a different problem. */
-  onSubdivide: () => void;
+  onEditStands: () => void;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
 }
@@ -145,7 +145,7 @@ export function PropertiesPanel({
   onTransformSelection,
   onDistributeSelection,
   onSaveComponent,
-  onSubdivide,
+  onEditStands,
   collapsed = false,
   onToggleCollapsed,
 }: PropertiesPanelProps) {
@@ -969,14 +969,24 @@ export function PropertiesPanel({
           )}
 
           {selected.type === "rectangle" && (
-            <button
-              type="button"
-              className="properties-panel__button"
-              onClick={onSubdivide}
-              disabled={isLocked}
-            >
-              ▦ Subdiviser en stands…
-            </button>
+            <>
+              <button
+                type="button"
+                className="properties-panel__button"
+                onClick={onEditStands}
+                disabled={isLocked}
+              >
+                ▦ {selected.stands ? "Modifier les stands…" : "Stands…"}
+              </button>
+              {selected.stands && (
+                <div className="properties-panel__static">
+                  <span>Stands</span>
+                  <span>
+                    {selected.stands.columns} × {selected.stands.rows}
+                  </span>
+                </div>
+              )}
+            </>
           )}
 
           {getObjectDimensionSummary(selected) && (

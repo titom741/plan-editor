@@ -19,6 +19,8 @@ export interface LabelDisplay {
   dimensions: boolean;
   reference: boolean;
   quantity: boolean;
+  /** The stand names written inside a marquee. No effect on an object without a grid. */
+  stands: boolean;
 }
 
 export const DEFAULT_LABEL_DISPLAY: LabelDisplay = {
@@ -26,6 +28,9 @@ export const DEFAULT_LABEL_DISPLAY: LabelDisplay = {
   dimensions: true,
   reference: false,
   quantity: false,
+  // On by default: someone who has laid out stands wants to see them.
+  // The switch is there to take them off a client's copy, not to opt in.
+  stands: true,
 };
 
 export const LABEL_DISPLAY_KEYS: readonly (keyof LabelDisplay)[] = [
@@ -33,6 +38,7 @@ export const LABEL_DISPLAY_KEYS: readonly (keyof LabelDisplay)[] = [
   "dimensions",
   "reference",
   "quantity",
+  "stands",
 ];
 
 export const LABEL_DISPLAY_LABELS: Record<keyof LabelDisplay, string> = {
@@ -40,6 +46,7 @@ export const LABEL_DISPLAY_LABELS: Record<keyof LabelDisplay, string> = {
   dimensions: "Dimensions",
   reference: "Référence",
   quantity: "Quantité",
+  stands: "Stands",
 };
 
 /** The settings that actually apply to one object: its own override if it has one, the project's default otherwise. */
