@@ -40,6 +40,26 @@ function sizeOf(pdf: string, text: string): number | null {
   return null;
 }
 
+/**
+ * The whole `Tm` matrix of a piece of text: `[a b c d]` is its rotation,
+ * `(x, y)` its origin. Reading the matrix is the only way to assert that
+ * a caption is *turned*, not merely placed.
+ */
+function matrixOf(pdf: string, text: string) {
+  const numbers = "([-0-9.]+) ([-0-9.]+) ([-0-9.]+) ([-0-9.]+) ([-0-9.]+) ([-0-9.]+)";
+  const match = new RegExp(`${numbers} Tm \\(${text}\\) Tj`).exec(pdf);
+  if (!match) return null;
+  const [a, b, , , x, y] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  return { a, b, x, y };
+}
+
 /** The x a piece of text starts at — the fifth number of its `Tm` matrix. */
 function leftOf(pdf: string, text: string): number | null {
   const match = new RegExp(`([-0-9.]+) ([-0-9.]+) Tm \\(${text}\\) Tj`).exec(pdf);
@@ -390,5 +410,135 @@ describe("buildSheetPdf label sizes (KL-041)", () => {
     expect(straight).not.toBeNull();
     expect(bent).not.toBeNull();
     expect(bent!).toBeGreaterThan(straight!);
+  });
+});
+
+describe("buildSheetPdf caption rotation (KL-042)", () => {
+  const viewport = { basePixelsPerMeter: 20, zoom: 1, offsetXPx: 0, offsetYPx: 0 };
+
+  function sheetWith(objects: PlanObject[], labelDisplay?: LabelDisplay) {
+    const sheet = createSheet({ name: "Plan" });
+    return latin1(
+      buildSheetPdf({
+        project: createEmptyProject({ name: "Virade" }),
+        sheet,
+        layout: computeSheetLayout(sheet, null),
+        drawingJpegDataUrl: "data:image/jpeg;base64,/9j/2Q==",
+        pixelWidth: 900,
+        pixelHeight: 630,
+        now: new Date("2026-09-03T12:00:00Z"),
+        vectorObjects: objects,
+        vectorViewport: viewport,
+        ...(labelDisplay ? { labelDisplay } : {}),
+      }),
+    );
+  }
+
+  /** A marquee at `rotationDeg`, its stands named by `labels`. */
+  const marquee = (rotationDeg: number, labels: string[], columns = labels.length) => ({
+    ...createRectangleObject({
+      layerId: "l1",
+      name: "Chapiteau",
+      xM: 0,
+      yM: 0,
+      widthM: 20,
+      heightM: 10,
+    }),
+    rotationDeg,
+    stands: { columns, rows: 1, gapM: 0, marginM: 0, labels },
+  });
+
+  it("turns a stand name with the marquee instead of leaving it horizontal", () => {
+    // PDF space has y upward, so a shape turned clockwise on screen is
+    // turned the other way on the page — the convention a text object
+    // already uses.
+    const turned = matrixOf(sheetWith([marquee(30, ["Bar", "Miel"])]), "Bar");
+    expect(turned).not.toBeNull();
+    expect(turned!.a).toBeCloseTo(Math.cos((-30 * Math.PI) / 180), 3);
+    expect(turned!.b).toBeCloseTo(Math.sin((-30 * Math.PI) / 180), 3);
+  });
+
+  it("leaves an unturned marquee's names square on the page", () => {
+    const flat = matrixOf(sheetWith([marquee(0, ["Bar", "Miel"])]), "Bar");
+    expect(flat!.a).toBeCloseTo(1, 6);
+    expect(flat!.b).toBeCloseTo(0, 6);
+  });
+
+  it("turns the marquee's own name too", () => {
+    const turned = matrixOf(sheetWith([marquee(45, ["Bar", "Miel"])]), "Chapiteau");
+    expect(turned!.b).toBeCloseTo(Math.sin((-45 * Math.PI) / 180), 3);
+  });
+
+  it("hangs a marquee's own name off the middle of its top edge, not off a corner", () => {
+    // One stand filling the tent, so its name is centred on the tent's
+    // own middle — and named with the same letters as the marquee, so the
+    // two captions are exactly as wide as each other and their origins
+    // must line up. Anchoring the title on the shape's corner (or on its
+    // bounding box, which is the same thing once it turns) moves it by
+    // half a tent.
+    const tent = {
+      ...createRectangleObject({
+        layerId: "l1",
+        name: "Abc",
+        xM: 0,
+        yM: 0,
+        widthM: 20,
+        heightM: 10,
+        // 20 px is 15 pt, which is also the ceiling a stand name may
+        // reach: both captions then print at one size, so equal letters
+        // really do mean equal widths.
+        style: { labelFontSize: 20 },
+      }),
+      stands: { columns: 1, rows: 1, gapM: 0, marginM: 0, labels: ["cbA"] },
+    };
+    const pdf = sheetWith([tent], {
+      name: true,
+      dimensions: false,
+      reference: false,
+      quantity: false,
+      stands: true,
+    });
+    const title = matrixOf(pdf, "Abc");
+    const stand = matrixOf(pdf, "cbA");
+    expect(title).not.toBeNull();
+    expect(stand).not.toBeNull();
+    expect(title!.x).toBeCloseTo(stand!.x, 6);
+    // Above it, not through it: that is the rule this placement exists for.
+    expect(title!.y).toBeGreaterThan(stand!.y);
+  });
+
+  it("turns a caption's line spacing with it, not just its glyphs", () => {
+    // "Abcdefgh" and "hgfedcbA" are the same characters, so the two lines are
+    // exactly as wide as each other: whatever separates them is the line
+    // step alone, with no centring difference mixed in.
+    //
+    // Rotating the glyphs while leaving the offsets axis-aligned is the
+    // failure this catches — the second line would stay underneath the
+    // first instead of following the marquee round, and a two-line name
+    // would sit across its own cell.
+    // Ten narrow columns in a tent ten metres deep: the name only fits
+    // broken in two, which is the case being tested.
+    const name = ["Abcdefgh hgfedcbA", ...Array.from({ length: 9 }, () => "")];
+    const flat = sheetWith([marquee(0, name, 10)]);
+    const turned = sheetWith([marquee(90, name, 10)]);
+    expect(flat).not.toContain("Abcdefgh hgfedcbA");
+    expect(flat).toContain("hgfedcbA");
+
+    const stepOf = (pdf: string) => {
+      const first = matrixOf(pdf, "Abcdefgh")!;
+      const second = matrixOf(pdf, "hgfedcbA")!;
+      return { dx: second.x - first.x, dy: second.y - first.y };
+    };
+    const upright = stepOf(flat);
+    const sideways = stepOf(turned);
+    // Upright, the second line is below the first and directly under it.
+    expect(upright.dy).toBeLessThan(0);
+    expect(upright.dx).toBeCloseTo(0, 6);
+    // Turned a quarter turn, the step has become horizontal — the same
+    // length as before, because rotation does not stretch, and to the
+    // side the turn actually goes. Comparing magnitudes only would let a
+    // transposed matrix through, which mirrors the caption.
+    expect(sideways.dy).toBeCloseTo(0, 6);
+    expect(sideways.dx).toBeCloseTo(upright.dy, 6);
   });
 });

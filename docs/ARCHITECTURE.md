@@ -1740,3 +1740,31 @@ Two placements came along for parity with the screen: a line's caption
 sits half-way *along* the line (`polylineMidpointM`) rather than at the
 end it was drawn from, and every caption is centred with the fitter's own
 width model instead of a character count.
+
+### The captions did not turn with the plan (KL-042)
+
+The raster half gets rotation for free: every label is a child of the
+Konva `Group` that carries `rotation={object.rotationDeg}`, so a marquee
+pitched at an angle takes its stand names round with it. The vector half
+has to say so, and did not — `PdfTextItem` has carried a `rotationDeg`
+since the first PDF (a `text` object uses it), but the captions were
+written without one, flat on the page while the shape they name was
+turned.
+
+Rotating the glyphs alone would have been worse than leaving them
+straight. Each line is placed by an offset from an anchor — half its own
+width to the left, one step down per line — and those offsets have to
+turn with it, or a stand name slides out of the cell it names as soon as
+the tent is angled, and a two-line name lies across its neighbour.
+`stackedText` therefore rotates its offsets with the same matrix
+`printing/pdf.ts` writes into `Tm`, and both take the object's rotation
+**negated**: PDF space has y upward, so a shape turned clockwise on
+screen is turned anticlockwise on the page.
+
+Two anchors moved to the object's own frame in the process, because
+"above" is only meaningful there. A marquee's own name hangs off the
+middle of its **top edge** (`objectLocalToWorld` of `(widthM / 2, 0)`)
+rather than off the top of its bounding box: for an unturned tent the two
+points coincide, which is why nothing caught it, and for a turned one the
+bounding box has no top edge to speak of.
+

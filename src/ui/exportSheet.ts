@@ -226,8 +226,19 @@ function pointsPerMeter(content: SheetContent): number {
 }
 
 /**
- * Lays a caption's lines out as PDF text items, centred horizontally on
- * `centreX` and stacked downwards from `topBaseline`.
+ * Lays a caption's lines out as PDF text items, centred on `anchor` and
+ * turned with the object (KL-042).
+ *
+ * The offsets are worked out in the caption's *own* frame — half a line's
+ * width to the left, one step down per line — and then rotated with it.
+ * Rotating the glyphs while leaving the offsets axis-aligned would be
+ * worse than not rotating at all: a stand name would slide out of the
+ * cell it names as soon as the marquee was turned.
+ *
+ * `rotationDeg` is the object's rotation expressed in PDF space, where y
+ * grows upward — that is, negated, the same convention a `text` object
+ * already uses. The matrix here is the one `printing/pdf.ts` writes into
+ * `Tm`, so the two cannot drift apart.
  *
  * Lines are centred with the same width model the fitter uses
  * (`estimateTextWidthPx`) rather than by counting characters at half an
@@ -237,15 +248,25 @@ function pointsPerMeter(content: SheetContent): number {
 function stackedText(
   lines: readonly string[],
   sizePt: number,
-  centreX: number,
-  topBaseline: number,
+  anchor: { x: number; y: number },
+  /** Where the first line's baseline sits above the anchor, in the caption's own frame. */
+  topOffsetPt: number,
+  rotationDeg: number,
 ): PdfTextItem[] {
-  return lines.map((line, index) => ({
-    text: line,
-    xPt: centreX - estimateTextWidthPx(line, sizePt) / 2,
-    yPt: topBaseline - index * sizePt * LABEL_LINE_HEIGHT,
-    sizePt,
-  }));
+  const angle = (rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return lines.map((line, index) => {
+    const dx = -estimateTextWidthPx(line, sizePt) / 2;
+    const dy = topOffsetPt - index * sizePt * LABEL_LINE_HEIGHT;
+    return {
+      text: line,
+      xPt: anchor.x + dx * cos - dy * sin,
+      yPt: anchor.y + dx * sin + dy * cos,
+      sizePt,
+      rotationDeg,
+    };
+  });
 }
 
 /**
@@ -280,34 +301,39 @@ function labelText(
   if (!bounds) return stands;
   const sizePt = labelSizePt(object);
   const step = sizePt * LABEL_LINE_HEIGHT;
-  const centre = point(boundsCenterM(bounds));
 
-  // A line's caption reads half-way along the line, above the stroke —
-  // the same placement as on screen (KL-040), and for the same reason:
-  // the centre of a bent line's bounding box is not on the line.
-  const midpointM = object.type === "line" ? polylineMidpointM(object.pointsM) : null;
-  // PDF y grows upward, so a block placed *clear of* something starts at
-  // that edge plus the gap and steps up by the lines below it.
-  const above = (referenceY: number) => referenceY + LABEL_GAP_PT + (lines.length - 1) * step;
+  // A line's caption reads half-way along the line; a marquee full of
+  // stand names has no middle left, so its own name moves clear of its
+  // top edge. Both anchors are taken in the object's *local* frame and
+  // turned with it, so a tent pitched at an angle keeps its name along
+  // its own side instead of somewhere off its bounding box (KL-042).
+  const anchorM =
+    object.type === "line"
+      ? polylineMidpointM(object.pointsM)
+      : grid && object.type === "rectangle"
+        ? { xM: object.widthM / 2, yM: 0 }
+        : null;
 
-  const topBaseline = midpointM
-    ? above(point(objectLocalToWorld(object, midpointM)).y)
-    : grid
-      ? // A marquee that writes stand names has none of its middle left,
-        // so its own name moves above its top edge — the rule the screen
-        // applies, or the two would print on top of each other.
-        above(point({ xM: bounds.minXM, yM: bounds.minYM }).y)
-      : centre.y + ((lines.length - 1) * step) / 2 - CAP_HALF_HEIGHT * sizePt;
+  // Clear of the anchor: the last line sits one gap away, the ones above
+  // it a step further. Centred on it otherwise, letters not baselines.
+  const topOffsetPt = anchorM
+    ? LABEL_GAP_PT + (lines.length - 1) * step
+    : ((lines.length - 1) * step) / 2 - CAP_HALF_HEIGHT * sizePt;
+  const anchor = anchorM
+    ? point(objectLocalToWorld(object, anchorM))
+    : point(boundsCenterM(bounds));
 
-  const centreX = midpointM ? point(objectLocalToWorld(object, midpointM)).x : centre.x;
-  return [...stands, ...stackedText(lines, sizePt, centreX, topBaseline)];
+  return [...stands, ...stackedText(lines, sizePt, anchor, topOffsetPt, -object.rotationDeg)];
 }
 
 /**
- * One text item per named stand, centred on its own cell.
+ * One text item per named stand, centred on its own cell and turned with
+ * the marquee.
  *
  * The cells come out of `domain/stands.ts` in the marquee's local frame,
- * so they are rotated with it here exactly as the shape outlines are.
+ * so they are rotated with it here exactly as the shape outlines are —
+ * and so is the text, which the raster half gets for free from the Konva
+ * group and this one has to say (KL-042).
  */
 function standLabels(
   object: RectangleObject,
@@ -339,8 +365,8 @@ function standLabels(
       }),
     );
     const lines = fitted.lines[index] ?? [cell.text];
-    const topBaseline = centre.y + ((lines.length - 1) * step) / 2 - CAP_HALF_HEIGHT * sizePt;
-    return stackedText(lines, sizePt, centre.x, topBaseline);
+    const topOffsetPt = ((lines.length - 1) * step) / 2 - CAP_HALF_HEIGHT * sizePt;
+    return stackedText(lines, sizePt, centre, topOffsetPt, -object.rotationDeg);
   });
 }
 

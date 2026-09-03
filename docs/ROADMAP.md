@@ -894,3 +894,48 @@ Mesuré, pas supposé, en relisant les octets du PDF produit : chapiteau de
 le navigateur : le dialogue affiche « Noms de stands — 5,3 mm (15 pt) » à
 1:200, l'avertissement à 1:5000, et le bouton « Passer à 1:2817 » donne
 exactement 1,8 mm (5 pt) — le plancher, au point près.
+
+## KL-042 — Les étiquettes tournent avec le plan *(done)*
+
+Suite de KL-041, remontée à l'usage : « les noms de stands sont
+horizontaux et ne suivent pas l'orientation du chapiteau ».
+
+Même partage que la fois précédente. La moitié raster a la rotation
+gratuitement : chaque étiquette est un enfant du groupe Konva qui porte
+`rotation={object.rotationDeg}`. La moitié vectorielle doit la dire, et ne
+la disait pas — `PdfTextItem` transporte un `rotationDeg` depuis le
+premier PDF (un objet `text` s'en sert), mais les étiquettes étaient
+écrites sans, à plat sur la page pendant que la forme nommée était
+tournée.
+
+- **Tourner les lettres seules aurait été pire que de ne rien tourner.**
+  Chaque ligne est posée par un décalage depuis un point d'ancrage — une
+  demi-largeur à gauche, un pas par ligne — et ces décalages doivent
+  tourner aussi, sinon le nom sort de la case qu'il désigne dès que le
+  chapiteau est de biais, et un nom sur deux lignes se couche en travers
+  de son voisin. `stackedText` tourne donc ses décalages avec la matrice
+  que `printing/pdf.ts` écrit dans `Tm`.
+- **L'angle est celui de l'objet, nié.** Le PDF a son y vers le haut :
+  une forme tournée dans le sens horaire à l'écran est tournée dans
+  l'autre sens sur la page. C'est déjà la convention d'un objet `text` et
+  du DXF.
+- **Deux ancrages sont passés dans le repère propre de l'objet**, parce
+  que « au-dessus » n'a de sens que là. Le nom d'un chapiteau se pose au
+  milieu de son **bord haut** — `objectLocalToWorld` de `(largeur/2, 0)`
+  — et non au sommet de sa boîte englobante : sur un chapiteau droit les
+  deux points se confondent, ce qui explique que personne ne l'ait vu, et
+  sur un chapiteau tourné la boîte englobante n'a pas de bord haut.
+
+679 tests, dont 5 nouveaux, validés par mutation : six défauts introduits,
+six détectés. Deux ont survécu au premier essai, et tous deux parce que le
+test était trop faible : comparer la *valeur absolue* du pas de ligne
+laissait passer une matrice transposée (le texte miroir), et un chapiteau
+droit ne distingue pas son coin de son bord haut — il a fallu deux
+étiquettes de largeur identique pour que l'alignement soit vérifiable.
+
+Mesuré en relisant les octets du PDF, chapiteau de 20 × 10 m en huit
+stands sur A3 à 1:200 : à 0° les textes sortent à 0,0° sur la page, à 30°
+ils sortent à −30,0°, à 90° à −90,0° — noms de stands, nom du chapiteau et
+étiquettes multi-lignes comprises. Vérifié aussi dans le navigateur, où
+l'étiquette d'un chapiteau tourné à 30° rend bien à 30° à l'écran : c'est
+la moitié qui marchait déjà, et elle marche toujours.
