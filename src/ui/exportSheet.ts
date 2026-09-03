@@ -6,8 +6,16 @@ import { objectLocalToWorld } from "../domain/geometry";
 import { boundsCenterM, getObjectBoundsM } from "../domain/bounds";
 import { getObjectDisplayLabel } from "../domain/labels";
 import { labelledStandCells, standGridToDraw } from "../domain/stands";
-import { DEFAULT_LABEL_DISPLAY, resolveLabelDisplay, type LabelDisplay } from "../domain/display";
-import { worldToScreen, type Viewport } from "../rendering/viewport";
+import {
+  DEFAULT_LABEL_DISPLAY,
+  resolveLabelDisplay,
+  resolveLabelFontSizePx,
+  type LabelDisplay,
+} from "../domain/display";
+import { polylineMidpointM } from "../domain/measure";
+import { LABEL_LINE_HEIGHT, estimateTextWidthPx } from "../rendering/labelFit";
+import { getEffectivePixelsPerMeter, worldToScreen, type Viewport } from "../rendering/viewport";
+import { PT_PER_CSS_PX, clampLabelPt, fitStandLabelsPt } from "../printing/standLabels";
 import type { SheetLayout } from "../printing/sheetLayout";
 import { suggestedFileName } from "./projectFileActions";
 
@@ -171,10 +179,74 @@ function vectorGraphics(content: SheetContent): { paths: PdfPathItem[]; text: Pd
   return { paths, text };
 }
 
-/** Point size for an object's label on paper. Small enough to fit inside a stand, large enough to read at arm's length. */
-const LABEL_SIZE_PT = 6;
-/** Rough width of one character at `LABEL_SIZE_PT`, used only to centre a line — Helvetica averages about 0.5 em. */
-const LABEL_CHAR_WIDTH_PT = LABEL_SIZE_PT * 0.5;
+/**
+ * A caption's size on paper comes from its size on screen: a CSS pixel is
+ * 1/96 inch and a point is 1/72, so the conversion is fixed at 0.75 pt
+ * per pixel (`PT_PER_CSS_PX`). It is the same conversion the raster half
+ * applies — `renderScale = dpi / 96`, and a print pixel is 1/dpi inch —
+ * which is what makes the vector and raster halves of an export agree by
+ * construction rather than by inspection.
+ *
+ * This replaced a flat 6 pt (KL-041). Six points is 2.1 mm: legible held
+ * close, invisible on a sheet read at arm's length, and — the real defect
+ * — deaf to everything. A stand cell 50 mm wide on paper was handed the
+ * same 6 pt as one of 5 mm, and the size the user had set on the object
+ * was ignored outright.
+ */
+
+/**
+ * Where a line of text sits above its own baseline, as a fraction of the
+ * font size — Helvetica's capitals are about 0.72 em tall, so their
+ * middle is around 0.36 em up. Centring a caption on a shape means
+ * centring the letters, not the baseline.
+ */
+const CAP_HALF_HEIGHT = 0.36;
+
+/** Gap between a caption and the edge (or stroke) it is placed clear of, in points — the 6 screen pixels the editor uses. */
+const LABEL_GAP_PT = 6 * PT_PER_CSS_PX;
+
+/** The size this object's caption prints at, its own setting included. */
+function labelSizePt(object: PlanObject): number {
+  return clampLabelPt(resolveLabelFontSizePx(object) * PT_PER_CSS_PX);
+}
+
+/**
+ * Points per metre on this sheet — the print scale, in the unit the PDF
+ * is written in. Taken from the raster's own viewport rather than from
+ * the sheet's nominal scale, because a tiled sheet or a fitted scale can
+ * differ from it, and what the captions must match is the drawing that
+ * was actually laid out.
+ */
+function pointsPerMeter(content: SheetContent): number {
+  const viewport = content.vectorViewport;
+  if (!viewport || content.pixelWidth <= 0) return 0;
+  return (
+    getEffectivePixelsPerMeter(viewport) * (content.layout.drawing.widthPt / content.pixelWidth)
+  );
+}
+
+/**
+ * Lays a caption's lines out as PDF text items, centred horizontally on
+ * `centreX` and stacked downwards from `topBaseline`.
+ *
+ * Lines are centred with the same width model the fitter uses
+ * (`estimateTextWidthPx`) rather than by counting characters at half an
+ * em: "Illy" and "MMMM" are four characters and nowhere near the same
+ * width, and the old estimate put every narrow name visibly off-centre.
+ */
+function stackedText(
+  lines: readonly string[],
+  sizePt: number,
+  centreX: number,
+  topBaseline: number,
+): PdfTextItem[] {
+  return lines.map((line, index) => ({
+    text: line,
+    xPt: centreX - estimateTextWidthPx(line, sizePt) / 2,
+    yPt: topBaseline - index * sizePt * LABEL_LINE_HEIGHT,
+    sizePt,
+  }));
+}
 
 /**
  * The lines an object writes on the printed sheet.
@@ -196,7 +268,8 @@ function labelText(
 ): PdfTextItem[] {
   const display = resolveLabelDisplay(object, content.labelDisplay ?? DEFAULT_LABEL_DISPLAY);
   const grid = standGridToDraw(object, display);
-  const stands = grid && object.type === "rectangle" ? standLabels(object, grid, point) : [];
+  const stands =
+    grid && object.type === "rectangle" ? standLabels(object, grid, content, point) : [];
 
   const lines = getObjectDisplayLabel(object, display)
     .split("\n")
@@ -205,28 +278,29 @@ function labelText(
 
   const bounds = getObjectBoundsM(object);
   if (!bounds) return stands;
-  const center = point(boundsCenterM(bounds));
-  // PDF y grows upward, so the first line sits above the centre and each
-  // following one steps down.
-  const firstBaseline = center.y + ((lines.length - 1) * LABEL_SIZE_PT) / 2;
-  // A marquee that writes stand names has none of its middle left, so its
-  // own name moves above the shape — the same rule the screen applies, or
-  // the two would print on top of each other.
-  const topOffset = grid ? point({ xM: bounds.minXM, yM: bounds.minYM }).y - center.y : 0;
+  const sizePt = labelSizePt(object);
+  const step = sizePt * LABEL_LINE_HEIGHT;
+  const centre = point(boundsCenterM(bounds));
 
-  return [
-    ...stands,
-    ...lines.map((line, index) => ({
-      text: line,
-      xPt: center.x - (line.length * LABEL_CHAR_WIDTH_PT) / 2,
-      yPt:
-        firstBaseline +
-        topOffset +
-        (grid ? LABEL_SIZE_PT * lines.length : 0) -
-        index * LABEL_SIZE_PT,
-      sizePt: LABEL_SIZE_PT,
-    })),
-  ];
+  // A line's caption reads half-way along the line, above the stroke —
+  // the same placement as on screen (KL-040), and for the same reason:
+  // the centre of a bent line's bounding box is not on the line.
+  const midpointM = object.type === "line" ? polylineMidpointM(object.pointsM) : null;
+  // PDF y grows upward, so a block placed *clear of* something starts at
+  // that edge plus the gap and steps up by the lines below it.
+  const above = (referenceY: number) => referenceY + LABEL_GAP_PT + (lines.length - 1) * step;
+
+  const topBaseline = midpointM
+    ? above(point(objectLocalToWorld(object, midpointM)).y)
+    : grid
+      ? // A marquee that writes stand names has none of its middle left,
+        // so its own name moves above its top edge — the rule the screen
+        // applies, or the two would print on top of each other.
+        above(point({ xM: bounds.minXM, yM: bounds.minYM }).y)
+      : centre.y + ((lines.length - 1) * step) / 2 - CAP_HALF_HEIGHT * sizePt;
+
+  const centreX = midpointM ? point(objectLocalToWorld(object, midpointM)).x : centre.x;
+  return [...stands, ...stackedText(lines, sizePt, centreX, topBaseline)];
 }
 
 /**
@@ -238,21 +312,35 @@ function labelText(
 function standLabels(
   object: RectangleObject,
   grid: StandGrid,
+  content: SheetContent,
   point: (world: { xM: number; yM: number }) => { x: number; y: number },
 ): PdfTextItem[] {
-  return labelledStandCells(object, grid).map((cell) => {
-    const center = point(
+  const cells = labelledStandCells(object, grid);
+  if (cells.length === 0) return [];
+
+  // Sized against the space the cell actually occupies on paper, through
+  // the same fitter the screen and the raster use — one rule, three
+  // units. A flat point size could not be right twice: the same 6 pt was
+  // handed to a cell 50 mm wide and to one of 5 mm. The bounds and the
+  // padding live in `printing/standLabels.ts`, with the function the
+  // export dialogue uses to warn that a scale cannot carry them.
+  const fitted = fitStandLabelsPt(object, grid, pointsPerMeter(content));
+  // Nothing fits at a size anyone could read: the cells print empty, as
+  // they do on screen, rather than carrying a row of grey specks.
+  if (!fitted) return [];
+
+  const sizePt = fitted.fontSizePx;
+  const step = sizePt * LABEL_LINE_HEIGHT;
+  return cells.flatMap((cell, index) => {
+    const centre = point(
       objectLocalToWorld(object, {
         xM: cell.xM + cell.widthM / 2,
         yM: cell.yM + cell.heightM / 2,
       }),
     );
-    return {
-      text: cell.text,
-      xPt: center.x - (cell.text.length * LABEL_CHAR_WIDTH_PT) / 2,
-      yPt: center.y - LABEL_SIZE_PT / 2,
-      sizePt: LABEL_SIZE_PT,
-    };
+    const lines = fitted.lines[index] ?? [cell.text];
+    const topBaseline = centre.y + ((lines.length - 1) * step) / 2 - CAP_HALF_HEIGHT * sizePt;
+    return stackedText(lines, sizePt, centre.x, topBaseline);
   });
 }
 

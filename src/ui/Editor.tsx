@@ -508,6 +508,7 @@ export default function Editor({
     startExport,
     startMultiPageExport,
     handlePrintCanvasReady,
+    standLegibility,
   } = useSheetExport({
     project,
     orderedObjects,
@@ -1569,6 +1570,7 @@ export default function Editor({
             />
           }
           contentBounds={contentBounds}
+          standLegibility={standLegibility}
           busy={pendingExport !== null}
           onChange={changeSheet}
           showGrid={printGrid}

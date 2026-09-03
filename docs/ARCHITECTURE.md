@@ -1688,3 +1688,55 @@ or down, so "the text size of this object" means one thing.
 Sizes out of a file are clamped rather than refused
 (`clampLabelFontSizePx`): a hand-edited 10 000 is a caption nobody can
 undo, but it is not a reason to reject the plan.
+
+## The PDF was printing every caption at 6 pt (KL-041)
+
+KL-040 sized stand names against their cell, and it had **no effect on
+the PDF at all**. The reason is the split in `useSheetExport`: a PNG
+rasterises everything, but a PDF rasterises only what vectors cannot
+express — bitmap objects — and draws every shape and every caption as
+real PDF text. That path, `ui/exportSheet.ts`, wrote them all at a
+hardcoded `LABEL_SIZE_PT = 6`.
+
+Six points is 2.1 mm: legible held close, invisible on a sheet read at
+arm's length. But the size was not the defect — being deaf was. A stand
+cell 50 mm wide on paper was handed the same 6 pt as one of 5 mm; the
+label size the user had set on the object was ignored outright; and the
+lines were centred by *counting characters* at half an em, which puts
+every narrow name visibly off to one side.
+
+**One rule, three units.** The fitter (`rendering/labelFit.ts`) takes a
+box and returns a size in the box's own units, so it serves all three
+targets: screen pixels, print-raster pixels, and now points.
+`printing/standLabels.ts` holds the paper half — the bounds, the padding,
+and `fitStandLabelsPt` — and both the exporter and the export dialogue
+call it, or the sheet and the warning about the sheet could disagree.
+
+**A caption's size on paper is not a choice.** A CSS pixel is 1/96 inch
+and a point is 1/72, so a caption declared in screen pixels has exactly
+one printed size: 0.75 pt per pixel. It is the same conversion the raster
+half already applies (`renderScale = dpi / 96`, a print pixel being
+1/dpi inch), which is what makes the two halves of an export agree by
+construction rather than by inspection. The 14 px default label prints at
+10.5 pt, and the field added in KL-040 now governs the PDF too.
+
+**The floor is ISO 3098's smallest lettering, 1.8 mm.** Below it a name is
+not read, it is guessed at, so the cell prints empty — the same rule the
+screen applies at low zoom. That is honest but silent, and silence is
+what sends someone to a printer for nothing, so the export dialogue says
+it before the export: *« À 1:5000, les noms de stands sont trop petits
+pour être imprimés et seront omis. Passer à 1:2817 »*.
+
+That suggested scale is **searched for, not calculated**. A closed form
+looks available — halve the denominator and every cell doubles on paper —
+and it is wrong, because the breathing room kept around a name is a fixed
+two points and does not scale with the cell. The first version of
+`measureStandLegibility` divided it out and said 1:338 where the truth was
+1:300; a suggestion that does nothing when pressed is worse than none.
+Bisection on the denominator needs no assumption but monotonicity: a
+smaller drawing never fits more text.
+
+Two placements came along for parity with the screen: a line's caption
+sits half-way *along* the line (`polylineMidpointM`) rather than at the
+end it was drawn from, and every caption is centred with the fitter's own
+width model instead of a character count.

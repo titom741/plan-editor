@@ -13,6 +13,7 @@ import {
   getCoveredAreaM,
 } from "../../domain/sheets";
 import type { Orientation, PaperSize, Sheet } from "../../domain/types";
+import type { StandLegibility } from "../../printing/standLabels";
 import type { ReactNode } from "react";
 
 interface ExportDialogProps {
@@ -25,6 +26,8 @@ interface ExportDialogProps {
   preview: ReactNode;
   /** Extent of everything visible, or null for an empty plan. */
   contentBounds: BoundsM | null;
+  /** Whether the stand names survive this scale on paper, measured for the worst marquee (KL-041). */
+  standLegibility: StandLegibility;
   busy: boolean;
   onChange: (patch: Partial<Sheet>) => void;
   showGrid: boolean;
@@ -39,6 +42,12 @@ interface ExportDialogProps {
 
 function formatMeters(value: number): string {
   return `${value.toFixed(1).replace(/\.0$/, "")} m`;
+}
+
+/** A printed text size, in millimetres — the unit someone holds a ruler against — with the point size after it. */
+function formatStandSize(sizePt: number): string {
+  const mm = (sizePt / 72) * 25.4;
+  return `${mm.toFixed(1).replace(".", ",")} mm (${Math.round(sizePt)} pt)`;
 }
 
 async function fileToJpegDataUrl(file: File): Promise<string> {
@@ -86,6 +95,7 @@ export function ExportDialog({
   onDeleteSheet,
   preview,
   contentBounds,
+  standLegibility,
   busy,
   onChange,
   showGrid,
@@ -359,6 +369,41 @@ export function ExportDialog({
                 </>
               )}
             </p>
+          )}
+          {/*
+            A stand name is written in the cell it names, so how large it
+            can be printed is decided by the scale, not by the app: at
+            1:S a cell of C metres is C/S wide on paper. Below the
+            smallest lettering worth printing the names are left out
+            rather than turned to specks — which the user must be told
+            *before* the export, not discover on the paper.
+          */}
+          {standLegibility.sizePt === null && standLegibility.readableScaleDenominator !== null && (
+            <p className="export-dialog__warning">
+              ⚠ À {formatScale(sheet.scaleDenominator)}, les noms de stands sont trop petits pour
+              être imprimés et seront omis.
+              {standLegibility.readableScaleDenominator < sheet.scaleDenominator && (
+                <>
+                  {" "}
+                  <button
+                    type="button"
+                    className="export-dialog__link"
+                    onClick={() =>
+                      onChange({ scaleDenominator: standLegibility.readableScaleDenominator! })
+                    }
+                  >
+                    Passer à {formatScale(standLegibility.readableScaleDenominator)}
+                  </button>
+                  , ou choisir un format de papier plus grand.
+                </>
+              )}
+            </p>
+          )}
+          {standLegibility.sizePt !== null && (
+            <div className="properties-panel__static">
+              <span>Noms de stands</span>
+              <span>{formatStandSize(standLegibility.sizePt)}</span>
+            </div>
           )}
           {contentSize && fits && (
             <p className="properties-panel__hint">

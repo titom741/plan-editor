@@ -11,6 +11,7 @@ import {
   type PrintRaster,
   type SheetLayout,
 } from "../../printing/sheetLayout";
+import { measureStandLegibility } from "../../printing/standLabels";
 
 /** Screen CSS pixels per inch — the reference for turning a print DPI into a stroke/label multiplier. */
 export const CSS_PIXELS_PER_INCH = 96;
@@ -101,6 +102,19 @@ export function useSheetExport({
       ),
     [orderedObjects, visibleLayerIds],
   );
+  /**
+   * Whether the stand names survive this scale on paper (KL-041).
+   *
+   * Computed from the sheet's own scale rather than from the print
+   * raster: the number the dialogue reports must be the one attached to
+   * the scale the user is choosing, and it must not wait for an export to
+   * be started.
+   */
+  const standLegibility = useMemo(
+    () => measureStandLegibility(orderedObjects, labelDisplay, sheet.scaleDenominator),
+    [orderedObjects, labelDisplay, sheet.scaleDenominator],
+  );
+
   /** The shapes the off-screen stage must rasterise. For a PNG that is everything; for a PDF, only what vectors can't express. */
   const rasterObjects = useMemo(
     () =>
@@ -287,6 +301,7 @@ export function useSheetExport({
     startExport,
     startMultiPageExport,
     handlePrintCanvasReady,
+    standLegibility,
   };
 }
 

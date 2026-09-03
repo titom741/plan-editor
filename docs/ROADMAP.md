@@ -836,3 +836,61 @@ deux lignes dans une grille de 6 × 2, tous les stands à la même taille ;
 30 px depuis le panneau. Contrôlé aussi dans l'aperçu avant impression,
 où le rendu passe par `renderScale` : noms de stands sur deux lignes à
 1:200, et rien du tout à 1:949, où les cases ne sont plus lisibles.
+
+## KL-041 — Le PDF écrit les étiquettes à leur taille *(done)*
+
+Remonté à l'usage, une phrase : « lorsque j'exporte, le texte des stands
+est trop petit pour qu'il soit visible sur le PDF ».
+
+C'était un défaut, pas un réglage. KL-040 dimensionne les noms de stands
+d'après leur case, et **cela n'avait aucun effet sur le PDF** : un PDF ne
+rasterise que ce que le vectoriel ne sait pas dire (les images), et écrit
+formes et étiquettes en vrai texte PDF. Ce chemin-là, `ui/exportSheet.ts`,
+les écrivait toutes à un `LABEL_SIZE_PT = 6` en dur.
+
+Six points font 2,1 mm. Mais la taille n'était pas le défaut : c'est
+d'être sourd. Une case de stand de 50 mm sur le papier recevait les mêmes
+6 pt qu'une de 5 mm, la taille réglée sur l'objet était ignorée, et les
+lignes étaient centrées **en comptant les caractères** — ce qui décale
+visiblement tout nom étroit.
+
+- **Une seule règle, trois unités.** Le calculateur de
+  `rendering/labelFit.ts` prend une boîte et rend une taille dans l'unité
+  de cette boîte : pixels écran, pixels d'impression, et maintenant
+  points. `printing/standLabels.ts` porte la moitié papier — bornes,
+  retrait, `fitStandLabelsPt` — et l'export comme le dialogue l'appellent,
+  sinon la feuille et l'avertissement sur la feuille se contrediraient.
+- **La taille d'une étiquette sur le papier ne se choisit pas.** Un pixel
+  CSS fait 1/96 de pouce, un point 1/72 : 0,75 pt par pixel, exactement la
+  conversion que la moitié raster applique déjà. Le défaut de 14 px sort
+  donc à 10,5 pt, et le champ ajouté en KL-040 gouverne aussi le PDF.
+- **Le plancher est celui de l'ISO 3098, 1,8 mm.** En dessous, un nom
+  n'est pas lu mais deviné : la case sort vide, comme à l'écran en
+  dézoomé. C'est honnête et muet, et le muet est ce qui envoie chez
+  l'imprimeur pour rien — le dialogue d'export le dit donc avant :
+  « À 1:5000, les noms de stands sont trop petits pour être imprimés et
+  seront omis. Passer à 1:2817 ».
+- **L'échelle proposée est cherchée, pas calculée.** La forme fermée
+  semble évidente (diviser le dénominateur par deux double chaque case)
+  et elle est fausse : le retrait autour du nom vaut deux points fixes et
+  ne suit pas la case. La première version annonçait 1:338 là où la vérité
+  était 1:300 — une proposition qui ne fait rien quand on la presse est
+  pire que pas de proposition. Dichotomie sur le dénominateur, qui ne
+  suppose que la monotonie.
+- **Deux placements alignés sur l'écran** au passage : l'étiquette d'une
+  ligne se lit à mi-longueur du tracé et non au point de départ, et tout
+  texte est centré avec le modèle de largeur du calculateur.
+
+674 tests, dont 22 nouveaux, validés par mutation : treize défauts
+introduits, treize détectés. Deux ont survécu au premier essai — un test
+d'emplacement trop faible (il comparait des points à des pixels et
+passait quoi qu'il arrive) et une branche morte dans le verdict, dont la
+suppression a été la vraie correction.
+
+Mesuré, pas supposé, en relisant les octets du PDF produit : chapiteau de
+20 × 10 m coupé en huit stands, sur A3 paysage. Avant, 6 pt partout. Après :
+1:100 → 15 pt (le plafond), 1:200 → 11,2 pt, 1:500 → rien (les cases font
+8,8 mm), et le nom du chapiteau à 10,5 pt au lieu de 6. Vérifié aussi dans
+le navigateur : le dialogue affiche « Noms de stands — 5,3 mm (15 pt) » à
+1:200, l'avertissement à 1:5000, et le bouton « Passer à 1:2817 » donne
+exactement 1,8 mm (5 pt) — le plancher, au point près.
