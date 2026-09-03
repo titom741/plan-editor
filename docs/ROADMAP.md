@@ -778,3 +778,61 @@ son cadre et son cartouche, « Remplir la feuille » qui passe le plan de
 démonstration de 1:200 à 1:25 (la feuille couvre alors 10 m × 6,9 m pour
 un plan de 10 × 5 m), et 1:137 saisi à la main correctement signalé comme
 personnalisé.
+
+## KL-040 — Le texte, et la main sur le plan *(done)*
+
+Quatre reproches d'usage, trois sur le texte et un sur le geste le plus
+fréquent de l'application.
+
+- **Le déplacement du plan partait tout seul.** Le pan repose sur le
+  `Stage` Konva rendu draggable : à chaque `dragmove` on reversait sa
+  position dans l'offset du viewport, puis on le remettait à (0, 0). Sauf
+  que cette position est le déplacement **total depuis l'appui**, pas le
+  pas depuis l'événement précédent — Konva la calcule comme
+  `pointeur − offset`, où l'offset est mesuré une seule fois, au début du
+  geste, et remettre le nœud à zéro ne le remesure pas. On appliquait
+  donc tout le trajet à chaque image : un glissement régulier de *d*
+  pixels par image déplaçait le plan de *d*, puis *2d*, puis *3d*.
+  `rendering/dragPan.ts` ne demande plus rien au nœud et suit le
+  pointeur, où le pas est sans ambiguïté. Amorcé au `mousedown` (et au
+  `touchstart` à un doigt) plutôt qu'au `dragstart` : Konva attend trois
+  pixels avant d'appeler un appui un glissement, et ces trois pixels sont
+  du mouvement que l'utilisateur a fait.
+- **Les noms de stands sont dimensionnés par leur case.** 12 px fixes ne
+  peuvent pas convenir à la fois à un chapiteau coupé en deux et au même
+  coupé en six. `rendering/labelFit.ts` déduit la taille de la case et
+  autorise un nom à passer sur deux lignes — c'est justement ce qui
+  *permet* la taille supérieure, une case étroite étant rarement basse.
+  Une seule taille pour toute la grille, fixée par le nom le plus long :
+  des cases identiques qui écriraient « Bar » en grand et
+  « Boulangerie » en petit se liraient comme une erreur. Les traits
+  d'union sont sécables — « Sapeurs-pompiers » à lui seul rabaissait
+  toute la grille. Sous une taille minimale, on n'écrit rien : c'est ce
+  qui fait qu'un plan dézoomé reste un plan et pas un aplat gris.
+- **La longueur d'une ligne se lit au milieu de la ligne.** Elle était
+  écrite au premier point, celui par lequel le tracé a commencé.
+  `polylineMidpointM` donne le point à mi-*longueur* — pas le centre de
+  la boîte englobante, qui sur un tracé en L ne tombe même pas sur le
+  trait. La longueur courante de l'outil tracé a suivi.
+- **La taille du texte d'une forme se règle.** `style.labelFontSize`, en
+  pixels écran, avec un champ « Taille du texte (px) » dans les
+  propriétés. En pixels écran parce qu'une étiquette est une annotation :
+  elle reste lisible à tous les zooms, contrairement au texte d'un objet
+  `text`, qui est en mètres et fait partie du dessin. Sur un chapiteau,
+  le même réglage plafonne aussi ses stands.
+
+652 tests, dont 42 nouveaux, validés par mutation : douze défauts
+introduits, douze détectés. Deux ont survécu au premier essai — un milieu
+de polyligne dégénérée (tous les points confondus, où le ratio devient
+0/0 et l'étiquette part en NaN) et une case large et basse, où c'est la
+hauteur qui borne la taille. Les deux tests manquaient ; ils ont été
+écrits, et les douze défauts sont détectés.
+
+Vérifié dans le navigateur, pas seulement construit : glissement de
+645 × 430 px mesuré au pointeur, plan déplacé de 645 × 430 px (1:1, sans
+accélération) ; « Boulangerie Dupont » et « Sapeurs-pompiers » coupés en
+deux lignes dans une grille de 6 × 2, tous les stands à la même taille ;
+« Ligne 1 / 51.75 m » au milieu du tracé, et la même étiquette passée à
+30 px depuis le panneau. Contrôlé aussi dans l'aperçu avant impression,
+où le rendu passe par `renderScale` : noms de stands sur deux lignes à
+1:200, et rien du tout à 1:949, où les cases ne sont plus lisibles.

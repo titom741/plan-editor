@@ -19,7 +19,7 @@
  * on disk for them to keep or send on.
  */
 
-import { DEFAULT_LABEL_DISPLAY } from "../domain/display";
+import { DEFAULT_LABEL_DISPLAY, clampLabelFontSizePx } from "../domain/display";
 import { PAPER_SIZE_ORDER } from "../domain/sheets";
 import type {
   Background,
@@ -311,6 +311,11 @@ function readStyle(value: unknown, path: string): PlanObject["style"] {
     style.arrowStart = readBoolean(record.arrowStart, `${path}.arrowStart`);
   if (record.arrowEnd !== undefined)
     style.arrowEnd = readBoolean(record.arrowEnd, `${path}.arrowEnd`);
+  if (record.labelFontSize !== undefined) {
+    style.labelFontSize = clampLabelFontSizePx(
+      readPositiveNumber(record.labelFontSize, `${path}.labelFontSize`),
+    );
+  }
   if (record.fontFamily !== undefined) {
     const value = readString(record.fontFamily, `${path}.fontFamily`);
     if (

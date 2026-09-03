@@ -11,6 +11,7 @@ import {
   createEmptyProject,
   addBackground,
 } from "../domain/project";
+import { MAX_LABEL_FONT_SIZE_PX } from "../domain/display";
 import type { Project } from "../domain/types";
 import {
   FILE_KIND,
@@ -48,6 +49,7 @@ function richProject(): Project {
         dash: "dashed",
         arrowStart: false,
         arrowEnd: true,
+        labelFontSize: 18,
       },
       catalogId: "tent-5x5",
       category: "Structures",
@@ -154,6 +156,33 @@ describe("serializeProject / deserializeProject", () => {
     expect(parsed.kind).toBe(FILE_KIND);
     expect(parsed.schemaVersion).toBe(SCHEMA_VERSION);
     expect(typeof parsed.savedAt).toBe("string");
+  });
+});
+
+describe("label font size (KL-040)", () => {
+  it("round-trips a caption size set on an object", () => {
+    const rectangle = roundTrip(richProject()).objects.find((o) => o.type === "rectangle");
+    expect(rectangle?.style?.labelFontSize).toBe(18);
+  });
+
+  it("brings an out-of-range size back into what the app draws instead of refusing the file", () => {
+    const file: any = JSON.parse(serializeProject(richProject()));
+    file.project.objects[0].style.labelFontSize = 10_000;
+    const result = parseProjectFile(file);
+    if (!result.ok) throw new Error(`fichier refusé : ${JSON.stringify(result.error)}`);
+    expect(result.file.project.objects[0]?.style?.labelFontSize).toBe(MAX_LABEL_FONT_SIZE_PX);
+  });
+
+  it("still rejects a size that is not a number at all", () => {
+    const file: any = JSON.parse(serializeProject(richProject()));
+    file.project.objects[0].style.labelFontSize = "grand";
+    const result = parseProjectFile(file);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({
+      code: "invalidField",
+      path: "project.objects[0].style.labelFontSize",
+    });
   });
 });
 

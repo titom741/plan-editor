@@ -8,7 +8,13 @@ import {
 import { boundsSizeM } from "../../domain/bounds";
 import type { BoundsM } from "../../domain/bounds";
 import { formatMeters, getObjectDimensionSummary } from "../../domain/labels";
-import { LABEL_DISPLAY_KEYS, LABEL_DISPLAY_LABELS, type LabelDisplay } from "../../domain/display";
+import {
+  LABEL_DISPLAY_KEYS,
+  LABEL_DISPLAY_LABELS,
+  clampLabelFontSizePx,
+  resolveLabelFontSizePx,
+  type LabelDisplay,
+} from "../../domain/display";
 import { rotateObjectToDeg } from "../../domain/geometry";
 import { sortLayersByOrder } from "../../domain/layers";
 import type {
@@ -938,6 +944,23 @@ export function PropertiesPanel({
                 </label>
               )}
             </>
+          )}
+          {selected.type !== "text" && (
+            <NumberField
+              /* The caption's size, not the object's own text: a `text`
+                 object is drawn in metres, at the scale of the plan, and
+                 has its own field above. A caption is annotation, so it
+                 is in screen pixels and keeps its size at every zoom. */
+              label="Taille du texte (px)"
+              valueM={resolveLabelFontSizePx(selected)}
+              step={1}
+              disabled={isLocked}
+              onCommit={(value) =>
+                applyPatch({
+                  style: { ...selected.style, labelFontSize: clampLabelFontSizePx(value) },
+                })
+              }
+            />
           )}
           <label className="properties-panel__field">
             <span>Opacité ({Math.round((selected.style?.opacity ?? 1) * 100)} %)</span>

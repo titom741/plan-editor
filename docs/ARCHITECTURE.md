@@ -1596,3 +1596,95 @@ The type now names its three routes rather than flattening them:
 Distinguishing them is the whole point: a bare file name in all three
 cases would leave the user unable to tell which host they are in, and
 quietly imply the web build could do something it cannot.
+
+## Four things the plan got wrong under the hand (KL-040)
+
+Four complaints from daily use, three of them about text and one about
+the most-used gesture in the app.
+
+### Panning applied the whole journey at every frame
+
+The canvas pans by making the Konva `Stage` draggable and folding its
+displacement into the viewport's offset on each `dragmove`, then snapping
+the node back to (0, 0) so the offset stays the single source of truth.
+The trap is what the node's position *means*. Konva computes it, every
+move, as `pointer − offset`, where `offset` was measured **once**, when
+the gesture began (`_createDragElement`). It is therefore the total
+displacement since the button went down, not the step since the last
+event — and snapping the node back to zero does not reset it, because the
+offset it is derived from is never re-measured.
+
+Folding that number in as a step applies the whole journey again at every
+frame. A steady drag of *d* pixels per frame moves the plan *d*, then
+*2d*, then *3d*: the view accelerates away from the pointer, and a slow
+drag that wanders is the erratic motion that was reported.
+
+`rendering/dragPan.ts` fixes it by not asking the node at all. It tracks
+the **pointer**, where the step is unambiguous: where it is now minus
+where it was last time. The tracker is seeded on `mousedown` (and on a
+one-finger `touchstart`) rather than on `dragstart`, because Konva waits
+for three pixels of travel before calling a press a drag, and those three
+pixels are movement the user made and would see the plan fail to follow.
+It is reset on `dragend`, so a fresh press on the far side of the canvas
+cannot be read as one enormous step.
+
+Measured in the browser afterwards, on a drag with three intermediate
+moves: pointer +645/+430 px, plan +645/+430 px. Exactly 1:1.
+
+### Stand names are sized to their cell, and may break in two
+
+A fixed 12 px cannot be right for both a tent split in two and the same
+tent split in six: it is unreadable in the narrow case and timid in the
+wide one. `rendering/labelFit.ts` derives the size from the cell instead,
+and allows a name to break onto a second line — which is usually what
+*buys* the bigger size, since a cell that is narrow is rarely short.
+
+- **The line breaks are ours, not the renderer's.** Konva wraps by itself
+  given a width, but it wraps at whatever size it was handed; it cannot
+  choose the size *because* of the wrap, which is the whole point. We
+  hand it lines and `wrap="none"`.
+- **One size for the whole grid.** Cells are identical, so per-cell
+  fitting would print "Bar" large and "Boulangerie" small in identical
+  squares. `fitLabelsToBox` takes every name at once and returns the one
+  size that suits them all, set by the longest.
+- **Hyphens are break opportunities.** French stand names are full of
+  them — "Sapeurs-pompiers", "Croix-Rouge" — and since one size serves
+  the whole grid, a single unbreakable long word drags every cell down
+  with it. The hyphen stays on the line above, as the language does it.
+- **Below a readable minimum nothing is drawn.** That is what makes a
+  zoomed-out plan a plan rather than a grey wash; it replaces the old
+  "cell smaller than 26 px" guard with the same idea said once.
+
+Text width is *estimated* (`estimateTextWidthPx`, a per-character table
+for Helvetica/Arial) rather than measured on a canvas, so the module
+stays pure and testable in Node. An estimate a few percent out costs a
+few percent of font size and never a broken layout — the breaks it is
+choosing between are the ones that actually get drawn.
+
+The size is chosen in the *target's* pixels, so the print raster gets a
+font proportional to its own resolution for free: the ceiling and floor
+are passed through `px()`, the cell size comes from the print viewport.
+
+### A caption belongs on the thing it describes
+
+A line's label — a length, most often — was drawn at `pointsM[0]`, the
+end the drawing happened to start from. It now sits at
+`polylineMidpointM`: the point half-way *along* the polyline, not the
+centre of its bounding box. The two agree on a straight segment and
+disagree on everything else; on an L-shaped run the box centre is not
+even on the line. The polyline tool's live running length moved to the
+same place, for the same reason.
+
+### The caption's size is the object's business
+
+`ObjectStyle.labelFontSize` (screen pixels) overrides the per-type
+default in `DEFAULT_LABEL_FONT_SIZE_PX`. Screen pixels because a caption
+is annotation: it stays legible at every zoom instead of shrinking with
+the thing it names, and on paper it is scaled to the print resolution —
+unlike a `text` *object*, whose `fontSizeM` is in metres and is part of
+the drawing. On a marquee the same number also caps its stand names, up
+or down, so "the text size of this object" means one thing.
+
+Sizes out of a file are clamped rather than refused
+(`clampLabelFontSizePx`): a hand-edited 10 000 is a caption nobody can
+undo, but it is not a reason to reject the plan.

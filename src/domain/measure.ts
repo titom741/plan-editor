@@ -85,3 +85,39 @@ export function formatAreaM2(areaM2: number): string {
   }
   return `${formatMeters(Math.round(areaM2 * 100) / 100)} m²`;
 }
+
+/**
+ * The point half-way *along* a polyline, in metres — the middle of the
+ * ink, not the centre of the bounding box.
+ *
+ * The two agree on a straight segment and disagree on everything else: on
+ * an L-shaped run the box centre sits off the line entirely, which is no
+ * place to write that line's length. Walking the segments costs nothing
+ * and puts the caption on the thing it measures.
+ *
+ * `null` for an empty list; a single point is its own midpoint, and so is
+ * the first point of a polyline of zero length.
+ */
+export function polylineMidpointM(points: readonly PointM[]): PointM | null {
+  const first = points[0];
+  if (!first) return null;
+
+  const lengths = segmentLengthsM(points);
+  const halfM = lengths.reduce((total, length) => total + length, 0) / 2;
+  let travelledM = 0;
+  for (let i = 0; i < lengths.length; i += 1) {
+    const segmentM = lengths[i] ?? 0;
+    const from = points[i];
+    const to = points[i + 1];
+    if (!from || !to || segmentM === 0) continue;
+    if (travelledM + segmentM >= halfM) {
+      const ratio = (halfM - travelledM) / segmentM;
+      return {
+        xM: from.xM + (to.xM - from.xM) * ratio,
+        yM: from.yM + (to.yM - from.yM) * ratio,
+      };
+    }
+    travelledM += segmentM;
+  }
+  return first;
+}

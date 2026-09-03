@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_LABEL_DISPLAY,
+  DEFAULT_LABEL_FONT_SIZE_PX,
+  MAX_LABEL_FONT_SIZE_PX,
+  MIN_LABEL_FONT_SIZE_PX,
+  clampLabelFontSizePx,
   isLabelHidden,
   resolveLabelDisplay,
+  resolveLabelFontSizePx,
   type LabelDisplay,
 } from "./display";
 import { getObjectDisplayLabel } from "./labels";
@@ -103,5 +108,31 @@ describe("getObjectDisplayLabel with display settings", () => {
 
   it("still honours a pre-KL-027 free-text label, so existing plans don't silently change", () => {
     expect(getObjectDisplayLabel(crate({ label: "Zone A" }), ALL_OFF)).toBe("Zone A");
+  });
+});
+
+describe("label font size (KL-040)", () => {
+  it("falls back to the default for the object's type", () => {
+    expect(resolveLabelFontSizePx(crate())).toBe(DEFAULT_LABEL_FONT_SIZE_PX.rectangle);
+  });
+
+  it("uses the object's own size when it carries one", () => {
+    expect(resolveLabelFontSizePx(crate({ style: { labelFontSize: 24 } }))).toBe(24);
+  });
+
+  it("keeps a size out of a hand-edited file inside what the app draws", () => {
+    expect(resolveLabelFontSizePx(crate({ style: { labelFontSize: 5000 } }))).toBe(
+      MAX_LABEL_FONT_SIZE_PX,
+    );
+    expect(resolveLabelFontSizePx(crate({ style: { labelFontSize: 0.2 } }))).toBe(
+      MIN_LABEL_FONT_SIZE_PX,
+    );
+    expect(clampLabelFontSizePx(Number.NaN)).toBe(DEFAULT_LABEL_FONT_SIZE_PX.rectangle);
+  });
+
+  it("leaves the rest of the style alone", () => {
+    const object = crate({ style: { fill: "#fff", labelFontSize: 18 } });
+    expect(object.style?.fill).toBe("#fff");
+    expect(resolveLabelFontSizePx(object)).toBe(18);
   });
 });

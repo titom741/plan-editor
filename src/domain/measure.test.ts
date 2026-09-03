@@ -7,6 +7,7 @@ import {
   polygonAreaM2,
   polygonPerimeterM,
   polylineLengthM,
+  polylineMidpointM,
   segmentLengthsM,
 } from "./measure";
 import { collectSnapTargets, getObjectSnapTargets, snapPointM, snapToGridM } from "./snapping";
@@ -39,6 +40,67 @@ describe("lengths", () => {
   it("closes the loop for a perimeter but not for a polyline", () => {
     expect(polylineLengthM(square)).toBe(30);
     expect(polygonPerimeterM(square)).toBe(40);
+  });
+});
+
+describe("polylineMidpointM", () => {
+  it("is the middle of a straight segment", () => {
+    expect(
+      polylineMidpointM([
+        { xM: 0, yM: 0 },
+        { xM: 10, yM: 0 },
+      ]),
+    ).toEqual({ xM: 5, yM: 0 });
+  });
+
+  it("walks the segments rather than averaging the ends", () => {
+    // An L: 6 m across then 4 m down. Half the *length* is 5 m, which
+    // lands on the first arm — the average of the two ends (3, 2) does
+    // not even sit on the line.
+    expect(
+      polylineMidpointM([
+        { xM: 0, yM: 0 },
+        { xM: 6, yM: 0 },
+        { xM: 6, yM: 4 },
+      ]),
+    ).toEqual({ xM: 5, yM: 0 });
+  });
+
+  it("lands inside the segment that straddles the halfway mark", () => {
+    expect(
+      polylineMidpointM([
+        { xM: 0, yM: 0 },
+        { xM: 2, yM: 0 },
+        { xM: 2, yM: 6 },
+      ]),
+    ).toEqual({ xM: 2, yM: 2 });
+  });
+
+  it("ignores zero-length segments left by a double-clicked point", () => {
+    expect(
+      polylineMidpointM([
+        { xM: 0, yM: 0 },
+        { xM: 0, yM: 0 },
+        { xM: 0, yM: 8 },
+      ]),
+    ).toEqual({ xM: 0, yM: 4 });
+  });
+
+  it("stays on the spot when every point is the same one", () => {
+    // Half of nothing is nothing, and the ratio along a segment of length
+    // zero is 0/0: without a guard this returns a NaN point, and a caption
+    // placed at NaN silently disappears.
+    expect(
+      polylineMidpointM([
+        { xM: 4, yM: 9 },
+        { xM: 4, yM: 9 },
+      ]),
+    ).toEqual({ xM: 4, yM: 9 });
+  });
+
+  it("has nothing to place without points, and needs no travel for one", () => {
+    expect(polylineMidpointM([])).toBeNull();
+    expect(polylineMidpointM([{ xM: 3, yM: 7 }])).toEqual({ xM: 3, yM: 7 });
   });
 });
 

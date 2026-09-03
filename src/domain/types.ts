@@ -155,6 +155,15 @@ export interface ObjectStyle {
   dash?: "solid" | "dashed" | "dotted";
   arrowStart?: boolean;
   arrowEnd?: boolean;
+  /**
+   * Size of the label this object writes on the plan, in *screen* pixels
+   * — the caption, not a `text` object's own body, which is in metres
+   * (`TextObject.fontSizeM`). Screen pixels because a caption is
+   * annotation: it stays legible at every zoom instead of shrinking with
+   * the thing it names, and on paper it is scaled to the print
+   * resolution. Absent means the default for the object's type.
+   */
+  labelFontSize?: number;
   fontFamily?: "Arial" | "Helvetica" | "Georgia" | "Courier New";
   fontWeight?: "normal" | "bold";
   fontStyle?: "normal" | "italic";

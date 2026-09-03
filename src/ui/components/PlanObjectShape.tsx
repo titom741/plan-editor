@@ -5,8 +5,11 @@ import { labelledStandCells, standGridToDraw } from "../../domain/stands";
 import {
   DEFAULT_LABEL_DISPLAY,
   resolveLabelDisplay,
+  resolveLabelFontSizePx,
   type LabelDisplay,
 } from "../../domain/display";
+import { polylineMidpointM } from "../../domain/measure";
+import { LABEL_LINE_HEIGHT, fitLabelsToBox } from "../../rendering/labelFit";
 import type { PlanObject, RectangleObject, StandGrid } from "../../domain/types";
 import { metersToPixels, screenToWorld, worldToScreen } from "../../rendering/viewport";
 import type { Viewport } from "../../rendering/viewport";
@@ -40,6 +43,9 @@ interface PlanObjectShapeProps {
 }
 
 const SELECTED_STROKE = "#e0470f";
+
+/** Width of the invisible box a line's caption is centred in, in screen pixels. Only its centre matters; the text is free to overflow it. */
+const LINE_LABEL_BOX_PX = 400;
 
 /** Shift (or Ctrl/Cmd, for the platform habits people arrive with) means "add to / remove from the selection" rather than "replace it". */
 function isAdditive(event: MouseEvent | TouchEvent): boolean {
@@ -85,6 +91,10 @@ export function PlanObjectShape({
       : object.style?.dash === "dotted"
         ? [px(2), px(5)]
         : undefined;
+  /** The size this object's caption is drawn at, in this target's pixels — its own setting, or its type's default. */
+  const labelFontSizePx = px(resolveLabelFontSizePx(object));
+  /** How many lines the caption occupies, which is what places it relative to the shape. */
+  const labelLineCount = labelText.split("\n").length;
 
   const handleSelect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     // Outside the select tool, let the click bubble up to the Stage so
@@ -151,7 +161,13 @@ export function PlanObjectShape({
             dash={dash}
           />
           {standGrid && (
-            <StandLabels object={object} grid={standGrid} viewport={viewport} px={px} />
+            <StandLabels
+              object={object}
+              grid={standGrid}
+              viewport={viewport}
+              px={px}
+              ownFontSizePx={object.style?.labelFontSize}
+            />
           )}
           {showLabel && (
             <Text
@@ -160,11 +176,12 @@ export function PlanObjectShape({
               /* A marquee full of stand names has no room left in the
                  middle for its own, so it moves above its top edge —
                  where it reads as the title of what is under it. */
-              y={standGrid ? -px(6) - px(14) * labelText.split("\n").length : 0}
+              y={standGrid ? -px(6) - labelFontSizePx * LABEL_LINE_HEIGHT * labelLineCount : 0}
               height={standGrid ? undefined : heightPx}
               align="center"
               verticalAlign={standGrid ? undefined : "middle"}
-              fontSize={px(14)}
+              fontSize={labelFontSizePx}
+              lineHeight={LABEL_LINE_HEIGHT}
               fill="#0f172a"
               listening={false}
             />
@@ -188,10 +205,14 @@ export function PlanObjectShape({
             <Text
               text={labelText}
               x={-radiusPx}
-              y={px(-8)}
+              /* Centred on the circle's own centre by measuring the text
+                 block rather than by a fixed nudge, which only held at
+                 one font size and one line. */
+              y={-(labelFontSizePx * LABEL_LINE_HEIGHT * labelLineCount) / 2}
               width={radiusPx * 2}
               align="center"
-              fontSize={px(13)}
+              fontSize={labelFontSizePx}
+              lineHeight={LABEL_LINE_HEIGHT}
               fill="#0f172a"
               listening={false}
             />
@@ -204,6 +225,14 @@ export function PlanObjectShape({
         metersToPixels(p.xM, viewport),
         metersToPixels(p.yM, viewport),
       ]);
+      // The caption — a length, most often — belongs half-way along the
+      // line it describes, not at the end the drawing happened to start
+      // from. On a polyline that is half its *length*, so the text lands
+      // on the stroke even when the run bends (`polylineMidpointM`).
+      const midpointM = polylineMidpointM(object.pointsM);
+      const midpoint = midpointM
+        ? { x: metersToPixels(midpointM.xM, viewport), y: metersToPixels(midpointM.yM, viewport) }
+        : { x: 0, y: 0 };
       return (
         <Group {...commonGroupProps}>
           {object.style?.arrowStart || object.style?.arrowEnd ? (
@@ -233,9 +262,17 @@ export function PlanObjectShape({
           {showLabel && (
             <Text
               text={labelText}
-              x={points.length >= 2 ? points[0] : 0}
-              y={-px(18)}
-              fontSize={px(12)}
+              /* Centred on the midpoint through a box wide enough for the
+                 text to overflow symmetrically — Konva has no "centre on
+                 this point" for text, but an over-wide box with
+                 `align="center"` and no wrapping is exactly that. */
+              x={midpoint.x - LINE_LABEL_BOX_PX / 2}
+              width={LINE_LABEL_BOX_PX}
+              align="center"
+              wrap="none"
+              y={midpoint.y - px(6) - labelFontSizePx * LABEL_LINE_HEIGHT * labelLineCount}
+              fontSize={labelFontSizePx}
+              lineHeight={LABEL_LINE_HEIGHT}
               fill={object.style?.fill ?? "#0f172a"}
               opacity={object.style?.opacity ?? 1}
               listening={false}
@@ -272,7 +309,8 @@ export function PlanObjectShape({
               y={minY + px(6)}
               width={Math.max(maxX - minX, px(80))}
               align="center"
-              fontSize={px(12)}
+              fontSize={labelFontSizePx}
+              lineHeight={LABEL_LINE_HEIGHT}
               fill="#0f172a"
               opacity={object.style?.opacity ?? 1}
               listening={false}
@@ -321,51 +359,81 @@ export function PlanObjectShape({
   }
 }
 
-/** Smallest cell, in screen pixels, still worth writing a stand name in. Below it the grid is a smudge, not a plan. */
-const MIN_READABLE_CELL_PX = 26;
+/** Below this, in this target's pixels, a stand name is a smudge rather than a name — the cell is left empty instead. */
+const MIN_STAND_FONT_SIZE_PX = 7;
+
+/** How big a stand name may grow when the cell has room to spare, unless the marquee carries a size of its own. */
+const MAX_STAND_FONT_SIZE_PX = 20;
+
+/** Breathing room kept between a name and its cell's edges, in screen pixels — a name touching the aisle reads as belonging to both. */
+const STAND_LABEL_PADDING_PX = 4;
 
 /**
  * The stand names inside a marquee.
  *
- * Drawn at a fixed *screen* size like every other label, so zooming out
- * does not shrink the text into a line of dots — and hidden entirely once
- * a cell is too small to hold it, which is the same thing said the other
- * way round. Each name is centred in its own cell, so it lands where the
- * stand will be rather than in a list.
+ * Sized to the cell rather than fixed (KL-040). A fixed size cannot be
+ * right for both a tent split in two and the same tent split in six: it
+ * is either unreadable in the narrow case or timid in the wide one. So
+ * the size is derived from the cell, and a name is allowed to break in
+ * two — which is usually what *buys* the bigger size, because a cell that
+ * is narrow is rarely short.
+ *
+ * One size for the whole grid, set by the longest name: identical cells
+ * printing their names at different sizes would read as a mistake. And
+ * when even the smallest allowed size will not fit — zoomed out, or a
+ * grid too fine for the tent — nothing is drawn at all, which is what
+ * makes a plan at low zoom a plan rather than a grey wash.
  */
 function StandLabels({
   object,
   grid,
   viewport,
   px,
+  ownFontSizePx,
 }: {
   object: RectangleObject;
   grid: StandGrid;
   viewport: Viewport;
   px: (screenPx: number) => number;
+  /** The marquee's own label size in screen pixels, when it carries one: it then caps its stands too, up or down. Undefined leaves them the default ceiling. */
+  ownFontSizePx: number | undefined;
 }) {
   const cells = labelledStandCells(object, grid);
-  if (cells.length === 0) return null;
-
   const firstCell = cells[0];
   if (!firstCell) return null;
+
   const cellWidthPx = metersToPixels(firstCell.widthM, viewport);
   const cellHeightPx = metersToPixels(firstCell.heightM, viewport);
-  if (cellWidthPx < MIN_READABLE_CELL_PX || cellHeightPx < MIN_READABLE_CELL_PX / 2) return null;
+  const fitted = fitLabelsToBox(
+    cells.map((cell) => cell.text),
+    {
+      widthPx: cellWidthPx - px(STAND_LABEL_PADDING_PX) * 2,
+      heightPx: cellHeightPx - px(STAND_LABEL_PADDING_PX) * 2,
+    },
+    {
+      maxFontSizePx: px(ownFontSizePx ?? MAX_STAND_FONT_SIZE_PX),
+      minFontSizePx: px(MIN_STAND_FONT_SIZE_PX),
+    },
+  );
+  if (!fitted) return null;
 
   return (
     <>
-      {cells.map((cell) => (
+      {cells.map((cell, index) => (
         <Text
           key={`${cell.rowIndex}-${cell.columnIndex}`}
-          text={cell.text}
+          /* The lines were chosen here, at the size that made them fit, so
+             Konva is told not to have opinions of its own about wrapping. */
+          text={(fitted.lines[index] ?? [cell.text]).join("\n")}
+          wrap="none"
           x={metersToPixels(cell.xM, viewport)}
           y={metersToPixels(cell.yM, viewport)}
           width={cellWidthPx}
           height={cellHeightPx}
           align="center"
           verticalAlign="middle"
-          fontSize={px(12)}
+          fontSize={fitted.fontSizePx}
+          lineHeight={LABEL_LINE_HEIGHT}
           fill="#0f172a"
           listening={false}
         />

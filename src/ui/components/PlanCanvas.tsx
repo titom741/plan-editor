@@ -10,6 +10,7 @@ import {
 } from "react-konva";
 import type Konva from "konva";
 import { computeGridLines } from "../../rendering/grid";
+import { idleDragPan, stepDragPan } from "../../rendering/dragPan";
 import {
   getEffectivePixelsPerMeter,
   metersToPixels,
@@ -36,6 +37,7 @@ import {
   formatLengthM,
   polygonAreaM2,
   polylineLengthM,
+  polylineMidpointM,
   segmentLengthsM,
 } from "../../domain/measure";
 import { collectSnapTargets, snapPointM } from "../../domain/snapping";
@@ -210,6 +212,8 @@ export function PlanCanvas({
    */
   const isAltHeldRef = useRef(false);
   const pinchDistanceRef = useRef<number | null>(null);
+  /** The pan gesture in progress, if any — see `rendering/dragPan.ts` for why the Stage's own position cannot serve. */
+  const dragPanRef = useRef(idleDragPan());
   /** Where the pointer was last pulled to, for the on-canvas marker. `null` when nothing snapped. */
   const [snapMarker, setSnapMarker] = useState<SnapTarget | null>(null);
   useEffect(() => {
@@ -503,14 +507,33 @@ export function PlanCanvas({
     [onZoomAt],
   );
 
-  const handleTouchStart = useCallback((event: Konva.KonvaEventObject<TouchEvent>) => {
-    if (event.evt.touches.length !== 2) return;
-    const [a, b] = [event.evt.touches[0], event.evt.touches[1]];
-    if (!a || !b) return;
-    event.evt.preventDefault();
-    event.target.getStage()?.stopDrag();
-    pinchDistanceRef.current = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+  /**
+   * A pan is measured from where the button went down, not from where
+   * Konva decided the press had become a drag — it waits for three pixels
+   * of travel, and those three pixels are movement the user made and
+   * would see the plan fail to follow. Seeded on every press, including
+   * ones that turn out to be clicks: the next press overwrites it.
+   */
+  const seedDragPan = useCallback((stage: Konva.Stage | null) => {
+    const pointer = stage?.getPointerPosition();
+    dragPanRef.current = pointer ? stepDragPan(idleDragPan(), pointer).tracker : idleDragPan();
   }, []);
+
+  const handleTouchStart = useCallback(
+    (event: Konva.KonvaEventObject<TouchEvent>) => {
+      // One finger drags the plan and lands in the same handler a mouse
+      // does; two start a pinch, and the pan tracker is reset either way
+      // when the gesture ends.
+      if (event.evt.touches.length === 1) seedDragPan(event.target.getStage());
+      if (event.evt.touches.length !== 2) return;
+      const [a, b] = [event.evt.touches[0], event.evt.touches[1]];
+      if (!a || !b) return;
+      event.evt.preventDefault();
+      event.target.getStage()?.stopDrag();
+      pinchDistanceRef.current = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+    },
+    [seedDragPan],
+  );
 
   const handleTouchMove = useCallback(
     (event: Konva.KonvaEventObject<TouchEvent>) => {
@@ -548,25 +571,49 @@ export function PlanCanvas({
   // this as a pan when the Stage itself is what's actually being dragged.
   const handleStageDragMove = useCallback(
     (e: Konva.KonvaEventObject<DragEvent>) => {
-      if (e.target !== e.target.getStage()) return;
-      const node = e.target;
+      const stage = e.target.getStage();
+      if (!stage || e.target !== stage) return;
       // A marquee and a pan are the same gesture with a different modifier,
       // and Konva has already decided it is a drag by the time the marquee
       // draft exists — the `draggable` prop goes false a render too late.
       // Refusing to pan here is what actually stops the view sliding out
       // from under the rubber band.
       if (draft?.tool === "marquee") {
-        node.position({ x: 0, y: 0 });
+        stage.position({ x: 0, y: 0 });
         return;
       }
-      onPan(node.x(), node.y());
-      node.position({ x: 0, y: 0 });
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+      // The *step* the pointer just made, not the node's position: that
+      // one is the whole displacement since the button went down, and
+      // adding it every frame is what made panning run away (see
+      // `rendering/dragPan.ts`).
+      const { tracker, deltaXPx, deltaYPx } = stepDragPan(dragPanRef.current, pointer);
+      dragPanRef.current = tracker;
+      stage.position({ x: 0, y: 0 });
+      if (deltaXPx === 0 && deltaYPx === 0) return;
+      onPan(deltaXPx, deltaYPx);
     },
     [draft, onPan],
   );
 
+  /**
+   * The end of a gesture must not become the start of the next one: a
+   * fresh press on the far side of the canvas would otherwise be read as
+   * one enormous step and throw the plan across the screen. Dragging a
+   * *child* (an object, a background) bubbles here too and is none of our
+   * business.
+   */
+  const handleStageDragEnd = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
+    if (e.target !== e.target.getStage()) return;
+    dragPanRef.current = idleDragPan();
+  }, []);
+
   const handleMouseDown = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
+      // Before any tool decides what this press means: a pan, if it turns
+      // out to be one, starts here.
+      seedDragPan(e.target.getStage());
       if (activeTool === "select") {
         const stage = e.target.getStage();
         // "Empty canvas" means the bare Stage *or* the background image:
@@ -618,7 +665,7 @@ export function PlanCanvas({
         else setDraft({ tool: "line", startWorld: world, currentWorld: world });
       }
     },
-    [activeTool, onDeselectAll, getPointerWorld],
+    [activeTool, onDeselectAll, getPointerWorld, seedDragPan],
   );
 
   const handleMouseMove = useCallback(
@@ -871,6 +918,7 @@ export function PlanCanvas({
           draggable={activeTool === "select" && !isShiftHeld && draft?.tool !== "marquee"}
           onWheel={handleWheel}
           onDragMove={handleStageDragMove}
+          onDragEnd={handleStageDragEnd}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -1046,6 +1094,16 @@ function DraftPreview({ draft, viewport }: { draft: Draft | null; viewport: View
           })()
         : [];
     const lengthM = polylineLengthM(draft.pointsM);
+    // The running length belongs on the line, not at the point the line
+    // started from — the same reasoning as the finished object's own
+    // caption (`PlanObjectShape`).
+    const midpointM = polylineMidpointM(draft.pointsM);
+    const lengthAnchor = midpointM
+      ? worldToScreen(
+          { xM: draft.anchorWorld.xM + midpointM.xM, yM: draft.anchorWorld.yM + midpointM.yM },
+          viewport,
+        )
+      : anchor;
     return (
       <>
         <Line
@@ -1076,8 +1134,11 @@ function DraftPreview({ draft, viewport }: { draft: Draft | null; viewport: View
         })}
         {lengthM > 0 && (
           <Text
-            x={anchor.x + 10}
-            y={anchor.y - 18}
+            x={lengthAnchor.x - 60}
+            y={lengthAnchor.y - 20}
+            width={120}
+            align="center"
+            wrap="none"
             text={formatLengthM(lengthM)}
             fontSize={12}
             fill="#2563eb"
