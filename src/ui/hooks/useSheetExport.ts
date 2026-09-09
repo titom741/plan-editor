@@ -42,11 +42,11 @@ interface UseSheetExportOptions {
  * the page layout it implies, and the two-phase export — mount an
  * off-screen stage, wait for it to be ready, rasterise, write the file.
  *
- * It lives outside `Editor` because that two-phase dance needs five pieces
- * of state that mean nothing to the rest of the editor (`pendingExport`,
- * the multi-page cursor, the stage ref, and the two print-only toggles),
- * and because "what a sheet is" has nothing to do with selection, layers
- * or history.
+ * It lives outside `Editor` because that two-phase dance needs several
+ * pieces of state that mean nothing to the rest of the editor
+ * (`pendingExport`, the multi-page cursor, the stage ref, and the
+ * print-only toggles), and because "what a sheet is" has nothing to do
+ * with selection, layers or history.
  *
  * The export is deliberately *hybrid*: only image objects and the
  * background go through the raster, while every vector shape is handed to
@@ -64,6 +64,16 @@ export function useSheetExport({
   const [activeSheetId, setActiveSheetId] = useState<string | null>(null);
   const [printGrid, setPrintGrid] = useState(false);
   const [transparentPng, setTransparentPng] = useState(false);
+  /**
+   * Whether this export holds every text to the readable floor (KL-043).
+   *
+   * A print setting, not a document one, so it lives here beside the grid
+   * and the transparent PNG rather than on the `Sheet`: it says how this
+   * sheet is being *printed today*, and writing it into the project would
+   * put a rescue into a file that is otherwise a faithful record of what
+   * was drawn.
+   */
+  const [enlargeSmallText, setEnlargeSmallText] = useState(false);
   const [pendingExport, setPendingExport] = useState<ExportTarget | null>(null);
   const [multiPageExport, setMultiPageExport] = useState<MultiPageExport | null>(null);
   const printStageRef = useRef<Konva.Stage>(null);
@@ -111,8 +121,14 @@ export function useSheetExport({
    * be started.
    */
   const standLegibility = useMemo(
-    () => measureStandLegibility(orderedObjects, labelDisplay, sheet.scaleDenominator),
-    [orderedObjects, labelDisplay, sheet.scaleDenominator],
+    () =>
+      measureStandLegibility(
+        orderedObjects,
+        labelDisplay,
+        sheet.scaleDenominator,
+        enlargeSmallText,
+      ),
+    [orderedObjects, labelDisplay, sheet.scaleDenominator, enlargeSmallText],
   );
 
   /** The shapes the off-screen stage must rasterise. For a PNG that is everything; for a PDF, only what vectors can't express. */
@@ -239,6 +255,7 @@ export function useSheetExport({
                 vectorObjects,
                 vectorViewport: raster.viewport,
                 labelDisplay,
+                enlargeSmallText,
               };
             }),
           );
@@ -263,6 +280,7 @@ export function useSheetExport({
             vectorObjects,
             vectorViewport: printRaster.viewport,
             labelDisplay,
+            enlargeSmallText,
           });
       })
       .catch((error: unknown) =>
@@ -277,6 +295,7 @@ export function useSheetExport({
     printRaster,
     vectorObjects,
     labelDisplay,
+    enlargeSmallText,
     onError,
   ]);
 
@@ -294,6 +313,8 @@ export function useSheetExport({
     setPrintGrid,
     transparentPng,
     setTransparentPng,
+    enlargeSmallText,
+    setEnlargeSmallText,
     changeSheet,
     addSheet,
     duplicateSheet,

@@ -9,6 +9,8 @@ import { PlanObjectShape } from "./PlanObjectShape";
 import type { LabelDisplay } from "../../domain/display";
 import { useHtmlImage } from "../hooks/useHtmlImage";
 import { createWhiteRemovalFilter } from "../imageFilters";
+import { MIN_READABLE_PT } from "../../printing/standLabels";
+import { POINTS_PER_INCH } from "../../printing/pdf";
 
 interface PrintCanvasProps {
   stageRef: Ref<Konva.Stage>;
@@ -22,6 +24,14 @@ interface PrintCanvasProps {
   labelDisplay: LabelDisplay;
   /** Screen-pixel sizes (strokes, labels) are multiplied by this so they come out the right physical size at print resolution. */
   renderScale: number;
+  /**
+   * The resolution this raster is drawn at, needed only to turn the
+   * readable floor — which is a size on *paper*, in points — into this
+   * stage's own pixels. Omitted, no floor is held.
+   */
+  effectiveDpi?: number;
+  /** Hold every text to the readable floor, letting it spill rather than vanish (KL-043). */
+  enlargeSmallText?: boolean;
   transparentBackground?: boolean;
   /** Called once everything that needs loading has loaded and the stage is safe to rasterise. */
   onReady: () => void;
@@ -58,9 +68,19 @@ export function PrintCanvas({
   showGrid,
   labelDisplay,
   renderScale,
+  effectiveDpi,
+  enlargeSmallText = false,
   transparentBackground = false,
   onReady,
 }: PrintCanvasProps) {
+  /**
+   * The readable floor in this stage's pixels. A point is 1/72 inch and
+   * the stage is `effectiveDpi` pixels to the inch, so the conversion is
+   * the resolution itself — the same arithmetic the PDF half does in
+   * reverse, which is why both halves come out at one size.
+   */
+  const minTextPx =
+    enlargeSmallText && effectiveDpi ? (MIN_READABLE_PT * effectiveDpi) / POINTS_PER_INCH : 0;
   // Only the bottom visible backdrop is filtered/cached here; the rest are
   // drawn by `PrintBackground` below, one component each, because Konva
   // filters are per node and a hook can't be called in a loop.
@@ -147,6 +167,7 @@ export function PrintCanvas({
               draggable={false}
               selectable={false}
               renderScale={renderScale}
+              minTextPx={minTextPx}
               onSelect={noop}
               onBeginEdit={noop}
               onMoveLive={noop}

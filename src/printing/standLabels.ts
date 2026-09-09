@@ -34,6 +34,23 @@ export const PT_PER_CSS_PX = POINTS_PER_INCH / 96;
  */
 export const MIN_STAND_LABEL_PT = (1.8 / MM_PER_INCH) * POINTS_PER_INCH;
 
+/**
+ * The floor the "agrandir les textes" switch holds every printed text to
+ * (KL-043) — the same 1.8 mm, because there is only one answer to "what
+ * is too small to read on paper" and it should not depend on which kind
+ * of text is asking.
+ *
+ * The switch does not resize what already clears the floor. A plan whose
+ * captions are legible must come out of the export unchanged, or the
+ * option would be a second, invisible style setting rather than a rescue.
+ */
+export const MIN_READABLE_PT = MIN_STAND_LABEL_PT;
+
+/** Raises a printed text to the readable floor, when the user asked for that; leaves it alone otherwise. */
+export function enlargeToReadable(sizePt: number, enlarge: boolean): number {
+  return enlarge ? Math.max(MIN_READABLE_PT, sizePt) : sizePt;
+}
+
 /** How large a stand name may grow when its cell has room to spare, unless the marquee carries a size of its own. */
 export const MAX_STAND_LABEL_PT = 15;
 
@@ -72,7 +89,7 @@ export function fitStandLabelsPt(
   object: RectangleObject,
   grid: StandGrid,
   pointsPerMeter: number,
-  options?: { minSizePt?: number; maxSizePt?: number },
+  options?: { minSizePt?: number; maxSizePt?: number; enlarge?: boolean },
 ): FittedLabels | null {
   const cells = labelledStandCells(object, grid);
   const first = cells[0];
@@ -86,6 +103,7 @@ export function fitStandLabelsPt(
     {
       maxFontSizePx: options?.maxSizePt ?? ceilingPt(object.style?.labelFontSize),
       minFontSizePx: options?.minSizePt ?? MIN_STAND_LABEL_PT,
+      enlargeToMin: options?.enlarge ?? false,
     },
   );
 }
@@ -101,6 +119,13 @@ export interface StandLegibility {
    * nothing to place, or when the current scale is already enough.
    */
   readableScaleDenominator: number | null;
+  /**
+   * True when `sizePt` is the floor held by force rather than a size the
+   * cells could carry (KL-043): the names print, and they run over the
+   * cell that names them. The dialogue says so, because a plan whose
+   * names overlap is a different kind of wrong from one with no names.
+   */
+  enlarged: boolean;
 }
 
 /** Every marquee on the plan that writes stand names, with the grid it writes. */
@@ -124,11 +149,12 @@ function labelledGrids(
 function worstSizePt(
   grids: readonly { object: RectangleObject; grid: StandGrid }[],
   scaleDenominator: number,
+  enlarge = false,
 ): number | null {
   const pointsPerMeter = pointsPerMeterAtScale(scaleDenominator);
   let worst: number | null = null;
   for (const { object, grid } of grids) {
-    const fitted = fitStandLabelsPt(object, grid, pointsPerMeter);
+    const fitted = fitStandLabelsPt(object, grid, pointsPerMeter, { enlarge });
     if (fitted === null) return null;
     worst = worst === null ? fitted.fontSizePx : Math.min(worst, fitted.fontSizePx);
   }
@@ -155,17 +181,31 @@ export function measureStandLegibility(
   objects: readonly PlanObject[],
   labelDisplay: LabelDisplay,
   scaleDenominator: number,
+  /** Whether the export is holding every text to the readable floor (KL-043). */
+  enlarge = false,
 ): StandLegibility {
   const grids = labelledGrids(objects, labelDisplay);
-  const sizePt = worstSizePt(grids, scaleDenominator);
-  if (sizePt !== null) return { scaleDenominator, sizePt, readableScaleDenominator: null };
+  const natural = worstSizePt(grids, scaleDenominator);
+  if (natural !== null) {
+    return { scaleDenominator, sizePt: natural, readableScaleDenominator: null, enlarged: false };
+  }
+
+  // The scale cannot carry them. With the floor held they print anyway,
+  // and the size reported is the one the sheet will actually show — the
+  // dialogue must never quote a size the export does not use.
+  const forced = enlarge ? worstSizePt(grids, scaleDenominator, true) : null;
 
   const low0 = 1;
   // Two different silences answered the same way: a plan that writes no
   // stand name at all, and one whose names would not fit even at 1:1 —
   // a name longer than its own stand. Neither has a scale to suggest.
   if (worstSizePt(grids, low0) === null) {
-    return { scaleDenominator, sizePt: null, readableScaleDenominator: null };
+    return {
+      scaleDenominator,
+      sizePt: forced,
+      readableScaleDenominator: null,
+      enlarged: forced !== null,
+    };
   }
   let low = low0;
   let high = Math.max(1, Math.floor(scaleDenominator));
@@ -174,5 +214,10 @@ export function measureStandLegibility(
     if (worstSizePt(grids, middle) === null) high = middle;
     else low = middle;
   }
-  return { scaleDenominator, sizePt: null, readableScaleDenominator: low };
+  return {
+    scaleDenominator,
+    sizePt: forced,
+    readableScaleDenominator: low,
+    enlarged: forced !== null,
+  };
 }

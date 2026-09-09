@@ -151,3 +151,73 @@ describe("fitLabelsToBox", () => {
     expect(fitted?.lines[0]).toEqual(["Boulangerie Dupont"]);
   });
 });
+
+describe("fitLabelsToBox holding the floor (KL-043)", () => {
+  /** A box far too small for the text at `minFontSizePx` — the case the switch exists for. */
+  const TINY = { widthPx: 6, heightPx: 4 };
+
+  it("draws nothing there by default, as it always has", () => {
+    expect(fitLabelsToBox(["Boulangerie"], TINY, OPTIONS)).toBeNull();
+  });
+
+  it("draws at the floor instead of losing the text, when asked", () => {
+    const fitted = fitLabelsToBox(["Boulangerie"], TINY, { ...OPTIONS, enlargeToMin: true });
+    expect(fitted?.fontSizePx).toBe(OPTIONS.minFontSizePx);
+  });
+
+  it("leaves a text that already clears the floor exactly where it was", () => {
+    // The switch is a rescue, not a second size setting: a plan whose
+    // labels are legible must come out of the export unchanged.
+    const box = { widthPx: 200, heightPx: 60 };
+    const asIs = fitLabelsToBox(["Bar"], box, OPTIONS);
+    const enlarged = fitLabelsToBox(["Bar"], box, { ...OPTIONS, enlargeToMin: true });
+    expect(enlarged).toEqual(asIs);
+  });
+
+  it("holds the floor even over a ceiling below it — a caller that pins both wants it readable", () => {
+    const fitted = fitLabelsToBox(["Boulangerie"], TINY, {
+      minFontSizePx: 7,
+      maxFontSizePx: 5,
+      enlargeToMin: true,
+    });
+    expect(fitted?.fontSizePx).toBe(7);
+  });
+
+  it("breaks the text where it overflows least, rather than leaving it on one line", () => {
+    // A box that carries this name at 5.4 px at best — under the floor,
+    // so nothing fits once it is forced to 7 and the break chosen is
+    // the one that came closest. On one line it would spill twice as far.
+    const box = { widthPx: 15, heightPx: 20 };
+    expect(fitLabelsToBox(["Croix Rouge"], box, OPTIONS)).toBeNull();
+    const fitted = fitLabelsToBox(["Croix Rouge"], box, { ...OPTIONS, enlargeToMin: true });
+    expect(fitted?.fontSizePx).toBe(OPTIONS.minFontSizePx);
+    expect(fitted?.lines[0]).toEqual(["Croix", "Rouge"]);
+  });
+
+  it("still writes into a box with no room at all, which is where the text would vanish", () => {
+    const box = { widthPx: 0, heightPx: 0 };
+    expect(fitLabelsToBox(["A1"], box, OPTIONS)).toBeNull();
+    expect(fitLabelsToBox(["A1"], box, { ...OPTIONS, enlargeToMin: true })?.fontSizePx).toBe(7);
+  });
+
+  it("does not break a text into a box that has no height for one line, let alone two", () => {
+    // A wide, flat cell — a long marquee one stand deep — leaves the
+    // padding eating more than the height. Ranking the candidates by how
+    // negative they came out would prefer two lines here, on the grounds
+    // that each is shorter: exactly backwards, since more lines need
+    // more height. Nothing fits either way, so the name stays unbroken.
+    const fitted = fitLabelsToBox(
+      ["Croix Rouge"],
+      { widthPx: 60, heightPx: -1 },
+      { ...OPTIONS, enlargeToMin: true },
+    );
+    expect(fitted?.fontSizePx).toBe(OPTIONS.minFontSizePx);
+    expect(fitted?.lines[0]).toEqual(["Croix Rouge"]);
+  });
+
+  it("has nothing to write when there is no text, floor or not", () => {
+    expect(
+      fitLabelsToBox([], { widthPx: 100, heightPx: 100 }, { ...OPTIONS, enlargeToMin: true }),
+    ).toBeNull();
+  });
+});

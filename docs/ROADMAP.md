@@ -939,3 +939,80 @@ ils sortent à −30,0°, à 90° à −90,0° — noms de stands, nom du chapit
 étiquettes multi-lignes comprises. Vérifié aussi dans le navigateur, où
 l'étiquette d'un chapiteau tourné à 30° rend bien à 30° à l'écran : c'est
 la moitié qui marchait déjà, et elle marche toujours.
+
+## KL-043 — Le texte peut refuser de disparaître *(done)*
+
+Remonté à l'usage : « sous Exporter, il faudrait une option pour modifier
+automatiquement la taille du texte, pour qu'il soit visible à
+l'impression pleine page ».
+
+Le plancher de KL-041 est honnête et c'est une impasse. Un plan qui doit
+tenir sur une feuille — c'est toute la raison d'être de « Remplir la
+feuille » — est à l'échelle que le papier impose, et les seuls remèdes
+que proposait le dialogue étaient une échelle plus grande ou une feuille
+plus grande : deux refus de ce qui est demandé. La planche sortait sans
+un seul nom de stand, avec un avertissement expliquant pourquoi — une
+réponse juste à une question que personne n'a posée.
+
+Le dialogue porte donc une case, **« Agrandir les textes trop petits
+(1,8 mm minimum) »**, décochée par défaut.
+
+- **C'est un secours, pas un second réglage de style.** Elle ne touche
+  pas à ce qui passe déjà le plancher : une planche dont les étiquettes
+  sont lisibles sort identique, cochée ou non. Ce qui ne le passe pas est
+  remonté à 1,8 mm, où le texte déborde de ce qu'il nomme au lieu de
+  disparaître — et le dialogue le dit dans la même phrase, parce qu'un
+  plan dont les noms se chevauchent est *un autre* genre de faux qu'un
+  plan sans noms, et que seul le lecteur peut dire lequel il préfère.
+- **Un seul plancher, pour tous les textes.** Trois légendes peuvent
+  passer dessous, pour trois raisons sans rapport : un nom de stand, dont
+  la taille est décidée par sa case ; un objet `text`, mesuré en mètres
+  de *terrain* et donc la seule légende qui rétrécit avec l'échelle ; et
+  l'étiquette d'un objet dont la taille propre a été réglée bas. Elles
+  partagent `MIN_READABLE_PT` — le plancher de KL-041 sous un nom qui ne
+  dit pas « stand » —, sinon le millimétrage affiché ne serait vrai que
+  d'une des trois.
+- **Le calculateur se fait dire, il ne décide pas.** `fitLabelsToBox`
+  reçoit `enlargeToMin` : c'est l'appelant qui sait si une boîte trop
+  petite veut dire « ne rien dessiner » (l'écran dézoomé, où le lecteur
+  peut toujours zoomer) ou « dessiner quand même » (le papier, qui n'a
+  pas de zoom). Quand le plancher est forcé, aucune découpe n'y tient et
+  celle retenue est la moins mauvaise — ce qui a obligé à borner
+  `largestSizeFor` à zéro : classées par leur *négativité*, une boîte sans
+  hauteur préfère deux lignes à une, sous prétexte qu'elles sont plus
+  courtes. Exactement à l'envers.
+- **Les deux moitiés restent d'accord.** La moitié raster reçoit
+  `minTextPx` dans ses propres pixels, converti du même plancher par la
+  résolution du raster (un point valant 1/72 de pouce), et une cible qui
+  tient un plancher *remplace* le minimum de l'écran au lieu de s'y
+  ajouter — sans quoi le PNG et le PDF d'une même planche sauveraient la
+  même case à deux tailles différentes.
+- **C'est un réglage d'impression, pas de document.** Il vit dans
+  `useSheetExport` à côté de la grille imprimée et du PNG transparent, et
+  n'est jamais écrit dans le projet : un fichier `.plan` est le compte
+  rendu de ce qui a été dessiné, et une légende agrandie n'est pas ce qui
+  a été dessiné.
+
+699 tests, dont 20 nouveaux, validés par mutation : douze défauts
+introduits, douze détectés. Un a survécu au premier essai — la borne à
+zéro de `largestSizeFor`, indiscernable tant qu'on ne teste que des
+boîtes trop étroites, où « moins de lignes » et « moins négatif » donnent
+la même réponse. Il a fallu une boîte large et sans hauteur, celle d'un
+chapiteau d'un stand de profondeur, pour que le classement soit
+observable.
+
+Mesuré en relisant les octets du PDF produit : chapiteau de 20 × 10 m en
+vingt stands sur A3, tramé sur 6400 px. Sans la case, aucun nom n'est
+écrit ; avec, ils sortent à 5,1 pt — 1,8 mm au point près. Un objet
+`text` de 4 cm de terrain passe de 4,0 pt (le plancher d'impression) à
+5,1 pt, une étiquette réglée à 6 px de 4,5 pt à 5,1 pt, et une étiquette
+au défaut de 14 px reste à 10,5 pt, cochée ou non. Vérifié aussi dans le
+navigateur, sur le projet de démonstration à 1:949 (« Remplir la
+feuille ») : décochée, « À 1:949, les noms de stands sont trop petits
+pour être imprimés et seront omis. Passer à 1:719 […] Ou les agrandir
+quand même » ; cochée, la ligne devient « Noms de stands — 1,8 mm (5 pt)
+— agrandis, ils débordent ».
+
+La moitié raster (PNG) est câblée sur le même plancher et le même calcul,
+mais n'est pas couverte par un test : le dépôt n'a pas de rendu DOM en
+test, et aucun composant n'y est monté. Elle a été relue, pas mesurée.

@@ -3,8 +3,10 @@ import { createRectangleObject } from "../domain/objects";
 import { DEFAULT_LABEL_DISPLAY } from "../domain/display";
 import type { PlanObject, RectangleObject } from "../domain/types";
 import {
+  MIN_READABLE_PT,
   MIN_STAND_LABEL_PT,
   PT_PER_CSS_PX,
+  enlargeToReadable,
   fitStandLabelsPt,
   measureStandLegibility,
   pointsPerMeterAtScale,
@@ -102,6 +104,7 @@ describe("measureStandLegibility", () => {
       scaleDenominator: 200,
       sizePt: null,
       readableScaleDenominator: null,
+      enlarged: false,
     });
   });
 
@@ -169,6 +172,88 @@ describe("measureStandLegibility", () => {
       scaleDenominator: 5000,
       sizePt: null,
       readableScaleDenominator: null,
+      enlarged: false,
     });
+  });
+});
+
+describe("holding every printed text to the readable floor (KL-043)", () => {
+  /** Narrow enough that no cell can carry its name at a readable size. */
+  const cramped = marquee(["Association des commerçants", "B2"], 6, 2);
+
+  it("raises a text below the floor and leaves one above it alone", () => {
+    expect(enlargeToReadable(1, true)).toBe(MIN_READABLE_PT);
+    expect(enlargeToReadable(30, true)).toBe(30);
+    // Off, it is not a size setting at all.
+    expect(enlargeToReadable(1, false)).toBe(1);
+  });
+
+  it("uses the same floor for every kind of text, stand names included", () => {
+    // One answer to "what is too small to read on paper", not one per
+    // kind of caption — the dialogue quotes a single millimetre figure.
+    expect(MIN_READABLE_PT).toBe(MIN_STAND_LABEL_PT);
+  });
+
+  it("prints stand names at the floor where it printed none", () => {
+    const points = pointsPerMeterAtScale(2000);
+    expect(fitStandLabelsPt(cramped, cramped.stands, points)).toBeNull();
+    expect(
+      fitStandLabelsPt(cramped, cramped.stands, points, { enlarge: true })?.fontSizePx,
+    ).toBeCloseTo(MIN_STAND_LABEL_PT, 6);
+  });
+
+  it("reports the size the sheet will really show, and says it was forced", () => {
+    const verdict = measureStandLegibility([cramped], DEFAULT_LABEL_DISPLAY, 2000, true);
+    expect(verdict.sizePt).toBeCloseTo(MIN_STAND_LABEL_PT, 6);
+    expect(verdict.enlarged).toBe(true);
+    // The scale that would carry them honestly is still named: the
+    // switch is a way out, not a reason to stop offering the fix.
+    expect(verdict.readableScaleDenominator).not.toBeNull();
+    expect(verdict.readableScaleDenominator!).toBeLessThan(2000);
+  });
+
+  it("changes nothing about a scale that already carries the names", () => {
+    const roomy = marquee(["Boulanger", "Poterie"]);
+    const asIs = measureStandLegibility([roomy], DEFAULT_LABEL_DISPLAY, 100);
+    expect(measureStandLegibility([roomy], DEFAULT_LABEL_DISPLAY, 100, true)).toEqual(asIs);
+    expect(asIs.enlarged).toBe(false);
+  });
+
+  it("stays silent about a plan that writes no stand names", () => {
+    const plain: PlanObject = createRectangleObject({
+      layerId: "l1",
+      name: "Scène",
+      xM: 0,
+      yM: 0,
+      widthM: 8,
+      heightM: 6,
+    });
+    // Nothing to enlarge is not the same as something enlarged: a plan
+    // with no stands must not gain a notice from the switch.
+    expect(measureStandLegibility([plain], DEFAULT_LABEL_DISPLAY, 200, true)).toEqual({
+      scaleDenominator: 200,
+      sizePt: null,
+      readableScaleDenominator: null,
+      enlarged: false,
+    });
+  });
+
+  it("writes names no scale could ever carry, which is the case that had no remedy", () => {
+    // A name longer than the stand it names: five-centimetre cells (the
+    // narrowest the grid allows) and a name of a hundred characters. No
+    // scale fits that, not even 1:1, so KL-041 had nothing to suggest
+    // here — the floor is the only way out.
+    const impossible = marquee(
+      [
+        "Association intercommunale des commerçants et artisans réunis du canton — permanence et buvette",
+      ],
+      400,
+    );
+    const off = measureStandLegibility([impossible], DEFAULT_LABEL_DISPLAY, 200);
+    expect(off.sizePt).toBeNull();
+    expect(off.readableScaleDenominator).toBeNull();
+    const on = measureStandLegibility([impossible], DEFAULT_LABEL_DISPLAY, 200, true);
+    expect(on.sizePt).toBeCloseTo(MIN_STAND_LABEL_PT, 6);
+    expect(on.enlarged).toBe(true);
   });
 });

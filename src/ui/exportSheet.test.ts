@@ -542,3 +542,131 @@ describe("buildSheetPdf caption rotation (KL-042)", () => {
     expect(sideways.dx).toBeCloseTo(upright.dy, 6);
   });
 });
+
+describe("buildSheetPdf holding the readable floor (KL-043)", () => {
+  const viewport = { basePixelsPerMeter: 20, zoom: 1, offsetXPx: 0, offsetYPx: 0 };
+
+  function sheetWith(objects: PlanObject[], enlargeSmallText: boolean, pixelWidth = 800) {
+    const sheet = createSheet({ name: "Plan" });
+    return latin1(
+      buildSheetPdf({
+        project: createEmptyProject({ name: "Virade" }),
+        sheet,
+        layout: computeSheetLayout(sheet, null),
+        drawingJpegDataUrl: "data:image/jpeg;base64,/9j/2Q==",
+        pixelWidth,
+        pixelHeight: Math.round(pixelWidth * 0.7),
+        now: new Date("2026-09-09T12:00:00Z"),
+        vectorObjects: objects,
+        vectorViewport: viewport,
+        enlargeSmallText,
+      }),
+    );
+  }
+
+  /** 1.8 mm, the ISO 3098 floor, in points — what every text is held to. */
+  const FLOOR_PT = (1.8 / 25.4) * 72;
+
+  const marquee = (labels: string[], columns: number) => ({
+    ...createRectangleObject({
+      layerId: "l1",
+      name: "Chapiteau",
+      xM: 0,
+      yM: 0,
+      widthM: 20,
+      heightM: 10,
+    }),
+    stands: { columns, rows: 1, gapM: 0, marginM: 0, labels },
+  });
+
+  /** A text object is measured in metres of ground, so it is the caption that shrinks with the scale. */
+  const groundText = (fontSizeM: number): PlanObject => ({
+    id: "t1",
+    layerId: "l1",
+    type: "text",
+    name: "Note",
+    text: "Entree",
+    xM: 1,
+    yM: 1,
+    rotationDeg: 0,
+    fontSizeM,
+  });
+
+  it("writes the stand names it would otherwise have dropped", () => {
+    // Twenty cells in a 20 m tent, drawn over a large raster: a metre of
+    // ground is a fraction of a millimetre of paper, and KL-041 leaves
+    // the cells empty rather than print specks.
+    const names = ["Boulangerie Dupont", ...Array.from({ length: 19 }, () => "")];
+    expect(sheetWith([marquee(names, 20)], false, 6400)).not.toContain("Boulangerie");
+    const rescued = sheetWith([marquee(names, 20)], true, 6400);
+    // A cell this narrow holds nothing at any size, so the name is left
+    // unbroken and spills — which is what the dialogue warns about.
+    expect(sizeOf(rescued, "Boulangerie Dupont")).toBeCloseTo(FLOOR_PT, 4);
+  });
+
+  it("raises a ground-measured text that the scale has shrunk below the floor", () => {
+    // 4 cm of lettering on the ground is nothing on paper — the one
+    // caption that cannot be rescued by setting a bigger size, because
+    // its size *is* a ground measurement.
+    const tiny = groundText(0.04);
+    const asIs = sizeOf(sheetWith([tiny], false), "Entree");
+    expect(asIs).not.toBeNull();
+    expect(asIs!).toBeLessThan(FLOOR_PT);
+    expect(sizeOf(sheetWith([tiny], true), "Entree")).toBeCloseTo(FLOOR_PT, 4);
+  });
+
+  it("leaves a text that is already legible exactly as it was", () => {
+    // The switch is a rescue, not a second size setting: a sheet whose
+    // captions clear the floor must come out of the export unchanged.
+    const big = groundText(4);
+    expect(sizeOf(sheetWith([big], true), "Entree")).toBe(
+      sizeOf(sheetWith([big], false), "Entree"),
+    );
+
+    const scene = createRectangleObject({
+      layerId: "l1",
+      name: "Scene",
+      xM: 0,
+      yM: 0,
+      widthM: 8,
+      heightM: 6,
+    });
+    // 14 px is 10.5 pt, twice the floor: untouched either way.
+    expect(sizeOf(sheetWith([scene], true), "Scene")).toBeCloseTo(14 * (72 / 96), 4);
+  });
+
+  it("raises a caption whose own size was set below the floor", () => {
+    const whispered = createRectangleObject({
+      layerId: "l1",
+      name: "Scene",
+      xM: 0,
+      yM: 0,
+      widthM: 8,
+      heightM: 6,
+      style: { labelFontSize: 6 },
+    });
+    // 6 px is 4.5 pt — printable, and still under the 1.8 mm floor.
+    expect(sizeOf(sheetWith([whispered], false), "Scene")).toBeCloseTo(4.5, 4);
+    expect(sizeOf(sheetWith([whispered], true), "Scene")).toBeCloseTo(FLOOR_PT, 4);
+  });
+
+  it("changes nothing when the switch is off, which is the default", () => {
+    const names = ["Boulangerie Dupont", ...Array.from({ length: 19 }, () => "")];
+    const objects = [marquee(names, 20), groundText(0.04)];
+    const sheet = createSheet({ name: "Plan" });
+    const withoutFlag = latin1(
+      buildSheetPdf({
+        project: createEmptyProject({ name: "Virade" }),
+        sheet,
+        layout: computeSheetLayout(sheet, null),
+        drawingJpegDataUrl: "data:image/jpeg;base64,/9j/2Q==",
+        pixelWidth: 6400,
+        pixelHeight: 4480,
+        now: new Date("2026-09-09T12:00:00Z"),
+        vectorObjects: objects,
+        vectorViewport: viewport,
+      }),
+    );
+    expect(withoutFlag).toBe(sheetWith(objects, false, 6400));
+  });
+});

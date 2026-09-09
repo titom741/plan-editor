@@ -15,7 +15,12 @@ import {
 import { polylineMidpointM } from "../domain/measure";
 import { LABEL_LINE_HEIGHT, estimateTextWidthPx } from "../rendering/labelFit";
 import { getEffectivePixelsPerMeter, worldToScreen, type Viewport } from "../rendering/viewport";
-import { PT_PER_CSS_PX, clampLabelPt, fitStandLabelsPt } from "../printing/standLabels";
+import {
+  PT_PER_CSS_PX,
+  clampLabelPt,
+  enlargeToReadable,
+  fitStandLabelsPt,
+} from "../printing/standLabels";
 import type { SheetLayout } from "../printing/sheetLayout";
 import { suggestedFileName } from "./projectFileActions";
 
@@ -78,6 +83,12 @@ export interface SheetContent {
   vectorViewport?: Viewport;
   /** The plan's default label settings; each object may still override them. */
   labelDisplay?: LabelDisplay;
+  /**
+   * Hold every printed text to the readable floor, spilling out of the
+   * shape it names rather than shrinking below it or being dropped
+   * (KL-043). Off unless the user asked for it in the export dialogue.
+   */
+  enlargeSmallText?: boolean;
 }
 
 function rgb(hex: string | undefined, fallback: string): [number, number, number] {
@@ -120,13 +131,20 @@ function vectorGraphics(content: SheetContent): { paths: PdfPathItem[]; text: Pd
         text: object.text,
         xPt: anchor.x,
         yPt: anchor.y,
-        sizePt: Math.max(
-          4,
-          (object.fontSizeM *
-            content.vectorViewport.basePixelsPerMeter *
-            content.vectorViewport.zoom *
-            drawing.widthPt) /
-            content.pixelWidth,
+        // A text object is measured in metres of ground, so it is the one
+        // caption that shrinks with the scale: 2 m at 1:2000 is a
+        // millimetre of paper. The 4 pt floor keeps it printable; the
+        // readable floor, when asked for, keeps it legible.
+        sizePt: enlargeToReadable(
+          Math.max(
+            4,
+            (object.fontSizeM *
+              content.vectorViewport.basePixelsPerMeter *
+              content.vectorViewport.zoom *
+              drawing.widthPt) /
+              content.pixelWidth,
+          ),
+          content.enlargeSmallText ?? false,
         ),
         rotationDeg: -object.rotationDeg,
       });
@@ -205,9 +223,9 @@ const CAP_HALF_HEIGHT = 0.36;
 /** Gap between a caption and the edge (or stroke) it is placed clear of, in points — the 6 screen pixels the editor uses. */
 const LABEL_GAP_PT = 6 * PT_PER_CSS_PX;
 
-/** The size this object's caption prints at, its own setting included. */
-function labelSizePt(object: PlanObject): number {
-  return clampLabelPt(resolveLabelFontSizePx(object) * PT_PER_CSS_PX);
+/** The size this object's caption prints at, its own setting included, and the floor the sheet may be holding. */
+function labelSizePt(object: PlanObject, enlarge: boolean): number {
+  return enlargeToReadable(clampLabelPt(resolveLabelFontSizePx(object) * PT_PER_CSS_PX), enlarge);
 }
 
 /**
@@ -299,7 +317,7 @@ function labelText(
 
   const bounds = getObjectBoundsM(object);
   if (!bounds) return stands;
-  const sizePt = labelSizePt(object);
+  const sizePt = labelSizePt(object, content.enlargeSmallText ?? false);
   const step = sizePt * LABEL_LINE_HEIGHT;
 
   // A line's caption reads half-way along the line; a marquee full of
@@ -350,9 +368,13 @@ function standLabels(
   // handed to a cell 50 mm wide and to one of 5 mm. The bounds and the
   // padding live in `printing/standLabels.ts`, with the function the
   // export dialogue uses to warn that a scale cannot carry them.
-  const fitted = fitStandLabelsPt(object, grid, pointsPerMeter(content));
+  const fitted = fitStandLabelsPt(object, grid, pointsPerMeter(content), {
+    enlarge: content.enlargeSmallText ?? false,
+  });
   // Nothing fits at a size anyone could read: the cells print empty, as
-  // they do on screen, rather than carrying a row of grey specks.
+  // they do on screen, rather than carrying a row of grey specks —
+  // unless the sheet is holding the floor, in which case they print
+  // over the cell's edges, which the dialogue warned about.
   if (!fitted) return [];
 
   const sizePt = fitted.fontSizePx;

@@ -501,6 +501,8 @@ export default function Editor({
     setPrintGrid,
     transparentPng,
     setTransparentPng,
+    enlargeSmallText,
+    setEnlargeSmallText,
     changeSheet,
     addSheet,
     duplicateSheet,
@@ -1577,6 +1579,8 @@ export default function Editor({
           onShowGridChange={setPrintGrid}
           transparentPng={transparentPng}
           onTransparentPngChange={setTransparentPng}
+          enlargeSmallText={enlargeSmallText}
+          onEnlargeSmallTextChange={setEnlargeSmallText}
           onExportPdf={() => startExport("pdf")}
           onExportMultiPage={startMultiPageExport}
           onExportPng={() => startExport("png")}
@@ -1710,6 +1714,8 @@ export default function Editor({
             showGrid={printGrid}
             labelDisplay={labelDisplay}
             renderScale={printRaster.effectiveDpi / CSS_PIXELS_PER_INCH}
+            effectiveDpi={printRaster.effectiveDpi}
+            enlargeSmallText={enlargeSmallText}
             transparentBackground={pendingExport === "png" && transparentPng}
             onReady={handlePrintCanvasReady}
           />

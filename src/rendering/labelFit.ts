@@ -91,6 +91,17 @@ export interface FitLabelsOptions {
   maxFontSizePx: number;
   /** Below this the text is not read, it is guessed at; the caller draws nothing instead. */
   minFontSizePx: number;
+  /**
+   * What to do when the box cannot hold the text at `minFontSizePx`:
+   * draw nothing (the default), or draw it at `minFontSizePx` anyway and
+   * let it spill out of the box.
+   *
+   * Spilling is a deliberate choice the caller offers the user, not a
+   * fallback taken quietly — a name that runs into its neighbour is a
+   * worse plan than a blank cell, unless the alternative is a sheet with
+   * no names on it at all. See KL-043.
+   */
+  enlargeToMin?: boolean;
   /** How many lines a label may break into. Two by default: it buys most of the size, and three lines in a stand cell is a paragraph. */
   maxLines?: number;
 }
@@ -105,12 +116,17 @@ const DEFAULT_MAX_LINES = 2;
  */
 const MAX_ENUMERATED_TOKENS = 8;
 
-/** The largest size at which these lines still fit the box, ignoring the caller's own ceiling. */
+/**
+ * The largest size at which these lines still fit the box, ignoring the
+ * caller's own ceiling. Never below zero: a box with negative room fits
+ * nothing, and "less negative" is not "closer to fitting" — left
+ * unclamped it ranks a long line above a short one, which is backwards.
+ */
 function largestSizeFor(lines: readonly string[], box: LabelBoxPx): number {
   const widest = Math.max(...lines.map((line) => estimateTextWidthPx(line, 1)), 0);
   const byWidth = widest > 0 ? box.widthPx / widest : Number.POSITIVE_INFINITY;
   const byHeight = box.heightPx / (lines.length * LABEL_LINE_HEIGHT);
-  return Math.min(byWidth, byHeight);
+  return Math.max(0, Math.min(byWidth, byHeight));
 }
 
 /**
@@ -188,7 +204,8 @@ export function candidateLineBreaks(text: string, maxLines: number): string[][] 
  *
  * `null` when even the smallest allowed size does not fit — the caller's
  * cue to draw nothing at all, which is what a plan wants at low zoom:
- * empty cells rather than a smudge of grey.
+ * empty cells rather than a smudge of grey. `enlargeToMin` is how a
+ * caller says it would rather have the text spill than lose it.
  */
 export function fitLabelsToBox(
   texts: readonly string[],
@@ -197,7 +214,9 @@ export function fitLabelsToBox(
 ): FittedLabels | null {
   const maxLines = Math.max(1, options.maxLines ?? DEFAULT_MAX_LINES);
   if (texts.length === 0) return null;
-  if (box.widthPx <= 0 || box.heightPx <= 0) return null;
+  // A box with no room at all has no size to derive; only a caller
+  // holding the floor still wants something drawn there.
+  if ((box.widthPx <= 0 || box.heightPx <= 0) && !options.enlargeToMin) return null;
 
   const perText = texts.map((text) => {
     const candidates = candidateLineBreaks(text, maxLines);
@@ -205,14 +224,27 @@ export function fitLabelsToBox(
     return { candidates, sizes, best: Math.max(...sizes) };
   });
 
-  const fontSizePx = Math.min(options.maxFontSizePx, ...perText.map((entry) => entry.best));
-  if (!Number.isFinite(fontSizePx) || fontSizePx < options.minFontSizePx) return null;
+  const natural = Math.min(options.maxFontSizePx, ...perText.map((entry) => entry.best));
+  if (!Number.isFinite(natural)) return null;
+  // Too small to read: nothing, unless the caller asked for the floor to
+  // be held regardless. The floor wins over the ceiling here — a caller
+  // that pins both has said the text must be readable, and printing it at
+  // a size it called unreadable would honour neither.
+  const fontSizePx =
+    natural < options.minFontSizePx
+      ? options.enlargeToMin
+        ? options.minFontSizePx
+        : null
+      : natural;
+  if (fontSizePx === null) return null;
 
   return {
     fontSizePx,
     lines: perText.map((entry) => {
       // Candidates are ordered fewest-lines-first, so this is the least
-      // broken form that still fits at the size everyone shares.
+      // broken form that still fits at the size everyone shares. When the
+      // floor was forced nothing fits at it, and the fallback picks the
+      // break that overflows least.
       const index = entry.sizes.findIndex((size) => size >= fontSizePx);
       return entry.candidates[index === -1 ? entry.sizes.indexOf(entry.best) : index] ?? [];
     }),

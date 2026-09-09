@@ -31,6 +31,18 @@ interface PlanObjectShapeProps {
    * paper instead of a hairline (see `PrintCanvas`).
    */
   renderScale?: number;
+  /**
+   * The smallest a text may be drawn, in *this target's* pixels, with
+   * anything below it raised to this size even where it then overflows
+   * what it names (KL-043).
+   *
+   * 0 on screen — a plan zoomed out wants empty cells, not a grey wash,
+   * and the reader can always zoom. It is a print concern: paper has no
+   * zoom, so a caption that comes out below the readable floor is simply
+   * lost, and `PrintCanvas` passes the floor here when the export
+   * dialogue's "agrandir les textes" is on.
+   */
+  minTextPx?: number;
   /** The project's default label settings; the object's own `display` override wins over it. */
   labelDisplay?: LabelDisplay;
   /** `additive` is true when Shift (or Ctrl/Cmd) was held — the caller then toggles this object in the selection instead of replacing it. */
@@ -67,6 +79,7 @@ export function PlanObjectShape({
   draggable,
   selectable,
   renderScale = 1,
+  minTextPx = 0,
   labelDisplay = DEFAULT_LABEL_DISPLAY,
   onSelect,
   onBeginEdit,
@@ -91,8 +104,8 @@ export function PlanObjectShape({
       : object.style?.dash === "dotted"
         ? [px(2), px(5)]
         : undefined;
-  /** The size this object's caption is drawn at, in this target's pixels — its own setting, or its type's default. */
-  const labelFontSizePx = px(resolveLabelFontSizePx(object));
+  /** The size this object's caption is drawn at, in this target's pixels — its own setting, or its type's default, never below the target's floor. */
+  const labelFontSizePx = Math.max(minTextPx, px(resolveLabelFontSizePx(object)));
   /** How many lines the caption occupies, which is what places it relative to the shape. */
   const labelLineCount = labelText.split("\n").length;
 
@@ -166,6 +179,7 @@ export function PlanObjectShape({
               grid={standGrid}
               viewport={viewport}
               px={px}
+              minTextPx={minTextPx}
               ownFontSizePx={object.style?.labelFontSize}
             />
           )}
@@ -324,7 +338,10 @@ export function PlanObjectShape({
         <Group {...commonGroupProps}>
           <Text
             text={object.text}
-            fontSize={metersToPixels(object.fontSizeM, viewport)}
+            /* Measured in metres of ground, so it is the one caption
+               that shrinks with the scale rather than staying an
+               annotation: on paper it is the first to disappear. */
+            fontSize={Math.max(minTextPx, metersToPixels(object.fontSizeM, viewport))}
             fontFamily={object.style?.fontFamily ?? "Arial"}
             fontStyle={
               [
@@ -389,12 +406,15 @@ function StandLabels({
   grid,
   viewport,
   px,
+  minTextPx,
   ownFontSizePx,
 }: {
   object: RectangleObject;
   grid: StandGrid;
   viewport: Viewport;
   px: (screenPx: number) => number;
+  /** The floor this target holds every text to, in its own pixels; 0 leaves an unfittable cell empty. */
+  minTextPx: number;
   /** The marquee's own label size in screen pixels, when it carries one: it then caps its stands too, up or down. Undefined leaves them the default ceiling. */
   ownFontSizePx: number | undefined;
 }) {
@@ -412,7 +432,12 @@ function StandLabels({
     },
     {
       maxFontSizePx: px(ownFontSizePx ?? MAX_STAND_FONT_SIZE_PX),
-      minFontSizePx: px(MIN_STAND_FONT_SIZE_PX),
+      // A target holding a floor replaces the screen's rule rather than
+      // adding to it, so the raster and the PDF pick the same size for
+      // the same cell — the two halves of one export must not disagree.
+      // On screen (no floor) an unfittable cell stays empty, as always.
+      minFontSizePx: minTextPx > 0 ? minTextPx : px(MIN_STAND_FONT_SIZE_PX),
+      enlargeToMin: minTextPx > 0,
     },
   );
   if (!fitted) return null;

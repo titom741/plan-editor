@@ -1768,3 +1768,51 @@ rather than off the top of its bounding box: for an unturned tent the two
 points coincide, which is why nothing caught it, and for a turned one the
 bounding box has no top edge to speak of.
 
+
+### The floor could only be reached by giving up the page (KL-043)
+
+KL-041's floor is honest and it is a dead end. A plan that has to fit one
+sheet — the whole point of *« Remplir la feuille »* — is at the scale the
+paper dictates, and the only remedies the dialogue offered were a larger
+scale or a larger sheet: both of them refusals of the thing being asked
+for. The sheet came out with no stand names on it and a notice explaining
+why, which is a correct answer to a question nobody asked.
+
+So the export dialogue carries a switch, **« Agrandir les textes trop
+petits »**, off by default. It changes nothing that already clears the
+floor — that is what makes it a rescue rather than a second, invisible
+style setting — and raises what does not to 1.8 mm, where the text spills
+over the shape it names rather than vanishing. The dialogue says so in
+the same breath, because a plan whose names overlap is a *different* kind
+of wrong from one with no names, and only the reader can say which they
+would rather have.
+
+**One floor, every kind of text.** Three captions can fall under it, for
+three unrelated reasons: a stand name, whose size is decided by its cell;
+a `text` object, measured in metres of *ground* and therefore the only
+caption that shrinks with the scale; and an object label whose own size
+was set low. They share `MIN_READABLE_PT` in `printing/standLabels.ts`,
+which is KL-041's floor under a name that does not say "stand" — one
+answer to "what is too small to read on paper", not one per kind of
+caption, so the millimetre figure the dialogue quotes is true of all of
+them.
+
+**The fitter learned to be told, not to decide.** `fitLabelsToBox` takes
+`enlargeToMin`, and it is the caller that knows whether a box too small
+means "draw nothing" (the screen at low zoom, where the reader can always
+zoom in) or "draw it anyway" (paper, which has no zoom). When the floor is
+forced, no candidate break fits it, and the one chosen is the one that
+came closest — which required clamping `largestSizeFor` at zero. Ranked
+by how *negative* they came out, a box with no vertical room prefers two
+lines to one on the grounds that each is shorter: exactly backwards.
+
+**The two halves still agree.** The raster half is handed `minTextPx` in
+its own pixels, converted from the same floor through the raster's DPI
+(a point being 1/72 inch), and a target holding a floor *replaces* the
+screen's own minimum rather than adding to it — otherwise a PNG and a PDF
+of one sheet would rescue the same cell at two different sizes.
+
+The switch is print state, not document state: it lives in
+`useSheetExport` beside the printed grid and the transparent PNG, and is
+never written to the project. A `.plan` file records what was drawn, and
+an enlarged caption is not what was drawn.

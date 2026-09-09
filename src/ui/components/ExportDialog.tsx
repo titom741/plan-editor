@@ -13,7 +13,7 @@ import {
   getCoveredAreaM,
 } from "../../domain/sheets";
 import type { Orientation, PaperSize, Sheet } from "../../domain/types";
-import type { StandLegibility } from "../../printing/standLabels";
+import { MIN_READABLE_PT, type StandLegibility } from "../../printing/standLabels";
 import type { ReactNode } from "react";
 
 interface ExportDialogProps {
@@ -34,6 +34,9 @@ interface ExportDialogProps {
   onShowGridChange: (showGrid: boolean) => void;
   transparentPng: boolean;
   onTransparentPngChange: (value: boolean) => void;
+  /** Whether this export holds every text to the readable floor rather than losing it (KL-043). */
+  enlargeSmallText: boolean;
+  onEnlargeSmallTextChange: (value: boolean) => void;
   onExportPdf: () => void;
   onExportMultiPage: () => void;
   onExportPng: () => void;
@@ -49,6 +52,9 @@ function formatStandSize(sizePt: number): string {
   const mm = (sizePt / 72) * 25.4;
   return `${mm.toFixed(1).replace(".", ",")} mm (${Math.round(sizePt)} pt)`;
 }
+
+/** The readable floor written the way the dialogue quotes it, so the checkbox and the notices cannot drift apart. */
+const READABLE_FLOOR_MM = `${((MIN_READABLE_PT / 72) * 25.4).toFixed(1).replace(".", ",")} mm`;
 
 async function fileToJpegDataUrl(file: File): Promise<string> {
   const source = URL.createObjectURL(file);
@@ -102,6 +108,8 @@ export function ExportDialog({
   onShowGridChange,
   transparentPng,
   onTransparentPngChange,
+  enlargeSmallText,
+  onEnlargeSmallTextChange,
   onExportPdf,
   onExportMultiPage,
   onExportPng,
@@ -336,6 +344,27 @@ export function ExportDialog({
           />
           <span>PNG avec zones vides transparentes</span>
         </label>
+        {/*
+          The rescue, offered rather than applied (KL-043). Everything
+          else in this dialogue leaves the drawing alone and changes the
+          paper around it; this one changes the drawing, so it is a
+          switch the user throws knowingly and a notice sits under it.
+        */}
+        <label className="export-dialog__check">
+          <input
+            type="checkbox"
+            checked={enlargeSmallText}
+            onChange={(event) => onEnlargeSmallTextChange(event.target.checked)}
+          />
+          <span>Agrandir les textes trop petits ({READABLE_FLOOR_MM} minimum)</span>
+        </label>
+        {enlargeSmallText && (
+          <p className="export-dialog__warning">
+            ⚠ Les textes qui sortiraient sous {READABLE_FLOOR_MM} sont remontés à cette taille. Ils
+            ne sont plus à l'échelle du plan et peuvent déborder de ce qu'ils nomment : bon pour une
+            lecture, pas pour un relevé à la règle.
+          </p>
+        )}
 
         <div className="export-dialog__summary">
           <div className="properties-panel__static">
@@ -396,13 +425,24 @@ export function ExportDialog({
                   </button>
                   , ou choisir un format de papier plus grand.
                 </>
-              )}
+              )}{" "}
+              <button
+                type="button"
+                className="export-dialog__link"
+                onClick={() => onEnlargeSmallTextChange(true)}
+              >
+                Ou les agrandir quand même
+              </button>
+              , s'il faut que le plan tienne sur cette feuille.
             </p>
           )}
           {standLegibility.sizePt !== null && (
             <div className="properties-panel__static">
               <span>Noms de stands</span>
-              <span>{formatStandSize(standLegibility.sizePt)}</span>
+              <span>
+                {formatStandSize(standLegibility.sizePt)}
+                {standLegibility.enlarged ? " — agrandis, ils débordent" : ""}
+              </span>
             </div>
           )}
           {contentSize && fits && (
