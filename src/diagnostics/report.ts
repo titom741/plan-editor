@@ -42,6 +42,7 @@ export function buildDiagnosticReport(
     polygon: 0,
     text: 0,
     image: 0,
+    symbol: 0,
   };
   project.objects.forEach((object) => {
     objectsByType[object.type] += 1;

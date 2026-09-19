@@ -59,7 +59,7 @@ payoff:
   set (`Structures`, `Électricité`, `Sécurité`, `Annotations`) by
   `createDefaultLayers()`.
 - **`PlanObject`** — a discriminated union (`rectangle | circle | line |
-  polygon | text`) sharing `PlanObjectBase` (id, layerId, name, optional
+  polygon | text | image | symbol`) sharing `PlanObjectBase` (id, layerId, name, optional
   label override, `xM`/`yM` anchor, `rotationDeg`, style). Every geometric
   field is named with an `M` suffix (`widthM`, `heightM`, `radiusM`,
   `pointsM`) as a naming convention that makes it visually obvious, at every
@@ -437,7 +437,8 @@ No resize/rotate math lives in this component — it only positions handles
 ### Interaction model
 
 `ui/App.tsx` owns one `activeTool: ToolId` (`"select" | "rectangle" |
-"circle" | "line" | "polygon" | "text"`, defined in `ui/tools.ts`) that
+"circle" | "line" | "arrow" | "polyline" | "polygon" | "text" | "symbol"`,
+defined in `ui/tools.ts`) that
 `PlanCanvas` switches its pointer behavior on:
 
 - **select** — click an object to select it (click empty canvas to
@@ -456,6 +457,17 @@ No resize/rotate math lives in this component — it only positions handles
 - **text** — a single click places a text object with placeholder
   content, immediately selected, ready to rename from the properties
   panel.
+- **arrow** — the line gesture exactly, committed as a `line` whose style
+  carries `arrowEnd`. It is not a type of its own: the arrowhead has been
+  a line style since KL-002, and a second representation of the same
+  thing would have to be kept in step in the renderer, the exporters and
+  the file reader for no gain. Only the naming knows the difference (see
+  `ObjectNameKind` in `domain/labels.ts`), so a plan of arrows is not a
+  plan of "Ligne 7".
+- **symbol** — a single click places a `symbol` object carrying the
+  character currently chosen in the palette. Anchored on its **centre**
+  (like a circle, unlike a text) because it marks the point it is put on,
+  and sized in metres of ground so it holds its real size at every zoom.
 
 Every tool switches back to **select** and selects the object it just
 created, so "draw one shape, immediately see/tweak its real-world
@@ -839,8 +851,8 @@ Only source images remain resolution-dependent. Shapes, text, frame,
 cartouche, captions and scale bar are vector at exact point coordinates.
 
 `printing/pdf.ts` is a small multi-page writer (catalog, page tree,
-content streams, JPEG XObjects, paths and a standard font). Two details it gets right and
-that are easy to get wrong:
+content streams, JPEG XObjects, paths and two standard fonts). Three details it gets
+right and that are easy to get wrong:
 
 - **Offsets are counted in bytes, not characters.** The cross-reference
   table records where each object starts; one accented character in a
@@ -851,6 +863,18 @@ that are easy to get wrong:
   where French lives: `œ`, the typographic apostrophe, the em dash, the
   ellipsis. Getting this wrong prints "Cœur — l'entrée…" as
   "C?ur ? l'entr?e?".
+- **Symbols are a second font, addressed by byte (KL-044).** WinAnsi has
+  no arrows, no crosses, no numbered markers — so a `symbol` object is
+  printed from **ZapfDingbats** (`/F2`), one of the same 14 standard
+  fonts no viewer has to download. A dingbat is selected by a *byte* in
+  that font's own encoding, unrelated to the character's Unicode code
+  point, so `PdfTextItem.dingbat` carries the byte while `text` keeps the
+  character for readability, and the two are never mapped here: the table
+  lives in `domain/symbols.ts` and was read off a printed proof sheet
+  rather than derived. The font gets no `/Encoding` entry — imposing
+  WinAnsi on it would select the wrong glyph for every byte — and the
+  byte still needs escaping when it lands on `(`, `)` or `\`, which it
+  does (an aeroplane is 0x28).
 
 ### Three defects the first printed sheet revealed
 

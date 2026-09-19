@@ -1,4 +1,5 @@
 import { createId } from "./ids";
+import { DEFAULT_SYMBOL_CHARACTER, DEFAULT_SYMBOL_SIZE_M } from "./symbols";
 import type {
   CircleObject,
   LineObject,
@@ -8,6 +9,7 @@ import type {
   RectangleObject,
   TextObject,
   ImageObject,
+  SymbolObject,
 } from "./types";
 
 /**
@@ -135,6 +137,25 @@ export function createTextObject(
     style: input.style,
     text: input.text,
     fontSizeM: input.fontSizeM ?? DEFAULT_TEXT_SIZE_M,
+  };
+}
+
+export function createSymbolObject(
+  input: CommonObjectInput & { character?: string; sizeM?: number },
+): SymbolObject {
+  return {
+    id: createId("obj"),
+    type: "symbol",
+    layerId: input.layerId,
+    name: input.name,
+    label: input.label,
+    ...materialFields(input),
+    xM: input.xM,
+    yM: input.yM,
+    rotationDeg: input.rotationDeg ?? 0,
+    style: input.style,
+    character: input.character ?? DEFAULT_SYMBOL_CHARACTER,
+    sizeM: input.sizeM ?? DEFAULT_SYMBOL_SIZE_M,
   };
 }
 

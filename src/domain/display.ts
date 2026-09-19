@@ -79,6 +79,9 @@ export const DEFAULT_LABEL_FONT_SIZE_PX: Record<PlanObject["type"], number> = {
   polygon: 12,
   text: 14,
   image: 12,
+  // A symbol is small and its caption sits under it; matching the line's
+  // size keeps the pair from reading as two separate marks.
+  symbol: 12,
 };
 
 /** Below this a caption is a smudge; above it, it is a banner across the plan. Both ends are what the properties panel accepts. */

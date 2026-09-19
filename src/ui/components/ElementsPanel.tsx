@@ -10,6 +10,7 @@ const TYPE_ICONS: Record<PlanObject["type"], string> = {
   polygon: "⬠",
   text: "T",
   image: "🖼",
+  symbol: "★",
 };
 
 interface ElementsPanelProps {

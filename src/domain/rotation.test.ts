@@ -6,6 +6,7 @@ import {
   createLineObject,
   createPolygonObject,
   createRectangleObject,
+  createSymbolObject,
 } from "./objects";
 import type { PlanObject } from "./types";
 
@@ -91,5 +92,41 @@ describe("rotateObjectToDeg (KL-027)", () => {
     const after = boundsCenterM(getObjectBoundsM(rotated)!);
     expect(after.xM).toBeCloseTo(before.xM, 9);
     expect(after.yM).toBeCloseTo(before.yM, 9);
+  });
+});
+
+describe("a symbol turns on the point it marks (KL-044)", () => {
+  const symbol = createSymbolObject({
+    layerId: "l1",
+    name: "Secours",
+    xM: 12,
+    yM: -3,
+    character: "✚",
+    sizeM: 2,
+  });
+
+  it("pivots on its anchor, which is already its centre", () => {
+    expect(getLocalCenter(symbol)).toEqual({ xM: 0, yM: 0 });
+  });
+
+  it("leaves the marked point exactly where it was, at every angle", () => {
+    // A symbol marks a point, so turning it must not slide that point:
+    // an offset pivot would walk the mark off the thing it marks. Any
+    // other local centre solves for a different anchor and this catches
+    // it — which is what the first mutation pass found nothing doing.
+    for (const angle of [15, 45, 90, 180, 274]) {
+      const rotated = { ...symbol, ...rotateObjectToDeg(symbol, angle) };
+      expect(rotated.xM).toBeCloseTo(12, 9);
+      expect(rotated.yM).toBeCloseTo(-3, 9);
+      expect(pivotWorld(rotated).xM).toBeCloseTo(12, 9);
+      expect(pivotWorld(rotated).yM).toBeCloseTo(-3, 9);
+    }
+  });
+
+  it("keeps its bounding box centred on that point too", () => {
+    const rotated = { ...symbol, ...rotateObjectToDeg(symbol, 45) };
+    const after = boundsCenterM(getObjectBoundsM(rotated)!);
+    expect(after.xM).toBeCloseTo(12, 9);
+    expect(after.yM).toBeCloseTo(-3, 9);
   });
 });

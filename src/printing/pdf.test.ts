@@ -168,6 +168,56 @@ describe("buildPdf — embedded image", () => {
   });
 });
 
+describe("ZapfDingbats glyphs (KL-044)", () => {
+  const page = { widthPt: 200, heightPt: 200 };
+
+  it("declares the second standard font beside Helvetica", () => {
+    const text = asLatin1(buildPdf(page, metadata));
+    expect(text).toContain("/BaseFont /ZapfDingbats");
+    expect(text).toContain("/Font << /F1 3 0 R /F2 4 0 R >>");
+  });
+
+  it("leaves ZapfDingbats its own encoding", () => {
+    // Imposing WinAnsi on it would select a different glyph for every
+    // byte — the table in `domain/symbols.ts` would silently be wrong.
+    const text = asLatin1(buildPdf(page, metadata));
+    expect(text).toContain("/BaseFont /ZapfDingbats >>");
+  });
+
+  it("writes a symbol as its byte in /F2 rather than the character in /F1", () => {
+    const text = asLatin1(
+      buildPdf(
+        { ...page, text: [{ text: "★", dingbat: 0x48, xPt: 5, yPt: 5, sizePt: 12 }] },
+        metadata,
+      ),
+    );
+    expect(text).toContain("/F2 12 Tf");
+    expect(text).not.toContain("/F1 12 Tf");
+    // 0x48 is "H" as a byte: the glyph is the star, the byte is what says so.
+    expect(text).toContain("(H) Tj");
+  });
+
+  it("escapes a dingbat byte that happens to be a parenthesis", () => {
+    // The aeroplane is 0x28, i.e. "(" — written raw it would close the
+    // string early and corrupt the page.
+    const text = asLatin1(
+      buildPdf(
+        { ...page, text: [{ text: "✈", dingbat: 0x28, xPt: 5, yPt: 5, sizePt: 10 }] },
+        metadata,
+      ),
+    );
+    expect(text).toContain("(\\() Tj");
+  });
+
+  it("still writes ordinary text in Helvetica", () => {
+    const text = asLatin1(
+      buildPdf({ ...page, text: [{ text: "Entrée", xPt: 5, yPt: 5, sizePt: 9 }] }, metadata),
+    );
+    expect(text).toContain("/F1 9 Tf");
+    expect(text).toContain("(Entr\xE9e) Tj");
+  });
+});
+
 describe("toPdfDate", () => {
   it("formats a UTC date the way PDF expects", () => {
     expect(toPdfDate(new Date(Date.UTC(2026, 7, 27, 14, 5, 9)))).toBe("D:20260827140509Z");

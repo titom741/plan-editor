@@ -409,6 +409,31 @@ export function getCircleResizeHandleWorld(
   return getCircleHandleWorld(object, "e");
 }
 
+/** A symbol, geometrically: a centre, a turn, and a height on the ground. */
+type SymbolGeometry = { xM: number; yM: number; rotationDeg: number; sizeM: number };
+
+/**
+ * Resizes a symbol by dragging the handle at its corner to `pointerWorld`.
+ *
+ * The handle sits half a size away from the centre, so the new size is
+ * twice the distance back to it — measured in the symbol's *own* frame,
+ * which is what keeps a turned symbol growing along its own axes instead
+ * of jumping when the pointer crosses one.
+ */
+export function resizeSymbolFromHandle(
+  object: SymbolGeometry,
+  pointerWorld: PointM,
+): { sizeM: number } {
+  const local = worldToObjectLocal(object, pointerWorld);
+  return { sizeM: Math.max(MIN_SIZE_M, 2 * Math.max(Math.abs(local.xM), Math.abs(local.yM))) };
+}
+
+/** World position of a symbol's resize handle: its bottom-right corner, turned with it. */
+export function getSymbolHandleWorld(object: SymbolGeometry): PointM {
+  const half = object.sizeM / 2;
+  return objectLocalToWorld(object, { xM: half, yM: half });
+}
+
 /**
  * Computes a rotation (in degrees, normalized to [0, 360)) so that the ray
  * from `pivotWorld` to `pointerWorld` matches where a rotate handle is
@@ -465,6 +490,9 @@ export function getLocalCenter(object: PlanObject): VectorM {
       }
       return { xM: (minX + maxX) / 2, yM: (minY + maxY) / 2 };
     }
+    case "symbol":
+      // A symbol's anchor already *is* its centre, like a circle's.
+      return { xM: 0, yM: 0 };
     case "text":
       // A text anchor is its top-left; its width depends on font metrics
       // the domain doesn't have, so the height alone centres it vertically

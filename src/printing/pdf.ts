@@ -56,6 +56,17 @@ export interface PdfTextItem {
   yPt: number;
   sizePt: number;
   rotationDeg?: number;
+  /**
+   * Print this item as a single glyph from **ZapfDingbats** (`/F2`)
+   * instead of Helvetica: the value is the byte that selects the glyph in
+   * that font's own encoding, which has nothing to do with the
+   * character's Unicode code point (see `domain/symbols.ts`, where the
+   * table was read off a proof sheet).
+   *
+   * `text` still carries the character itself, so a content stream can be
+   * read and tested in terms of what was meant, not only what was sent.
+   */
+  dingbat?: number;
 }
 
 export interface PdfPathItem {
@@ -174,6 +185,13 @@ function pdfString(text: string): string {
   return out;
 }
 
+/** One raw byte as a PDF literal: only `(`, `)` and `\` carry meaning inside one, and all three occur in ZapfDingbats. */
+function escapeByte(code: number): string {
+  const byte = Math.max(0, Math.min(255, Math.round(code)));
+  const char = String.fromCharCode(byte);
+  return byte === 0x28 || byte === 0x29 || byte === 0x5c ? `\\${char}` : char;
+}
+
 function latin1Bytes(text: string): Uint8Array {
   const bytes = new Uint8Array(text.length);
   for (let i = 0; i < text.length; i += 1) bytes[i] = text.charCodeAt(i) & 0xff;
@@ -223,8 +241,14 @@ function buildContentStream(page: PdfPage): string {
     const angle = ((item.rotationDeg ?? 0) * Math.PI) / 180;
     const cos = num(Math.cos(angle));
     const sin = num(Math.sin(angle));
+    // A dingbat is one byte in a font with its own encoding, so it skips
+    // `pdfString`'s WinAnsi mapping entirely — and only the three
+    // structural characters still need escaping, since the byte may well
+    // be `(`, `)` or `\` (an aeroplane is 0x28).
+    const glyph = item.dingbat === undefined ? pdfString(item.text) : escapeByte(item.dingbat);
+    const font = item.dingbat === undefined ? "/F1" : "/F2";
     parts.push(
-      `BT 0 g /F1 ${num(item.sizePt)} Tf ${cos} ${sin} ${num(-Math.sin(angle))} ${cos} ${num(item.xPt)} ${num(item.yPt)} Tm (${pdfString(item.text)}) Tj ET`,
+      `BT 0 g ${font} ${num(item.sizePt)} Tf ${cos} ${sin} ${num(-Math.sin(angle))} ${cos} ${num(item.xPt)} ${num(item.yPt)} Tm (${glyph}) Tj ET`,
     );
   }
 
@@ -260,8 +284,9 @@ export function buildPdf(page: PdfPage, metadata: PdfMetadata): Uint8Array {
 export function buildMultiPagePdf(pages: readonly PdfPage[], metadata: PdfMetadata): Uint8Array {
   if (pages.length === 0) throw new Error("Un PDF doit contenir au moins une page.");
 
-  // 1 catalog, 2 page tree, 3 shared font, then page/content/(image), finally info.
-  let nextObject = 4;
+  // 1 catalog, 2 page tree, 3 and 4 the two shared fonts, then
+  // page/content/(image), finally info.
+  let nextObject = 5;
   const pageObjects = pages.map((page) => {
     const descriptor = {
       page,
@@ -310,13 +335,20 @@ export function buildMultiPagePdf(pages: readonly PdfPage[], metadata: PdfMetada
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n",
   );
 
+  // The second of the 14 standard fonts this app uses, and the reason the
+  // plan's symbols print anywhere without embedding a font file. No
+  // `/Encoding`: ZapfDingbats carries its own, and imposing WinAnsi on it
+  // would select the wrong glyph for every byte.
+  startObject(4);
+  push("<< /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats >>\nendobj\n");
+
   for (const descriptor of pageObjects) {
     const { page, pageObject, contentObject, imageObjects } = descriptor;
     const contentBytes = latin1Bytes(buildContentStream(page));
     startObject(pageObject);
     push(
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${num(page.widthPt)} ${num(page.heightPt)}] ` +
-        `/Resources << /Font << /F1 3 0 R >>${imageObjects.length ? ` /XObject << ${imageObjects.map((objectNumber, index) => `/Im${index} ${objectNumber} 0 R`).join(" ")} >>` : ""} >> ` +
+        `/Resources << /Font << /F1 3 0 R /F2 4 0 R >>${imageObjects.length ? ` /XObject << ${imageObjects.map((objectNumber, index) => `/Im${index} ${objectNumber} 0 R`).join(" ")} >>` : ""} >> ` +
         `/Contents ${contentObject} 0 R >>\nendobj\n`,
     );
     startObject(contentObject);

@@ -358,6 +358,52 @@ export function PlanObjectShape({
         </Group>
       );
     }
+    case "symbol": {
+      // Measured in metres of ground like a `text` object, so it keeps its
+      // real size as the plan is zoomed; centred on its anchor, unlike
+      // one, because a symbol marks the point it is placed on.
+      const sizePx = Math.max(minTextPx, metersToPixels(object.sizeM, viewport));
+      return (
+        <Group {...commonGroupProps}>
+          <Text
+            text={object.character}
+            /* Konva has no "centre on this point" for text: a box of
+               known size placed half of it up and to the left is one. */
+            x={-sizePx}
+            y={-sizePx * 0.6}
+            width={sizePx * 2}
+            height={sizePx * 1.2}
+            align="center"
+            verticalAlign="middle"
+            wrap="none"
+            fontSize={sizePx}
+            fill={selected ? SELECTED_STROKE : (object.style?.fill ?? "#0f172a")}
+            opacity={object.style?.opacity ?? 1}
+            listening={false}
+          />
+          {/* A hit area of its own: the glyph itself is mostly holes, and
+              a symbol you can only grab by its ink is a symbol you cannot
+              grab. */}
+          <Rect x={-sizePx / 2} y={-sizePx / 2} width={sizePx} height={sizePx} fill="transparent" />
+          {showLabel && (
+            <Text
+              text={labelText}
+              x={-sizePx}
+              /* Clear of the glyph's lower edge, so the name reads as a
+                 caption under the mark rather than across it. */
+              y={sizePx / 2 + px(4)}
+              width={sizePx * 2}
+              align="center"
+              fontSize={labelFontSizePx}
+              lineHeight={LABEL_LINE_HEIGHT}
+              fill="#0f172a"
+              opacity={object.style?.opacity ?? 1}
+              listening={false}
+            />
+          )}
+        </Group>
+      );
+    }
     case "image": {
       if (!objectImage) return null;
       return (

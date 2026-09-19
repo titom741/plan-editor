@@ -31,11 +31,13 @@ import { duplicateObjects } from "../domain/clipboard";
 import { calibrationFromKnownDistance, calibrationFromKnownScale } from "../domain/calibration";
 import { sortLayersByOrder } from "../domain/layers";
 import { nextObjectName } from "../domain/labels";
+import { DEFAULT_SYMBOL_CHARACTER } from "../domain/symbols";
 import {
   createCircleObject,
   createLineObject,
   createPolygonObject,
   createRectangleObject,
+  createSymbolObject,
   createTextObject,
   createImageObject,
 } from "../domain/objects";
@@ -185,6 +187,16 @@ function buildObjectFromSpec(project: Project, spec: NewObjectSpec, layerId: str
         pointsM: spec.pointsM,
         measurement: spec.measurement,
       });
+    case "arrow":
+      // A line that carries a head. The layer's default style still
+      // applies underneath — only the arrowhead is the tool's doing.
+      return createLineObject({
+        ...common,
+        style: { ...(style ?? {}), arrowEnd: true },
+        pointsM: spec.pointsM,
+      });
+    case "symbol":
+      return createSymbolObject({ ...common, character: spec.character });
     case "text":
       return createTextObject({ ...common, text: "Texte" });
   }
@@ -232,6 +244,12 @@ export default function Editor({
   } = useProjectHistory(initialProject);
 
   const [activeTool, setActiveTool] = useState<ToolId>("select");
+  /**
+   * The character the symbol tool will place. Session state, not
+   * document state: it is which symbol the user is currently stamping,
+   * and a plan file has no business remembering it.
+   */
+  const [symbolCharacter, setSymbolCharacter] = useState(DEFAULT_SYMBOL_CHARACTER);
   /** The layer new objects land on. KL-002 always used the first unlocked layer; KL-006 makes it the user's choice. */
   const [calibrationPoints, setCalibrationPoints] = useState<{
     pointA: PointM;
@@ -1369,6 +1387,8 @@ export default function Editor({
         <ToolsPanel
           activeToolId={activeTool}
           onSelectTool={handleSelectTool}
+          symbolCharacter={symbolCharacter}
+          onSymbolCharacterChange={setSymbolCharacter}
           snapEnabled={snapEnabled}
           onSnapEnabledChange={setSnapEnabled}
           gridVisible={gridVisible}
@@ -1399,6 +1419,7 @@ export default function Editor({
         layers={project.layers}
         backgrounds={project.backgrounds}
         activeTool={activeTool}
+        symbolCharacter={symbolCharacter}
         snapEnabled={snapEnabled}
         labelDisplay={labelDisplay}
         gridVisible={gridVisible}

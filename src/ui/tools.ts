@@ -15,9 +15,11 @@ export type ToolId =
   | "rectangle"
   | "circle"
   | "line"
+  | "arrow"
   | "polyline"
   | "polygon"
   | "text"
+  | "symbol"
   | "measure"
   | "calibrate";
 
@@ -32,8 +34,13 @@ export const TOOLS: ToolDefinition[] = [
   { id: "rectangle", label: "Rectangle", icon: "▭" },
   { id: "circle", label: "Cercle", icon: "◯" },
   { id: "line", label: "Ligne", icon: "／" },
+  // Drawn exactly like a line, and *is* a line — the arrowhead is a line
+  // style the model has always had. What was missing was a way to draw
+  // one without drawing a line first and then hunting for the checkbox.
+  { id: "arrow", label: "Flèche", icon: "➔" },
   { id: "polyline", label: "Tracé", icon: "〰" },
   { id: "polygon", label: "Polygone", icon: "⬠" },
   { id: "text", label: "Texte", icon: "T" },
+  { id: "symbol", label: "Symbole", icon: "★" },
   { id: "measure", label: "Mesure", icon: "📐" },
 ];

@@ -1,10 +1,14 @@
 import { LABEL_DISPLAY_KEYS, LABEL_DISPLAY_LABELS, type LabelDisplay } from "../../domain/display";
+import { symbolsByGroup } from "../../domain/symbols";
 import { TOOLS } from "../tools";
 import type { ToolId } from "../tools";
 
 interface ToolsPanelProps {
   activeToolId: ToolId;
   onSelectTool: (toolId: ToolId) => void;
+  /** The character the symbol tool places — shown as the selected cell of the palette below. */
+  symbolCharacter: string;
+  onSymbolCharacterChange: (character: string) => void;
   snapEnabled: boolean;
   onSnapEnabledChange: (enabled: boolean) => void;
   gridVisible: boolean;
@@ -22,6 +26,8 @@ interface ToolsPanelProps {
 export function ToolsPanel({
   activeToolId,
   onSelectTool,
+  symbolCharacter,
+  onSymbolCharacterChange,
   snapEnabled,
   onSnapEnabledChange,
   gridVisible,
@@ -67,6 +73,38 @@ export function ToolsPanel({
               </li>
             ))}
           </ul>
+          {/*
+            Shown only while the symbol tool is active. A palette that was
+            always on screen would take the room the tools themselves
+            need, and it is meaningless until you are about to place one.
+          */}
+          {activeToolId === "symbol" && (
+            <fieldset className="tools-panel__symbols">
+              <legend>Symbole à poser</legend>
+              {symbolsByGroup().map(({ group, symbols }) => (
+                <div key={group} className="tools-panel__symbol-group">
+                  <span className="tools-panel__symbol-title">{group}</span>
+                  <div className="tools-panel__symbol-grid">
+                    {symbols.map((symbol) => (
+                      <button
+                        key={symbol.character}
+                        type="button"
+                        className={`tools-panel__symbol${
+                          symbol.character === symbolCharacter ? " is-active" : ""
+                        }`}
+                        aria-pressed={symbol.character === symbolCharacter}
+                        title={symbol.name}
+                        onClick={() => onSymbolCharacterChange(symbol.character)}
+                      >
+                        <span aria-hidden="true">{symbol.character}</span>
+                        <span className="visually-hidden">{symbol.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </fieldset>
+          )}
           <label className="tools-panel__toggle">
             <input
               type="checkbox"
@@ -116,10 +154,16 @@ export function ToolsPanel({
               "Cliquez pour ajouter des points, Entrée pour terminer, Échap pour annuler."}
             {activeToolId === "calibrate" &&
               "Cliquez deux points d'une distance connue sur le fond de plan, Échap pour annuler."}
+            {activeToolId === "arrow" &&
+              "Pressez au départ, glissez jusqu'à la pointe, relâchez. Maintenez Maj pour contraindre l'angle par pas de 15°."}
+            {activeToolId === "symbol" &&
+              "Choisissez un symbole ci-dessus, puis cliquez sur le plan. Sa taille se règle ensuite dans les propriétés."}
             {activeToolId !== "polygon" &&
               activeToolId !== "polyline" &&
               activeToolId !== "calibrate" &&
               activeToolId !== "measure" &&
+              activeToolId !== "arrow" &&
+              activeToolId !== "symbol" &&
               "Échap désélectionne. Suppr efface l'objet sélectionné."}
           </p>
           <p className="tools-panel__hint">

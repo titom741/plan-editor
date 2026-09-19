@@ -51,6 +51,8 @@ export function transformObjectAroundPivot(
       };
     case "text":
       return { ...object, ...placement, fontSizeM: object.fontSizeM * safeScale };
+    case "symbol":
+      return { ...object, ...placement, sizeM: object.sizeM * safeScale };
     case "image":
       return {
         ...object,

@@ -5,6 +5,7 @@ import type { PdfLineItem, PdfPage, PdfPathItem, PdfTextItem } from "../printing
 import { objectLocalToWorld } from "../domain/geometry";
 import { boundsCenterM, getObjectBoundsM } from "../domain/bounds";
 import { getObjectDisplayLabel } from "../domain/labels";
+import { dingbatCodeFor } from "../domain/symbols";
 import { labelledStandCells, standGridToDraw } from "../domain/stands";
 import {
   DEFAULT_LABEL_DISPLAY,
@@ -150,6 +151,28 @@ function vectorGraphics(content: SheetContent): { paths: PdfPathItem[]; text: Pd
       });
       continue;
     }
+    if (object.type === "symbol") {
+      const centre = point({ xM: object.xM, yM: object.yM });
+      const sizePt = enlargeToReadable(
+        Math.max(4, object.sizeM * pointsPerMeter(content)),
+        content.enlargeSmallText ?? false,
+      );
+      const code = dingbatCodeFor(object.character);
+      if (code !== undefined) {
+        text.push({
+          text: object.character,
+          dingbat: code,
+          // PDF text grows from its baseline and starts at its left edge,
+          // while a symbol is centred on its anchor — so it is nudged
+          // back by half a glyph each way, turned with the object like
+          // any other caption (KL-042).
+          ...offsetText(centre, -sizePt * 0.5, -sizePt * CAP_HALF_HEIGHT, -object.rotationDeg),
+          sizePt,
+          rotationDeg: -object.rotationDeg,
+        });
+      }
+      continue;
+    }
     if (object.type === "image") continue;
     if (object.type === "circle") {
       const center = point({ xM: object.xM, yM: object.yM });
@@ -188,6 +211,23 @@ function vectorGraphics(content: SheetContent): { paths: PdfPathItem[]; text: Pd
       widthPt,
       dashPt,
     });
+    // The arrowheads. The screen has drawn them since long before this
+    // file existed (Konva's `Arrow`), but the vector half drew the shaft
+    // alone — so an arrow exported to PDF came out as a plain line, with
+    // the one thing that made it an arrow missing.
+    if (object.type === "line") {
+      const headPt = Math.max(3, widthPt * 4);
+      if (object.style?.arrowEnd) {
+        const tip = points[points.length - 1];
+        const from = points[points.length - 2];
+        if (tip && from) paths.push(arrowHead(from, tip, headPt, strokeRgb));
+      }
+      if (object.style?.arrowStart) {
+        const tip = points[0];
+        const from = points[1];
+        if (tip && from) paths.push(arrowHead(from, tip, headPt, strokeRgb));
+      }
+    }
   }
   // Labels, after every shape, so no fill can cover the text that names it.
   for (const object of content.vectorObjects ?? []) {
@@ -195,6 +235,51 @@ function vectorGraphics(content: SheetContent): { paths: PdfPathItem[]; text: Pd
     text.push(...labelText(object, content, point));
   }
   return { paths, text };
+}
+
+/**
+ * A filled triangle at `tip`, pointing the way the segment from `from`
+ * was going. Solid rather than two strokes: at print sizes a stroked head
+ * closes up into a blob, and a filled one is what the screen draws.
+ */
+function arrowHead(
+  from: { x: number; y: number },
+  tip: { x: number; y: number },
+  lengthPt: number,
+  strokeRgb: [number, number, number],
+): PdfPathItem {
+  const dx = tip.x - from.x;
+  const dy = tip.y - from.y;
+  const distance = Math.hypot(dx, dy) || 1;
+  const ux = dx / distance;
+  const uy = dy / distance;
+  // The base sits one head-length back along the shaft, its two corners
+  // half a width to each side of it.
+  const baseX = tip.x - ux * lengthPt;
+  const baseY = tip.y - uy * lengthPt;
+  const halfWidth = lengthPt * 0.45;
+  return {
+    commands:
+      `${tip.x} ${tip.y} m ` +
+      `${baseX - uy * halfWidth} ${baseY + ux * halfWidth} l ` +
+      `${baseX + uy * halfWidth} ${baseY - ux * halfWidth} l h`,
+    strokeRgb,
+    fillRgb: strokeRgb,
+    widthPt: 0.3,
+  };
+}
+
+/** A point offset in a caption's own frame, then turned with it — the same rotation `stackedText` applies. */
+function offsetText(
+  anchor: { x: number; y: number },
+  dx: number,
+  dy: number,
+  rotationDeg: number,
+): { xPt: number; yPt: number } {
+  const angle = (rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return { xPt: anchor.x + dx * cos - dy * sin, yPt: anchor.y + dx * sin + dy * cos };
 }
 
 /**
@@ -328,15 +413,25 @@ function labelText(
   const anchorM =
     object.type === "line"
       ? polylineMidpointM(object.pointsM)
-      : grid && object.type === "rectangle"
-        ? { xM: object.widthM / 2, yM: 0 }
-        : null;
+      : object.type === "symbol"
+        ? { xM: 0, yM: 0 }
+        : grid && object.type === "rectangle"
+          ? { xM: object.widthM / 2, yM: 0 }
+          : null;
 
   // Clear of the anchor: the last line sits one gap away, the ones above
   // it a step further. Centred on it otherwise, letters not baselines.
-  const topOffsetPt = anchorM
-    ? LABEL_GAP_PT + (lines.length - 1) * step
-    : ((lines.length - 1) * step) / 2 - CAP_HALF_HEIGHT * sizePt;
+  //
+  // A symbol is the one that hangs its caption *below* itself. Centred
+  // like a rectangle's it would be struck through its own glyph — which
+  // is exactly what the first printed proof showed — and the screen
+  // already draws it underneath, so the two halves would disagree.
+  const topOffsetPt =
+    object.type === "symbol"
+      ? -((object.sizeM / 2) * pointsPerMeter(content) + LABEL_GAP_PT + sizePt * CAP_HALF_HEIGHT)
+      : anchorM
+        ? LABEL_GAP_PT + (lines.length - 1) * step
+        : ((lines.length - 1) * step) / 2 - CAP_HALF_HEIGHT * sizePt;
   const anchor = anchorM
     ? point(objectLocalToWorld(object, anchorM))
     : point(boundsCenterM(bounds));

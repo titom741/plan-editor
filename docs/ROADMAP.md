@@ -1016,3 +1016,77 @@ quand même » ; cochée, la ligne devient « Noms de stands — 1,8 mm (5 pt)
 La moitié raster (PNG) est câblée sur le même plancher et le même calcul,
 mais n'est pas couverte par un test : le dépôt n'a pas de rendu DOM en
 test, et aucun composant n'y est monté. Elle a été relue, pas mesurée.
+
+## KL-044 — La flèche et le symbole *(done)*
+
+Demandé à l'usage : « il faudrait ajouter dans les formes flèche et
+symbole ». Deux ajouts qui se ressemblent dans la barre d'outils et ne se
+ressemblent pas du tout dans le modèle.
+
+- **La flèche n'est pas un type.** La pointe est un style de ligne depuis
+  KL-002 (`arrowStart` / `arrowEnd`), Konva la dessine, le panneau de
+  propriétés la coche. Ce qui manquait n'était pas l'objet, c'était le
+  geste : on ne pouvait obtenir une flèche qu'en traçant une ligne puis
+  en allant chercher la case. L'outil *Flèche* fait donc le geste de la
+  ligne et pose une ligne, `arrowEnd` déjà mis. Un second type aurait
+  fallu le tenir en phase dans le rendu, les trois exports et le lecteur
+  de fichiers, pour rien. Seul le **nommage** distingue les deux
+  (`ObjectNameKind`) : un plan de flèches ne doit pas s'appeler « Ligne 7 ».
+- **Ce que la flèche a révélé.** Depuis KL-039 le PDF dessine les formes
+  en vecteur et ne rastérise que les images — et la moitié vectorielle ne
+  traçait *que la hampe*. Toute flèche exportée depuis a donc été
+  imprimée en simple trait, la seule chose qui en faisait une flèche
+  manquante. Elle sort désormais avec une pointe pleine (`arrowHead`).
+- **Le symbole est un type.** `SymbolObject` porte un caractère et une
+  hauteur en mètres de terrain. Son ancre est son **centre**, comme un
+  cercle et contrairement à un texte : un symbole marque le point où on
+  le pose, et doit tourner sur ce point au lieu de l'emporter.
+- **La palette est fermée, et c'est le cœur de la mission.** L'écran
+  dessine ce que la police du système contient, emoji compris ; le PDF
+  écrit avec les 14 polices standard, qu'aucun lecteur n'a besoin de
+  télécharger — et elles ne couvrent que le Latin-1 et un jeu de
+  dingbats. Laisser saisir n'importe quel caractère, c'est accepter qu'un
+  plan sur deux s'imprime avec un « ? » à la place du symbole : la seule
+  issue qu'un plan ne peut pas se permettre. La palette est donc
+  l'intersection des deux alphabets, choisie une fois — flèches, marques
+  de sécurité, repères, et les numéros ① à ⑩, utiles pour numéroter des
+  postes qu'une légende reprend ensuite.
+- **ZapfDingbats est adressé à l'octet.** Le glyphe n'a aucun rapport
+  avec le code Unicode du caractère : la table de `domain/symbols.ts` a
+  été **relevée sur une planche de contrôle imprimée**, pas déduite. Le
+  PDF déclare la police en `/F2`, sans `/Encoding` — lui imposer WinAnsi
+  changerait le glyphe de chaque octet — et l'octet doit encore être
+  échappé quand il tombe sur `(`, `)` ou `\` : l'avion est 0x28.
+- **Le fichier refuse un caractère hors palette** plutôt que de
+  l'accepter. Il se dessinerait à l'écran et laisserait un trou sur le
+  papier ; un fichier qui se lit bien et s'imprime faux est pire qu'un
+  fichier refusé. `SCHEMA_VERSION` ne bouge pas pour autant : un plan
+  sans symbole reste lisible par une version antérieure, et la monter
+  rendrait *tous* les plans illisibles pour elle afin d'améliorer le
+  message d'erreur des quelques-uns qui en portent.
+
+**Un défaut que seule une planche imprimée pouvait montrer**, comme en
+KL-009 : l'étiquette du symbole sortait *en travers de son propre
+glyphe*. Le calcul la centrait sur l'objet, ce qui est juste pour un
+chapiteau et faux pour une marque ponctuelle — alors que l'écran, lui, la
+posait dessous. Les deux moitiés se contredisaient ; elle passe dessous
+des deux côtés, et un test l'épingle.
+
+733 tests, dont 34 nouveaux, validés par mutation : treize défauts
+introduits, douze détectés du premier coup. Le survivant mérite d'être
+noté — on pouvait déplacer le pivot d'un symbole sans qu'aucun test ne
+bronche, alors que « il tourne sur le point qu'il marque » est justement
+ce que la documentation promet. Trois tests de rotation le couvrent
+maintenant, et la mutation rejouée est détectée.
+
+Méthode, à ne pas refaire : la première passe de mutation révoquait
+chaque défaut par `git checkout --`, sur un arbre non commité — ce qui ne
+défait pas la mutation mais efface le travail. Huit fichiers ont dû être
+réécrits. Le script instantane désormais `src/` avant de toucher quoi que
+ce soit et restaure depuis cette copie, en vérifiant à la fin que l'arbre
+est redevenu identique.
+
+Mesuré en relisant les octets du PDF et en regardant la planche produite,
+A3 à 1:200 : les neuf symboles sortent en glyphes pleins (aucun « ? »),
+l'étoile à l'octet 0x48, la flèche d'accès porte sa pointe, et le ➔
+tourné à 45° pivote bien sur son point. Vérifié aussi dans le navigateur.

@@ -21,6 +21,7 @@
 
 import { DEFAULT_LABEL_DISPLAY, clampLabelFontSizePx } from "../domain/display";
 import { PAPER_SIZE_ORDER } from "../domain/sheets";
+import { isPaletteSymbol } from "../domain/symbols";
 import type {
   Background,
   BackgroundImage,
@@ -475,6 +476,20 @@ function readObject(value: unknown, path: string): PlanObject {
         text: readString(record.text, `${path}.text`),
         fontSizeM: readPositiveNumber(record.fontSizeM, `${path}.fontSizeM`),
       };
+    case "symbol": {
+      const character = readString(record.character, `${path}.character`);
+      // Refused, not quietly kept: a character outside the palette has no
+      // glyph in the PDF's fonts, so the plan would print with a hole
+      // exactly where the symbol is — and a file that reads fine and
+      // prints wrong is worse than one that refuses. See `domain/symbols.ts`.
+      if (!isPaletteSymbol(character)) fail(`${path}.character`);
+      return {
+        ...base,
+        type: "symbol",
+        character,
+        sizeM: readPositiveNumber(record.sizeM, `${path}.sizeM`),
+      };
+    }
     case "image":
       return {
         ...base,

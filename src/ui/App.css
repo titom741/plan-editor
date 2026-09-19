@@ -608,6 +608,60 @@
   color: var(--text);
 }
 
+/* The symbol palette, shown only while the symbol tool is active. */
+.tools-panel__symbols {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.tools-panel__symbols legend {
+  padding: 0 0.3rem;
+  font-size: 0.75rem;
+}
+
+.tools-panel__symbol-group + .tools-panel__symbol-group {
+  margin-top: 0.5rem;
+}
+
+.tools-panel__symbol-title {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.tools-panel__symbol-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2rem, 1fr));
+  gap: 0.25rem;
+}
+
+.tools-panel__symbol {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tools-panel__symbol:hover {
+  background: var(--accent-bg);
+}
+
+.tools-panel__symbol.is-active {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
 /* Canvas */
 .plan-canvas {
   grid-area: canvas;

@@ -81,6 +81,20 @@ export function getObjectBoundsM(object: PlanObject): BoundsM | null {
       return boundsOfPoints(
         object.pointsM.map((point) => addVector(anchor, rotateVector(point, object.rotationDeg))),
       );
+    case "symbol": {
+      // Anchored on its centre, so its extent is the box that centre sits
+      // in the middle of — and a glyph is about as wide as it is tall,
+      // which is close enough for framing and never reduces it to a point.
+      const half = object.sizeM / 2;
+      return boundsOfPoints(
+        [
+          { xM: -half, yM: -half },
+          { xM: half, yM: -half },
+          { xM: half, yM: half },
+          { xM: -half, yM: half },
+        ].map((corner) => addVector(anchor, rotateVector(corner, object.rotationDeg))),
+      );
+    }
     case "text":
       // A conservative font-independent estimate (average Latin glyph ≈
       // 0.6 em) prevents selection/export framing from reducing text to a

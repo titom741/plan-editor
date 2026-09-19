@@ -11,6 +11,7 @@ import {
   createLineObject,
   createPolygonObject,
   createRectangleObject,
+  createSymbolObject,
   createTextObject,
 } from "./objects";
 import { createEmptyProject } from "./project";
@@ -258,5 +259,48 @@ describe("nextObjectName", () => {
     expect(nextObjectName(withObjects, "rectangle")).toBe("Rectangle 3");
     expect(nextObjectName(withObjects, "circle")).toBe("Cercle 2");
     expect(nextObjectName(withObjects, "polygon")).toBe("Polygone 1");
+  });
+
+  it("counts arrows apart from the plain lines they share a type with", () => {
+    const project = createEmptyProject({ name: "Test" });
+    const layerId = project.layers[0]!.id;
+    const segment = [
+      { xM: 0, yM: 0 },
+      { xM: 1, yM: 0 },
+    ];
+    const withObjects = {
+      ...project,
+      objects: [
+        createLineObject({ layerId, name: "Ligne 1", xM: 0, yM: 0, pointsM: segment }),
+        createLineObject({
+          layerId,
+          name: "Flèche 1",
+          xM: 0,
+          yM: 0,
+          pointsM: segment,
+          style: { arrowEnd: true },
+        }),
+        createSymbolObject({ layerId, name: "Symbole 1", xM: 0, yM: 0 }),
+      ],
+    };
+    // An arrow *is* a line, so naming by type alone would call the next
+    // line "Ligne 3" and the next arrow "Flèche 3" — each counting the
+    // other's objects.
+    expect(nextObjectName(withObjects, "line")).toBe("Ligne 2");
+    expect(nextObjectName(withObjects, "arrow")).toBe("Flèche 2");
+    expect(nextObjectName(withObjects, "symbol")).toBe("Symbole 2");
+  });
+});
+
+describe("a symbol's dimension summary", () => {
+  it("states the height it stands at on the ground", () => {
+    const symbol = createSymbolObject({
+      layerId: LAYER,
+      name: "Secours",
+      xM: 0,
+      yM: 0,
+      sizeM: 1.5,
+    });
+    expect(getObjectDimensionSummary(symbol)).toBe("1.5 m");
   });
 });

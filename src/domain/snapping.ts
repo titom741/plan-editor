@@ -96,6 +96,11 @@ export function getObjectSnapTargets(object: PlanObject): SnapTarget[] {
     case "text":
       push({ xM: object.xM, yM: object.yM }, "vertex");
       break;
+    case "symbol":
+      // Its anchor is its centre, so that is what it offers — a symbol
+      // lines up with the middle of a gate, not with a corner of itself.
+      push({ xM: object.xM, yM: object.yM }, "center");
+      break;
   }
   return targets;
 }

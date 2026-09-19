@@ -252,8 +252,31 @@ export interface ImageObject extends PlanObjectBase {
   heightM: Meters;
 }
 
+/**
+ * A single character standing on the plan: an arrow, a cross, a numbered
+ * marker (see `domain/symbols.ts` for the palette and why it is closed).
+ *
+ * Its anchor is its **centre**, like a circle's and unlike a text
+ * object's, because a symbol marks a point — the point it marks is the
+ * one you place, and rotating it must turn it on the spot rather than
+ * swing it. `sizeM` is the glyph's height in metres of ground, so it is
+ * drawn to the scale of the plan and shrinks with it.
+ */
+export interface SymbolObject extends PlanObjectBase {
+  type: "symbol";
+  /** One character from the palette in `domain/symbols.ts`. */
+  character: string;
+  sizeM: Meters;
+}
+
 export type PlanObject =
-  RectangleObject | CircleObject | LineObject | PolygonObject | TextObject | ImageObject;
+  | RectangleObject
+  | CircleObject
+  | LineObject
+  | PolygonObject
+  | TextObject
+  | ImageObject
+  | SymbolObject;
 
 /**
  * A partial update to a `PlanObject`, distributed over the union so each

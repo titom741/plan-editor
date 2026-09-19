@@ -82,10 +82,20 @@ model → viewport → Konva) is visible immediately.
 **Creating objects** — pick a tool in the left panel, then:
 
 - **Rectangle / Cercle / Ligne** — press, drag, release on the canvas.
+- **Flèche** — the same gesture as a line, and the same object: a line
+  that carries a head. Hold `Maj` to constrain the angle to 15° steps.
+  Either end can be given or taken away afterwards from the properties
+  panel, as it always could.
 - **Polygone** — click to add each point, `Entrée` to finish (3+ points),
   `Échap` to cancel.
 - **Texte** — click once to place it, then rename its content from the
   properties panel.
+- **Symbole** — pick one from the palette that appears under the tools
+  (arrows, safety marks, plain shapes, numbers ① to ⑩), then click to
+  place it. It is centred on the point you click, sized in metres of
+  ground like a text object, and turns on its own centre. The palette is
+  fixed rather than free text: every character in it has a glyph in the
+  PDF's own fonts, so what you see is what prints.
 
 Every object-creation tool returns to Selection and selects the object you
 just drew.

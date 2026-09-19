@@ -3,7 +3,7 @@ import { createEmptyProject } from "../domain/project";
 import { createSheet } from "../domain/sheets";
 import { computeSheetLayout } from "../printing/sheetLayout";
 import { buildSheetPdf } from "./exportSheet";
-import { createLineObject, createRectangleObject } from "../domain/objects";
+import { createLineObject, createRectangleObject, createSymbolObject } from "../domain/objects";
 import type { LabelDisplay } from "../domain/display";
 import type { PlanObject } from "../domain/types";
 
@@ -668,5 +668,82 @@ describe("buildSheetPdf holding the readable floor (KL-043)", () => {
       }),
     );
     expect(withoutFlag).toBe(sheetWith(objects, false, 6400));
+  });
+});
+
+describe("symbols and arrowheads (KL-044)", () => {
+  const viewport = { basePixelsPerMeter: 20, zoom: 1, offsetXPx: 0, offsetYPx: 0 };
+
+  function sheetWith(objects: PlanObject[]) {
+    const sheet = createSheet({ name: "Plan" });
+    return latin1(
+      buildSheetPdf({
+        project: createEmptyProject({ name: "Virade" }),
+        sheet,
+        layout: computeSheetLayout(sheet, null),
+        drawingJpegDataUrl: "data:image/jpeg;base64,/9j/2Q==",
+        pixelWidth: 800,
+        pixelHeight: 560,
+        now: new Date("2026-09-19T12:00:00Z"),
+        vectorObjects: objects,
+        vectorViewport: viewport,
+      }),
+    );
+  }
+
+  const star = () =>
+    createSymbolObject({
+      layerId: "l1",
+      name: "Secours",
+      xM: 5,
+      yM: 5,
+      character: "★",
+      sizeM: 3,
+    });
+  const shaft = (arrowEnd: boolean) =>
+    createLineObject({
+      layerId: "l1",
+      name: "Accès",
+      xM: 0,
+      yM: 0,
+      pointsM: [
+        { xM: 0, yM: 0 },
+        { xM: 20, yM: 0 },
+      ],
+      style: arrowEnd ? { arrowEnd: true } : {},
+    });
+
+  /** How many paths the page *fills*: `B` paints a path, `S` only strokes it. */
+  const filledPaths = (pdf: string) => pdf.split(" B Q").length - 1;
+
+  it("prints a symbol as a glyph of the dingbat font rather than a missing character", () => {
+    const pdf = sheetWith([star()]);
+    expect(pdf).toContain("/F2 ");
+    // The star is byte 0x48 in ZapfDingbats, which is "H" read as one.
+    expect(pdf).toContain("(H) Tj");
+  });
+
+  it("hangs a symbol's caption below the glyph, where the screen draws it", () => {
+    // The first printed proof had it written straight through the glyph:
+    // a symbol's caption cannot be centred on the symbol the way a
+    // rectangle's is centred in its surface.
+    const pdf = sheetWith([star()]);
+    const glyph = baselineOf(pdf, "H");
+    const caption = baselineOf(pdf, "Secours");
+    expect(glyph).not.toBeNull();
+    expect(caption).not.toBeNull();
+    // PDF's y grows upward, so "below" is a smaller baseline — and by
+    // more than half the 3 m glyph, not by a hair.
+    expect(caption!).toBeLessThan(glyph!);
+  });
+
+  it("gives an arrow the head the vector half used to drop", () => {
+    // The screen has drawn arrowheads since long before the PDF did;
+    // until now the printed sheet showed the shaft alone.
+    expect(filledPaths(sheetWith([shaft(true)]))).toBe(filledPaths(sheetWith([shaft(false)])) + 1);
+  });
+
+  it("leaves a plain line unfilled", () => {
+    expect(filledPaths(sheetWith([shaft(false)]))).toBe(0);
   });
 });

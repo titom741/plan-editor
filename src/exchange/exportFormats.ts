@@ -4,8 +4,10 @@ import {
   createCircleObject,
   createLineObject,
   createPolygonObject,
+  createSymbolObject,
   createTextObject,
 } from "../domain/objects";
+import { isPaletteSymbol } from "../domain/symbols";
 import type { PlanObject, Project } from "../domain/types";
 
 function escapeXml(value: string) {
@@ -45,6 +47,11 @@ export function objectsToSvg(objects: readonly PlanObject[]): string {
         return `<circle cx="${object.xM}" cy="${object.yM}" r="${object.radiusM}" fill="${fill}" stroke="${stroke}" opacity="${opacity}"/>`;
       if (object.type === "text")
         return `<text x="${object.xM}" y="${object.yM}" font-size="${object.fontSizeM}" font-family="${escapeXml(object.style?.fontFamily ?? "Arial")}" fill="${color(object.style?.fill, "#0f172a")}"${transform}>${escapeXml(object.text)}</text>`;
+      if (object.type === "symbol")
+        // Centred on its anchor in both axes, which is where it is drawn
+        // and where it is snapped to — an SVG hung off the glyph's
+        // baseline would land it half a symbol away from its own point.
+        return `<text x="${object.xM}" y="${object.yM}" font-size="${object.sizeM}" text-anchor="middle" dominant-baseline="central" fill="${color(object.style?.fill, "#0f172a")}" opacity="${opacity}"${transform}>${escapeXml(object.character)}</text>`;
       if (object.type === "image")
         return `<image href="${escapeXml(object.url)}" x="${object.xM}" y="${object.yM}" width="${object.widthM}" height="${object.heightM}" opacity="${opacity}"${transform}/>`;
       const points = object.pointsM
@@ -68,6 +75,8 @@ export function objectsToDxf(objects: readonly PlanObject[]): string {
       entities += `0\nCIRCLE\n8\n${layer}\n10\n${object.xM}\n20\n${-object.yM}\n30\n0\n40\n${object.radiusM}\n`;
     else if (object.type === "text")
       entities += `0\nTEXT\n8\n${layer}\n10\n${object.xM}\n20\n${-object.yM}\n30\n0\n40\n${object.fontSizeM}\n1\n${object.text.replace(/[\r\n]/g, " ")}\n50\n${-object.rotationDeg}\n`;
+    else if (object.type === "symbol")
+      entities += `0\nTEXT\n8\n${layer}\n10\n${object.xM}\n20\n${-object.yM}\n30\n0\n40\n${object.sizeM}\n1\n${object.character}\n50\n${-object.rotationDeg}\n`;
     else {
       const local =
         object.type === "rectangle" || object.type === "image"
@@ -135,7 +144,7 @@ export function objectsToGeoJson(
     georeference ? localToLongitudeLatitude(point, georeference) : [point.xM, point.yM];
   const features = objects.map((object) => {
     let geometry: Record<string, unknown>;
-    if (object.type === "circle" || object.type === "text")
+    if (object.type === "circle" || object.type === "text" || object.type === "symbol")
       geometry = { type: "Point", coordinates: coordinate(object) };
     else {
       const local =
@@ -166,6 +175,8 @@ export function objectsToGeoJson(
         units: "m",
         radiusM: object.type === "circle" ? object.radiusM : undefined,
         text: object.type === "text" ? object.text : undefined,
+        symbol: object.type === "symbol" ? object.character : undefined,
+        sizeM: object.type === "symbol" ? object.sizeM : undefined,
       },
       geometry,
     };
@@ -222,6 +233,22 @@ export function geoJsonToObjects(
     const common = { layerId, name };
     if (feature.geometry?.type === "Point") {
       const point = local(feature.geometry.coordinates);
+      // A symbol we wrote ourselves comes back as one; anything else
+      // claiming to be a symbol but carrying a character we cannot print
+      // falls through to text, which can carry it.
+      if (
+        typeof feature.properties?.symbol === "string" &&
+        isPaletteSymbol(feature.properties.symbol)
+      )
+        return [
+          createSymbolObject({
+            ...common,
+            ...point,
+            character: feature.properties.symbol,
+            sizeM:
+              typeof feature.properties?.sizeM === "number" ? feature.properties.sizeM : undefined,
+          }),
+        ];
       if (typeof feature.properties?.radiusM === "number")
         return [createCircleObject({ ...common, ...point, radiusM: feature.properties.radiusM })];
       return [

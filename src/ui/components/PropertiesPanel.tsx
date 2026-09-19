@@ -16,6 +16,7 @@ import {
   type LabelDisplay,
 } from "../../domain/display";
 import { rotateObjectToDeg } from "../../domain/geometry";
+import { MIN_SYMBOL_SIZE_M, symbolsByGroup } from "../../domain/symbols";
 import { sortLayersByOrder } from "../../domain/layers";
 import type {
   BackgroundImage,
@@ -69,6 +70,7 @@ const TYPE_LABELS: Record<PlanObject["type"], string> = {
   polygon: "Polygone",
   text: "Texte",
   image: "Image",
+  symbol: "Symbole",
 };
 
 function formatForInput(value: number): string {
@@ -718,6 +720,42 @@ export function PropertiesPanel({
             />
           )}
 
+          {selected.type === "symbol" && (
+            <>
+              <label className="properties-panel__field">
+                <span>Symbole</span>
+                {/*
+                  The same palette the tools panel offers, as a list: this
+                  is where an *existing* symbol is changed, and swapping one
+                  for another must not mean deleting it and losing its name,
+                  layer and place in the nomenclature.
+                */}
+                <select
+                  value={selected.character}
+                  disabled={isLocked}
+                  onChange={(e) => applyPatch({ character: e.target.value })}
+                >
+                  {symbolsByGroup().map(({ group, symbols }) => (
+                    <optgroup key={group} label={group}>
+                      {symbols.map((symbol) => (
+                        <option key={symbol.character} value={symbol.character}>
+                          {symbol.character} {symbol.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+              <NumberField
+                label="Taille (m)"
+                valueM={selected.sizeM}
+                step={0.1}
+                disabled={isLocked}
+                onCommit={(value) => applyPatch({ sizeM: Math.max(MIN_SYMBOL_SIZE_M, value) })}
+              />
+            </>
+          )}
+
           {selected.type === "text" && (
             <>
               <label className="properties-panel__field">
@@ -815,7 +853,7 @@ export function PropertiesPanel({
           )}
 
           <div className="properties-panel__style-grid">
-            {selected.type !== "line" && selected.type !== "text" && (
+            {selected.type !== "line" && selected.type !== "text" && selected.type !== "symbol" && (
               <label className="properties-panel__field">
                 <span>Remplissage</span>
                 <input
@@ -837,11 +875,15 @@ export function PropertiesPanel({
               </label>
             )}
             <label className="properties-panel__field">
-              <span>{selected.type === "text" ? "Couleur" : "Contour"}</span>
+              {/* A symbol is ink, like a text: it has a colour, not a
+                  contour and a filling. */}
+              <span>
+                {selected.type === "text" || selected.type === "symbol" ? "Couleur" : "Contour"}
+              </span>
               <input
                 type="color"
                 value={
-                  selected.type === "text"
+                  selected.type === "text" || selected.type === "symbol"
                     ? (selected.style?.fill ?? "#0f172a")
                     : (selected.style?.stroke ?? "#0f172a")
                 }
@@ -851,14 +893,15 @@ export function PropertiesPanel({
                   applyPatch({
                     style: {
                       ...selected.style,
-                      [selected.type === "text" ? "fill" : "stroke"]: e.target.value,
+                      [selected.type === "text" || selected.type === "symbol" ? "fill" : "stroke"]:
+                        e.target.value,
                     },
                   })
                 }
               />
             </label>
           </div>
-          {selected.type !== "text" && (
+          {selected.type !== "text" && selected.type !== "symbol" && (
             <>
               <NumberField
                 label={

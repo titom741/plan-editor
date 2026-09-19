@@ -13,6 +13,7 @@ import {
   createCircleObject,
   createLineObject,
   createRectangleObject,
+  createSymbolObject,
   createTextObject,
 } from "./objects";
 import { addBackground, addObject, createEmptyProject } from "./project";
@@ -234,5 +235,27 @@ describe("getProjectBoundsM", () => {
       })),
     };
     expect(getProjectBoundsM(hidden)).toBeNull();
+  });
+});
+
+describe("getObjectBoundsM — symbols", () => {
+  it("centres the box on the anchor, unlike a text's top-left", () => {
+    const symbol = createSymbolObject({ layerId: "l", name: "S", xM: 10, yM: 20, sizeM: 2 });
+    expect(getObjectBoundsM(symbol)).toEqual({ minXM: 9, minYM: 19, maxXM: 11, maxYM: 21 });
+  });
+
+  it("keeps the symbol's own point still when it is turned", () => {
+    const symbol = {
+      ...createSymbolObject({ layerId: "l", name: "S", xM: 10, yM: 20, sizeM: 2 }),
+      rotationDeg: 45,
+    };
+    const bounds = getObjectBoundsM(symbol);
+    if (!bounds) throw new Error("no bounds");
+    // The anchor is the centre, so rotation moves the corners around it
+    // and never moves it: a square turned 45° bounds √2 wider, centred on
+    // the same point.
+    expect(boundsCenterM(bounds).xM).toBeCloseTo(10, 9);
+    expect(boundsCenterM(bounds).yM).toBeCloseTo(20, 9);
+    expect(boundsSizeM(bounds).widthM).toBeCloseTo(2 * Math.SQRT2, 6);
   });
 });

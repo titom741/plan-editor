@@ -6,8 +6,10 @@ import {
   createLineObject,
   createPolygonObject,
   createRectangleObject,
+  createSymbolObject,
   createTextObject,
 } from "./objects";
+import { DEFAULT_SYMBOL_CHARACTER, DEFAULT_SYMBOL_SIZE_M } from "./symbols";
 
 const common = { layerId: "layer-1", name: "Objet", xM: 2, yM: 3 };
 
@@ -94,5 +96,21 @@ describe("object factories", () => {
     expect(image.heightPx).toBe(900);
     expect(image.widthM).toBe(16);
     expect(image.heightM).toBe(9);
+  });
+
+  it("give a symbol the palette's default character, at a size that reads on paper", () => {
+    const symbol = createSymbolObject({ ...common });
+    expect(symbol.type).toBe("symbol");
+    expect(symbol.character).toBe(DEFAULT_SYMBOL_CHARACTER);
+    expect(symbol.sizeM).toBe(DEFAULT_SYMBOL_SIZE_M);
+    // Its anchor is the point it was placed on — a symbol marks a point.
+    expect(symbol.xM).toBe(2);
+    expect(symbol.yM).toBe(3);
+  });
+
+  it("let a symbol carry the character and size it is given", () => {
+    const symbol = createSymbolObject({ ...common, character: "✚", sizeM: 0.8 });
+    expect(symbol.character).toBe("✚");
+    expect(symbol.sizeM).toBe(0.8);
   });
 });

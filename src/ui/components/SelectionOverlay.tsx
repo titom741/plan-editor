@@ -10,6 +10,8 @@ import {
   getRectangleHandleWorld,
   getRotateHandleWorld,
   getSegmentCount,
+  getSymbolHandleWorld,
+  resizeSymbolFromHandle,
   getSegmentMidpointWorld,
   getVertexWorld,
   insertVertexAfter,
@@ -210,6 +212,19 @@ export function SelectionOverlay({
       });
     }
 
+    handles.push(rotateHandle());
+  } else if (object.type === "symbol") {
+    // One handle, at its corner: a symbol has a single dimension, and
+    // dragging that corner sets it. Eight handles would offer to stretch
+    // a glyph, which is not something the model can express.
+    handles.push({
+      key: "resize-size",
+      worldPoint: getSymbolHandleWorld(object),
+      shape: "square",
+      snaps: true,
+      cursor: resizeCursorFor("se", object.rotationDeg),
+      onDragMove: (pointerWorld) => onLiveUpdate(resizeSymbolFromHandle(object, pointerWorld)),
+    });
     handles.push(rotateHandle());
   } else {
     // text: rotate around its own anchor, nothing to resize.

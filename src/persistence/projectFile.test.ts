@@ -3,7 +3,12 @@ import { createBackgroundImage } from "../domain/background";
 import { calibrationFromKnownDistance } from "../domain/calibration";
 import { getDefaultTargetLayer } from "../domain/layers";
 import { createSheet } from "../domain/sheets";
-import { createCircleObject, createRectangleObject, createTextObject } from "../domain/objects";
+import {
+  createCircleObject,
+  createRectangleObject,
+  createSymbolObject,
+  createTextObject,
+} from "../domain/objects";
 import {
   addObject,
   applyCalibration,
@@ -598,5 +603,57 @@ describe("stand grids (KL-038)", () => {
       stands: "oui",
     };
     expect(parseProjectFile(file).ok).toBe(false);
+  });
+});
+
+describe("symbols (KL-044)", () => {
+  function projectWithSymbol(character: string): Project {
+    const project = createEmptyProject({ name: "Symboles" });
+    const layer = getDefaultTargetLayer(project.layers);
+    if (!layer) throw new Error("no default layer");
+    return addObject(
+      project,
+      createSymbolObject({
+        layerId: layer.id,
+        name: "Secours",
+        xM: 3,
+        yM: -1,
+        character,
+        sizeM: 1.5,
+      }),
+    );
+  }
+
+  it("round-trips a symbol with its character and its size", () => {
+    const project = projectWithSymbol("✚");
+    const result = parseProjectFile(JSON.parse(serializeProject(project)));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.file.project).toEqual(project);
+  });
+
+  it("refuses a character the app cannot print", () => {
+    // It would draw on screen and leave a hole on paper — a file that
+    // reads fine and prints wrong is worse than one that refuses.
+    const file = JSON.parse(JSON.stringify(toProjectFile(projectWithSymbol("✚"))));
+    file.project.objects[0].character = "🐙";
+    const result = parseProjectFile(file);
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error).toEqual({
+        code: "invalidField",
+        path: "project.objects[0].character",
+      });
+  });
+
+  it("refuses a symbol with no size", () => {
+    const file = JSON.parse(JSON.stringify(toProjectFile(projectWithSymbol("★"))));
+    file.project.objects[0].sizeM = 0;
+    const result = parseProjectFile(file);
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error).toEqual({
+        code: "invalidField",
+        path: "project.objects[0].sizeM",
+      });
   });
 });

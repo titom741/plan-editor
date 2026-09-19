@@ -36,6 +36,10 @@ export function getObjectDimensionSummary(object: PlanObject): string | null {
       return `${formatLengthM(polygonPerimeterM(object.pointsM))} · ${formatAreaM2(polygonAreaM2(object.pointsM))}`;
     case "text":
       return null;
+    case "symbol":
+      // Its height on the ground — the one dimension a symbol has, and
+      // the one that decides whether it still reads at the print scale.
+      return `${formatMeters(object.sizeM)} m`;
     case "image":
       return `${formatMeters(object.widthM)} × ${formatMeters(object.heightM)} m`;
   }
@@ -90,13 +94,25 @@ function getMeasurementSummary(object: PlanObject): string | null {
   return null;
 }
 
-const TYPE_NAME_PREFIXES: Record<PlanObject["type"], string> = {
+/**
+ * What a new object is named after.
+ *
+ * Almost always its type — but an arrow is a `line` carrying an
+ * arrowhead, and a plan full of "Ligne 7" when the user drew arrows would
+ * be naming them after their implementation rather than after what they
+ * asked for.
+ */
+export type ObjectNameKind = PlanObject["type"] | "arrow";
+
+const TYPE_NAME_PREFIXES: Record<ObjectNameKind, string> = {
+  arrow: "Flèche",
   rectangle: "Rectangle",
   circle: "Cercle",
   line: "Ligne",
   polygon: "Polygone",
   text: "Texte",
   image: "Image",
+  symbol: "Symbole",
 };
 
 /**
@@ -104,7 +120,15 @@ const TYPE_NAME_PREFIXES: Record<PlanObject["type"], string> = {
  * project already has two rectangles. Purely a naming convenience — users
  * can always rename an object afterwards via the properties panel.
  */
-export function nextObjectName(project: Project, type: PlanObject["type"]): string {
-  const countOfType = project.objects.filter((object) => object.type === type).length;
-  return `${TYPE_NAME_PREFIXES[type]} ${countOfType + 1}`;
+export function nextObjectName(project: Project, kind: ObjectNameKind): string {
+  // Arrows and plain lines are the same type, so each counts only its own
+  // kind: drawing a line then an arrow gives "Ligne 1" and "Flèche 1",
+  // not "Ligne 1" and "Flèche 2".
+  const isArrow = (object: PlanObject) =>
+    object.type === "line" &&
+    (object.style?.arrowStart === true || object.style?.arrowEnd === true);
+  const countOfKind = project.objects.filter((object) =>
+    kind === "arrow" ? isArrow(object) : object.type === kind && !isArrow(object),
+  ).length;
+  return `${TYPE_NAME_PREFIXES[kind]} ${countOfKind + 1}`;
 }

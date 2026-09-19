@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from "react";
 import {
+  Arrow,
   Group,
   Layer as KonvaLayer,
   Line,
@@ -77,6 +78,13 @@ export type NewObjectSpec =
       pointsM: PointM[];
       measurement?: { kind: "area"; showSegments?: boolean };
     }
+  /**
+   * An arrow is a two-point `line` that will carry an arrowhead — the
+   * gesture is a line's, and so is the object; only the naming and the
+   * style differ, which is `Editor`'s business, not the canvas's.
+   */
+  | { type: "arrow"; xM: number; yM: number; pointsM: PointM[] }
+  | { type: "symbol"; xM: number; yM: number; character: string }
   | { type: "text"; xM: number; yM: number };
 
 interface PlanCanvasProps {
@@ -90,6 +98,8 @@ interface PlanCanvasProps {
   /** The backdrop stack, bottom first — drawn in order, so the last one covers. */
   backgrounds: readonly BackgroundImage[];
   activeTool: ToolId;
+  /** The character the symbol tool places, chosen from the palette in the tools panel. */
+  symbolCharacter: string;
   /** Whether the pointer is pulled onto grid intersections and object corners (KL-007). Hold Alt to bypass it for one gesture. */
   snapEnabled: boolean;
   /** Project-wide default for what object labels show. */
@@ -144,6 +154,7 @@ type Draft =
   | { tool: "rectangle"; startWorld: PointM; currentWorld: PointM }
   | { tool: "circle"; centerWorld: PointM; currentWorld: PointM }
   | { tool: "line"; startWorld: PointM; currentWorld: PointM }
+  | { tool: "arrow"; startWorld: PointM; currentWorld: PointM }
   | { tool: "polygon"; anchorWorld: PointM; pointsM: PointM[]; previewWorld: PointM | null }
   /**
    * The polyline tool, which is two gestures in one shape: a click adds a
@@ -174,6 +185,7 @@ export function PlanCanvas({
   layers,
   backgrounds,
   activeTool,
+  symbolCharacter,
   snapEnabled,
   labelDisplay,
   gridVisible,
@@ -655,14 +667,19 @@ export function PlanCanvas({
         );
         return;
       }
-      if (activeTool === "rectangle" || activeTool === "circle" || activeTool === "line") {
+      if (
+        activeTool === "rectangle" ||
+        activeTool === "circle" ||
+        activeTool === "line" ||
+        activeTool === "arrow"
+      ) {
         const world = getPointerWorld(e.target.getStage());
         if (!world) return;
         if (activeTool === "rectangle")
           setDraft({ tool: "rectangle", startWorld: world, currentWorld: world });
         else if (activeTool === "circle")
           setDraft({ tool: "circle", centerWorld: world, currentWorld: world });
-        else setDraft({ tool: "line", startWorld: world, currentWorld: world });
+        else setDraft({ tool: activeTool, startWorld: world, currentWorld: world });
       }
     },
     [activeTool, onDeselectAll, getPointerWorld, seedDragPan],
@@ -719,7 +736,7 @@ export function PlanCanvas({
         if (draft.pointsWorld.length < 2) setDraft({ ...draft, previewWorld: world });
       } else {
         const currentWorld =
-          draft.tool === "line" && isShiftHeld
+          (draft.tool === "line" || draft.tool === "arrow") && isShiftHeld
             ? constrainPointAngleM(draft.startWorld, world, 15)
             : world;
         setDraft({ ...draft, currentWorld } as Draft);
@@ -758,12 +775,12 @@ export function PlanCanvas({
         });
       }
       setDraft(null);
-    } else if (draft.tool === "line") {
+    } else if (draft.tool === "line" || draft.tool === "arrow") {
       const dxM = draft.currentWorld.xM - draft.startWorld.xM;
       const dyM = draft.currentWorld.yM - draft.startWorld.yM;
       if (Math.hypot(dxM, dyM) >= MIN_CREATE_SIZE_M) {
         onCreateObject({
-          type: "line",
+          type: draft.tool,
           xM: draft.startWorld.xM,
           yM: draft.startWorld.yM,
           pointsM: [
@@ -830,6 +847,19 @@ export function PlanCanvas({
         const world = getPointerWorld(e.target.getStage());
         if (!world) return;
         onCreateObject({ type: "text", xM: world.xM, yM: world.yM });
+        return;
+      }
+      if (activeTool === "symbol") {
+        const world = getPointerWorld(e.target.getStage());
+        if (!world) return;
+        // One click, one symbol, on the point clicked: a symbol has no
+        // extent to drag out, and its anchor is its centre.
+        onCreateObject({
+          type: "symbol",
+          xM: world.xM,
+          yM: world.yM,
+          character: symbolCharacter,
+        });
         return;
       }
       if (activeTool === "polygon") {
@@ -904,7 +934,15 @@ export function PlanCanvas({
         onCalibrationMeasured(pointA, world);
       }
     },
-    [activeTool, draft, getPointerWorld, onCreateObject, onCalibrationMeasured, viewport],
+    [
+      activeTool,
+      draft,
+      getPointerWorld,
+      onCreateObject,
+      onCalibrationMeasured,
+      viewport,
+      symbolCharacter,
+    ],
   );
 
   return (
@@ -1179,19 +1217,33 @@ function DraftPreview({ draft, viewport }: { draft: Draft | null; viewport: View
     );
   }
 
-  if (draft.tool === "line") {
+  if (draft.tool === "line" || draft.tool === "arrow") {
     const start = worldToScreen(draft.startWorld, viewport);
     const end = worldToScreen(draft.currentWorld, viewport);
     const dx = draft.currentWorld.xM - draft.startWorld.xM;
     const dy = draft.currentWorld.yM - draft.startWorld.yM;
     return (
       <>
-        <Line
-          points={[start.x, start.y, end.x, end.y]}
-          stroke="#0f172a"
-          strokeWidth={2}
-          dash={[6, 4]}
-        />
+        {/* The preview shows the head, so an arrow looks like an arrow
+            before it is committed rather than after. */}
+        {draft.tool === "arrow" ? (
+          <Arrow
+            points={[start.x, start.y, end.x, end.y]}
+            stroke="#0f172a"
+            fill="#0f172a"
+            strokeWidth={2}
+            pointerLength={10}
+            pointerWidth={9}
+            dash={[6, 4]}
+          />
+        ) : (
+          <Line
+            points={[start.x, start.y, end.x, end.y]}
+            stroke="#0f172a"
+            strokeWidth={2}
+            dash={[6, 4]}
+          />
+        )}
         <Text
           x={(start.x + end.x) / 2 + 8}
           y={(start.y + end.y) / 2 - 18}
