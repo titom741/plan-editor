@@ -18,12 +18,14 @@ import {
   ratingPowerKva,
   rolesForType,
   type BoardOutput,
+  type DirectLoad,
   type ElectricalNetwork,
   type ElectricalRole,
   type ElectricalSpec,
   type Phases,
   type SourceSpec,
 } from "../../domain/electrical";
+import { MATERIAL_CATALOG } from "../../domain/catalog";
 import { formatMeters } from "../../domain/labels";
 import { polylineLengthM } from "../../domain/measure";
 import type { PlanObject, PlanObjectPatch } from "../../domain/types";
@@ -261,7 +263,7 @@ export function ElectricalSection({
             })}
             <button
               type="button"
-              className="properties-panel__button"
+              className="properties-panel__add"
               disabled={isLocked}
               onClick={() =>
                 setSpec({
@@ -273,6 +275,13 @@ export function ElectricalSection({
               + Ajouter un départ
             </button>
           </div>
+          <DirectLoadsEditor
+            loads={spec.loads ?? []}
+            allowTri={spec.phases === "tri"}
+            isLocked={isLocked}
+            onFieldFocus={onFieldFocus}
+            onChange={(loads) => setSpec({ ...spec, loads })}
+          />
         </>
       )}
 
@@ -387,6 +396,13 @@ export function ElectricalSection({
             onCommit={(value) => setSpec({ ...spec, outlets: Math.max(1, Math.round(value)) })}
           />
           {ratingSelect(spec.ratingA, (ratingA) => setSpec({ ...spec, ratingA }), "Calibre")}
+          <DirectLoadsEditor
+            loads={spec.loads ?? []}
+            allowTri={false}
+            isLocked={isLocked}
+            onFieldFocus={onFieldFocus}
+            onChange={(loads) => setSpec({ ...spec, loads })}
+          />
         </>
       )}
 
@@ -426,5 +442,133 @@ export function ElectricalSection({
         </ul>
       )}
     </fieldset>
+  );
+}
+
+/** The consumers of the library, offered as one-click presets. */
+const LOAD_PRESETS = MATERIAL_CATALOG.flatMap((item) =>
+  item.electrical?.role === "load"
+    ? [{ name: item.name, phases: item.electrical.phases, powerW: item.electrical.powerW }]
+    : [],
+);
+
+interface DirectLoadsEditorProps {
+  loads: readonly DirectLoad[];
+  /** False on a strip or a single-phase box, which cannot take a three-phase consumer. */
+  allowTri: boolean;
+  isLocked: boolean;
+  onFieldFocus: () => void;
+  onChange: (loads: DirectLoad[]) => void;
+}
+
+/**
+ * The consumers plugged straight into a coffret or a strip (KL-048),
+ * listed rather than drawn: one row each, with a quantity, so thirty
+ * projectors are one line and not thirty circles and thirty cables.
+ * Drawing a load stays possible; both count in the same balance.
+ */
+function DirectLoadsEditor({
+  loads,
+  allowTri,
+  isLocked,
+  onFieldFocus,
+  onChange,
+}: DirectLoadsEditorProps) {
+  const update = (index: number, patch: Partial<DirectLoad>) =>
+    onChange(loads.map((load, i) => (i === index ? { ...load, ...patch } : load)));
+  const add = (load: Omit<DirectLoad, "quantity">) =>
+    onChange([...loads, { ...load, quantity: 1 }]);
+  const total = loads.reduce((sum, load) => sum + load.powerW * load.quantity, 0);
+
+  return (
+    <div className="properties-panel__outputs">
+      <span className="properties-panel__outputs-title">
+        Récepteurs raccordés{loads.length > 0 ? ` — ${formatPowerW(total)}` : ""}
+      </span>
+      {loads.map((load, index) => (
+        <div key={index} className="properties-panel__load">
+          <input
+            type="text"
+            aria-label="Nom du récepteur"
+            value={load.name}
+            disabled={isLocked}
+            onFocus={onFieldFocus}
+            onChange={(e) => update(index, { name: e.target.value })}
+          />
+          <div className="properties-panel__load-row">
+            <input
+              type="number"
+              min={1}
+              step={1}
+              aria-label="Quantité"
+              title="Quantité"
+              value={load.quantity}
+              disabled={isLocked}
+              onFocus={onFieldFocus}
+              onChange={(e) => {
+                const quantity = Math.round(Number(e.target.value));
+                if (quantity >= 1) update(index, { quantity });
+              }}
+            />
+            <span aria-hidden="true">×</span>
+            <input
+              type="number"
+              min={1}
+              step={50}
+              aria-label="Puissance unitaire (W)"
+              title="Puissance unitaire (W)"
+              value={load.powerW}
+              disabled={isLocked}
+              onFocus={onFieldFocus}
+              onChange={(e) => {
+                const powerW = Number(e.target.value);
+                if (powerW > 0) update(index, { powerW });
+              }}
+            />
+            <span aria-hidden="true">W</span>
+            <select
+              aria-label="Phases"
+              value={load.phases}
+              disabled={isLocked}
+              onFocus={onFieldFocus}
+              onChange={(e) => update(index, { phases: e.target.value as Phases })}
+            >
+              <option value="mono">mono</option>
+              {(allowTri || load.phases === "tri") && <option value="tri">tri</option>}
+            </select>
+            <button
+              type="button"
+              className="properties-panel__icon-button"
+              title="Retirer ce récepteur"
+              disabled={isLocked}
+              onClick={() => onChange(loads.filter((_, i) => i !== index))}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      ))}
+      <select
+        className="properties-panel__add"
+        aria-label="Ajouter un récepteur"
+        value=""
+        disabled={isLocked}
+        onFocus={onFieldFocus}
+        onChange={(e) => {
+          const choice = e.target.value;
+          if (choice === "") return;
+          const preset = LOAD_PRESETS.find((candidate) => candidate.name === choice);
+          add(preset ?? { name: "Récepteur", phases: "mono", powerW: 1000 });
+        }}
+      >
+        <option value="">+ Ajouter un récepteur…</option>
+        {LOAD_PRESETS.filter((preset) => allowTri || preset.phases === "mono").map((preset) => (
+          <option key={preset.name} value={preset.name}>
+            {preset.name} ({formatPowerW(preset.powerW)} {preset.phases})
+          </option>
+        ))}
+        <option value="__custom">Autre récepteur</option>
+      </select>
+    </div>
   );
 }

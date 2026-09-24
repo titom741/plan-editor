@@ -18,6 +18,7 @@ import {
   TYPE_METRICS,
   edgeLabel,
   layoutSynoptic,
+  listedLoadRows,
   severityStroke,
   type SynopticLayout,
 } from "./synopticLayout";
@@ -134,6 +135,7 @@ export function buildDiagramPage(
       commands: `${x(first[0])} ${y(first[1])} m ${rest.map(([px, py]) => `${x(px)} ${y(py)} l`).join(" ")}`,
       strokeRgb: rgb(severityStroke(edge.severity)),
       widthPt: edge.severity === "error" ? 1.2 : 0.7,
+      ...(edge.dashed ? { dashPt: [2, 1.5] } : {}),
     });
     text.push({
       text: edge.label,
@@ -217,6 +219,11 @@ export function reportRows(network: ElectricalNetwork, names: ReadonlyMap<string
         `${formatMeters(Math.round(node.dropPct * 10) / 10)} %`,
       ],
     });
+    for (const row of listedLoadRows(node)) {
+      rows.push({
+        cells: [`${"  ".repeat(node.depth + 1)}${row.cells[0]}`, ...row.cells.slice(1)],
+      });
+    }
   }
   for (const device of network.unfed) {
     rows.push({

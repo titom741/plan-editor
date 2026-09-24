@@ -1924,3 +1924,19 @@ Electrical equipment is presented by its role, not its shape: the type
 line, the element list icon, and the label switches offered (no `stands`
 on equipment, no `electrical` on plain shapes). `standGridToDraw` refuses
 equipment, so screen, raster and PDF agree without each checking.
+
+## Consumers listed on a device (KL-048)
+
+`BoardSpec` and `StripSpec` carry an optional `loads: DirectLoad[]`
+(name, phases, unit power, quantity): consumers plugged straight into the
+device, not drawn. They enter `analyzeNetwork` as the device's own power
+(`directLoadsW`), and each unit takes a socket (`directLoadSocket`) in the
+same socket/outlet counting as the drawn cables, so both kinds mix on one
+coffret. A socket is picked from `SOCKET_RATINGS_A` (16, 32, 63, 125 A) by
+nameplate current P/U — sockets are rated by what the appliance draws —
+while the balance keeps the pessimistic power factor. `sizeCableForDevices`
+uses the same rule for a drawn load, so the two agree.
+
+In the synoptic they are leaves of their device with dashed links; boxes
+and edges now carry a `key` distinct from the `objectId` a click selects,
+since a listed consumer selects the device it hangs from.

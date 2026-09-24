@@ -68,6 +68,28 @@ export interface BoardSpec {
   rcdMa?: number;
   /** Outgoing sockets. Empty means "not described" and switches the socket count check off. */
   outputs: BoardOutput[];
+  /** Consumers plugged straight into the box, not drawn on the plan (KL-048). */
+  loads?: DirectLoad[];
+}
+
+/**
+ * A consumer plugged straight into a coffret or a power strip, listed on
+ * it rather than drawn (KL-048).
+ *
+ * Thirty projectors round a marquee are thirty identical circles and
+ * thirty cables nobody needs on the plan — what the electrician needs is
+ * their power in the balance and a socket for each. So they can be listed
+ * on the device that feeds them instead, with a quantity. Drawing a load
+ * and its cable remains the way to put one *somewhere*; the two mix
+ * freely on the same coffret.
+ */
+export interface DirectLoad {
+  name: string;
+  phases: Phases;
+  /** Power of one unit, in watts. */
+  powerW: number;
+  /** How many identical units, each on its own socket. */
+  quantity: number;
 }
 
 /** A flexible cable run between two devices. Only ever carried by a `line`. */
@@ -91,6 +113,8 @@ export interface StripSpec {
   role: "strip";
   outlets: number;
   ratingA: number;
+  /** Consumers plugged straight into the strip (KL-048). */
+  loads?: DirectLoad[];
 }
 
 /** Anything that consumes: a fridge, a PA, a string of lights. */
@@ -250,6 +274,40 @@ export function deviceCaptionAnchorLocal(device: DeviceObject): PointM {
     : { xM: device.widthM / 2, yM: device.heightM };
 }
 
+/** The consumers listed on a device, empty for one that can't carry any. */
+export function directLoadsOf(spec: ElectricalSpec): readonly DirectLoad[] {
+  return spec.role === "board" || spec.role === "strip" ? (spec.loads ?? []) : [];
+}
+
+/** Total power of a device's listed consumers, in watts. */
+export function directLoadsW(spec: ElectricalSpec): number {
+  return directLoadsOf(spec).reduce((sum, load) => sum + load.powerW * load.quantity, 0);
+}
+
+/** The ratings sockets actually come in (domestic 16 A, then P17): 20 A or 40 A breakers exist, sockets don't. */
+export const SOCKET_RATINGS_A: readonly number[] = [16, 32, 63, 125];
+
+/**
+ * The socket a listed consumer takes: its phases, and the smallest socket
+ * rating that carries one unit's **nameplate** current (P / U). A socket
+ * is chosen by what the appliance says it draws — a 3.5 kW fryer goes on
+ * a 16 A socket, which takes 3680 W — while the balance keeps its
+ * pessimistic power factor for what flows upstream.
+ */
+export function directLoadSocket(load: Pick<DirectLoad, "phases" | "powerW">): {
+  phases: Phases;
+  ratingA: number;
+} {
+  const volts =
+    load.phases === "tri" ? Math.sqrt(3) * NOMINAL_VOLTAGE_V.tri : NOMINAL_VOLTAGE_V.mono;
+  const nameplateA = load.powerW / volts;
+  return {
+    phases: load.phases,
+    ratingA:
+      SOCKET_RATINGS_A.find((rating) => rating >= nameplateA - 1e-9) ?? SOCKET_RATINGS_A.at(-1)!,
+  };
+}
+
 /** Which roles a shape of this type may take — what the properties panel offers. */
 export function rolesForType(type: PlanObject["type"]): readonly ElectricalRole[] {
   if (type === "line") return ["cable"];
@@ -282,11 +340,22 @@ export function formatOutput(output: BoardOutput): string {
   return `${output.count} × ${formatMeters(output.ratingA)} A ${PHASE_LABELS[output.phases]}`;
 }
 
+/** " · 3 récepteurs (4.5 kW)" when a device lists consumers, nothing otherwise. */
+function listedSuffix(spec: BoardSpec | StripSpec): string {
+  const count = directLoadsOf(spec).reduce((sum, load) => sum + load.quantity, 0);
+  if (count === 0) return "";
+  return ` · ${count} récepteur${count > 1 ? "s" : ""} (${formatPowerW(directLoadsW(spec))})`;
+}
+
 /**
  * What an electrical object writes on the plan, one line — only
  * characters the PDF's standard fonts can print (no ≈, no Δ).
  */
-export function electricalSummary(object: PlanObject): string | null {
+export function electricalSummary(
+  object: PlanObject,
+  /** Off where the listed consumers are shown on their own, as in the diagram. */
+  { withListed = true }: { withListed?: boolean } = {},
+): string | null {
   const spec = object.electrical;
   if (!spec) return null;
   switch (spec.role) {
@@ -294,12 +363,12 @@ export function electricalSummary(object: PlanObject): string | null {
       return `${SOURCE_KIND_LABELS[spec.kind]} · ${formatMeters(spec.ratingA)} A ${PHASE_LABELS[spec.phases]}`;
     case "board": {
       const rcd = spec.rcdMa ? ` · Diff. ${formatMeters(spec.rcdMa)} mA` : "";
-      return `${formatMeters(spec.ratingA)} A ${PHASE_LABELS[spec.phases]}${rcd}`;
+      return `${formatMeters(spec.ratingA)} A ${PHASE_LABELS[spec.phases]}${rcd}${withListed ? listedSuffix(spec) : ""}`;
     }
     case "cable":
       return `${cableDesignation(spec)} · ${formatMeters(spec.ratingA)} A`;
     case "strip":
-      return `${spec.outlets} prises ${formatMeters(spec.ratingA)} A`;
+      return `${spec.outlets} prises ${formatMeters(spec.ratingA)} A${withListed ? listedSuffix(spec) : ""}`;
     case "load":
       return `${formatPowerW(spec.powerW)} ${PHASE_LABELS[spec.phases]}`;
   }
@@ -609,12 +678,11 @@ export function sizeCableForDevices(project: Project, cableId: string): Project 
       phases = "mono";
       ratingA = spec.ratingA;
       break;
-    case "load": {
-      phases = spec.phases;
-      const current = currentForPowerA(spec.powerW, spec.phases);
-      ratingA = STANDARD_RATINGS_A.find((rating) => rating >= Math.max(16, current)) ?? 16;
+    case "load":
+      // The socket it would take if listed on the coffret (KL-048): a
+      // drawn load and a listed one plug into the same thing.
+      ({ phases, ratingA } = directLoadSocket(spec));
       break;
-    }
     default:
       return project;
   }
@@ -812,7 +880,10 @@ export function analyzeNetwork(project: Pick<Project, "objects">): ElectricalNet
 
   // Power and current flow up from the leaves; voltage drop flows down.
   const settleLoads = (node: NetworkNode): number => {
-    const own = node.device.electrical.role === "load" ? node.device.electrical.powerW : 0;
+    const own =
+      node.device.electrical.role === "load"
+        ? node.device.electrical.powerW
+        : directLoadsW(node.device.electrical);
     node.loadW = own + node.children.reduce((sum, child) => sum + settleLoads(child), 0);
     node.currentA = currentForPowerA(node.loadW, node.supplyPhases);
     return node.loadW;
@@ -896,17 +967,39 @@ export function analyzeNetwork(project: Pick<Project, "objects">): ElectricalNet
     }
 
     const outgoing = node.children.flatMap((child) => (child.feeder ? [child.feeder] : []));
+    // Listed consumers take sockets like drawn cables do (KL-048).
+    const listed = directLoadsOf(spec);
+    const listedCount = listed.reduce((sum, load) => sum + load.quantity, 0);
+    for (const load of listed) {
+      if (load.phases === "tri" && (spec.role === "strip" || node.supplyPhases === "mono")) {
+        issue(
+          "error",
+          node.device.id,
+          spec.role === "strip"
+            ? `${load.name} est triphasé : il ne se branche pas sur une multiprise.`
+            : `${load.name} est triphasé mais ${node.device.name} n'est alimenté qu'en monophasé.`,
+        );
+      }
+    }
+    const sockets = [
+      ...outgoing.map((cable) => ({
+        phases: cable.electrical.phases,
+        ratingA: cable.electrical.ratingA,
+        count: 1,
+      })),
+      ...listed.map((load) => ({ ...directLoadSocket(load), count: load.quantity })),
+    ];
     if (spec.role === "board") {
       if (spec.outputs.length > 0) {
         const groups = new Map<string, { phases: Phases; ratingA: number; used: number }>();
-        for (const cable of outgoing) {
-          const key = `${cable.electrical.phases}/${cable.electrical.ratingA}`;
+        for (const socket of sockets) {
+          const key = `${socket.phases}/${socket.ratingA}`;
           const group = groups.get(key) ?? {
-            phases: cable.electrical.phases,
-            ratingA: cable.electrical.ratingA,
+            phases: socket.phases,
+            ratingA: socket.ratingA,
             used: 0,
           };
-          group.used += 1;
+          group.used += socket.count;
           groups.set(key, group);
         }
         for (const group of groups.values()) {
@@ -922,7 +1015,7 @@ export function analyzeNetwork(project: Pick<Project, "objects">): ElectricalNet
           }
         }
       }
-      const needsRcd = outgoing.some((cable) => cable.electrical.ratingA <= RCD_REQUIRED_UP_TO_A);
+      const needsRcd = sockets.some((socket) => socket.ratingA <= RCD_REQUIRED_UP_TO_A);
       if (needsRcd && !(spec.rcdMa !== undefined && spec.rcdMa <= 30)) {
         issue(
           "warning",
@@ -931,11 +1024,11 @@ export function analyzeNetwork(project: Pick<Project, "objects">): ElectricalNet
         );
       }
     }
-    if (spec.role === "strip" && outgoing.length > spec.outlets) {
+    if (spec.role === "strip" && outgoing.length + listedCount > spec.outlets) {
       issue(
         "warning",
         node.device.id,
-        `${outgoing.length} branchements pour ${spec.outlets} prises.`,
+        `${outgoing.length + listedCount} branchements pour ${spec.outlets} prises.`,
       );
     }
 

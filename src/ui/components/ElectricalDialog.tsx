@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import {
   ELECTRICAL_ROLE_LABELS,
   electricalSummary,
@@ -18,6 +18,7 @@ import {
   TYPE_METRICS,
   edgeLabel,
   layoutSynoptic,
+  listedLoadRows,
   severityStroke,
 } from "../../printing/synopticLayout";
 
@@ -115,19 +116,20 @@ export function ElectricalDialog({
                   aria-label="Synoptique unifilaire du réseau électrique"
                 >
                   {layout.edges.map((edge) => (
-                    <g key={edge.cableId} className="electrical-dialog__edge">
+                    <g key={edge.key} className="electrical-dialog__edge">
                       <polyline
                         points={edge.pointsMm.map(([x, y]) => `${x},${y}`).join(" ")}
                         fill="none"
                         stroke={severityStroke(edge.severity)}
                         strokeWidth={edge.severity === "error" ? 0.45 : 0.3}
+                        strokeDasharray={edge.dashed ? "1.2 0.8" : undefined}
                       />
                       <text
                         x={edge.labelXMm}
                         y={edge.labelYMm}
                         fontSize={EDGE_LABEL_SIZE_PT * PT_TO_MM}
                         className="electrical-dialog__svg-text"
-                        onClick={() => onSelectObject(edge.cableId)}
+                        onClick={() => onSelectObject(edge.objectId)}
                       >
                         {edge.label}
                       </text>
@@ -135,7 +137,7 @@ export function ElectricalDialog({
                   ))}
                   {layout.boxes.map((box) => (
                     <g
-                      key={box.objectId}
+                      key={box.key}
                       className="electrical-dialog__box"
                       onClick={() => onSelectObject(box.objectId)}
                     >
@@ -220,17 +222,35 @@ export function ElectricalDialog({
                 </thead>
                 <tbody>
                   {nodes.map((node) => (
-                    <tr key={node.device.id}>
-                      <td style={{ paddingLeft: `${0.4 + node.depth * 0.9}rem` }}>
-                        {node.device.name}
-                      </td>
-                      <td>{ELECTRICAL_ROLE_LABELS[node.device.electrical.role]}</td>
-                      <td>{electricalSummary(node.device)}</td>
-                      <td>{node.feeder ? edgeLabel(node.feeder) : "—"}</td>
-                      <td>{formatPowerW(node.loadW)}</td>
-                      <td>{formatCurrentA(node.currentA)}</td>
-                      <td>{formatMeters(Math.round(node.dropPct * 10) / 10)} %</td>
-                    </tr>
+                    <Fragment key={node.device.id}>
+                      <tr>
+                        <td style={{ paddingLeft: `${0.4 + node.depth * 0.9}rem` }}>
+                          {node.device.name}
+                        </td>
+                        <td>{ELECTRICAL_ROLE_LABELS[node.device.electrical.role]}</td>
+                        <td>{electricalSummary(node.device)}</td>
+                        <td>{node.feeder ? edgeLabel(node.feeder) : "—"}</td>
+                        <td>{formatPowerW(node.loadW)}</td>
+                        <td>{formatCurrentA(node.currentA)}</td>
+                        <td>{formatMeters(Math.round(node.dropPct * 10) / 10)} %</td>
+                      </tr>
+                      {listedLoadRows(node).map((row) => (
+                        <tr key={row.key} className="electrical-dialog__listed">
+                          {row.cells.map((cell, index) => (
+                            <td
+                              key={index}
+                              style={
+                                index === 0
+                                  ? { paddingLeft: `${0.4 + (node.depth + 1) * 0.9}rem` }
+                                  : undefined
+                              }
+                            >
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))}
                   {network.unfed.map((device) => (
                     <tr key={device.id} className="electrical-dialog__unfed">

@@ -1249,3 +1249,46 @@ toujours rester visible ; c'est ce qui est à l'intérieur qui doit défiler. »
 détectés. Vérifié dans le navigateur à 1440 × 700 : titre d'Électricité et
 de Propriétés en place après 70 et 500 px de défilement, panneau d'un
 coffret sans stands.
+
+## KL-048 — Des récepteurs raccordés sans les dessiner *(done)*
+
+Demandé à l'usage : « pouvoir ajouter directement les récepteurs pour
+éviter de devoir dessiner chaque consommateur. Il faut que cette dernière
+reste possible, mais il faut pouvoir faire les deux. » Et, dans le coffret,
+un bouton « Ajouter un départ » moins haut.
+
+- **Une liste sur le coffret et sur la multiprise.** « Récepteurs
+  raccordés » : un nom, une quantité, une puissance unitaire, mono ou tri.
+  On ajoute d'un choix dans une liste, qui propose les récepteurs de la
+  bibliothèque (frigo, friteuse, sono, éclairage, chambre froide si
+  l'arrivée est tri) ou un récepteur libre. Trente projecteurs sont une
+  ligne, pas trente cercles et trente câbles.
+- **Les deux se mélangent.** Un récepteur dessiné et câblé reste le moyen
+  de le placer *quelque part* ; les listés et les dessinés d'un même
+  coffret comptent dans le même bilan, la même puissance installée, les
+  mêmes prises.
+- **Chaque unité prend une prise**, choisie parmi les calibres qui
+  existent en prise (16, 32, 63, 125 A) d'après le courant de plaque
+  P / U : une friteuse de 3,5 kW va sur une prise 16 A, qui accepte
+  3 680 W. Le premier essai prenait la liste des calibres de disjoncteurs
+  et le courant majoré du cos φ, et proposait une « prise 20 A » — qui
+  n'existe pas. Un récepteur *dessiné* suit la même règle pour
+  dimensionner son câble, si bien qu'une friteuse listée et une friteuse
+  dessinée se branchent sur la même chose.
+- **Contrôles** : les unités listées comptent dans les prises du coffret
+  et de la multiprise, déclenchent l'exigence du différentiel 30 mA, et
+  un récepteur tri est refusé sur une multiprise ou une arrivée mono.
+- **Sur le plan**, l'étiquette du coffret dit « … · 11 récepteurs
+  (5 kW) ». **Dans le synoptique**, chaque récepteur listé est une feuille
+  du coffret, reliée en tirets et étiquetée par sa prise (« Prise 16 A
+  mono ») ; un clic sélectionne le coffret. Le bilan (dialogue et PDF) les
+  range sous leur coffret.
+- **Fichier** : `loads` est facultatif sur un coffret et une multiprise,
+  lu aussi strictement que le reste (une quantité de 0 est refusée).
+- Les boutons « + Ajouter un départ » et « + Ajouter un récepteur… » sont
+  compacts : 22 px au lieu de 33.
+
+821 tests, dont 14 nouveaux, validés par mutation : douze défauts, douze
+détectés. Vérifié dans le navigateur : ajout d'une friteuse et d'un point
+lumineux sur un coffret depuis la liste, puis synoptique avec deux liaisons
+en tirets et deux lignes de bilan sous le coffret.

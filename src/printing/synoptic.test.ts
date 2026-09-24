@@ -3,6 +3,7 @@ import {
   analyzeNetwork,
   createCableObject,
   createDeviceObject,
+  flattenNetwork,
   reconcileCables,
   type CableSpec,
   type DeviceSpec,
@@ -14,6 +15,7 @@ import {
   COLUMN_GAP_MM,
   ROW_GAP_MM,
   layoutSynoptic,
+  listedLoadRows,
   severityStroke,
 } from "./synopticLayout";
 import { buildSynopticPdf, chooseSynopticPaper, reportRows } from "./synopticPdf";
@@ -164,6 +166,68 @@ describe("layoutSynoptic", () => {
     const empty = layoutSynoptic(analyzeNetwork(wire()));
     expect(empty.boxes).toEqual([]);
     expect(empty.widthMm).toBe(0);
+  });
+});
+
+describe("consumers listed on a coffret (KL-048)", () => {
+  function listedSite() {
+    const base = site();
+    return {
+      ...base,
+      objects: base.objects.map((object) =>
+        object.name === "Coffret" && object.electrical?.role === "board"
+          ? {
+              ...object,
+              electrical: {
+                ...object.electrical,
+                loads: [
+                  { name: "Projecteurs", phases: "mono" as const, powerW: 150, quantity: 10 },
+                ],
+              },
+            }
+          : object,
+      ),
+    };
+  }
+  const network = analyzeNetwork(listedSite());
+  const layout = layoutSynoptic(network);
+  const box = (title: string) => layout.boxes.find((candidate) => candidate.title === title)!;
+
+  it("draws each listed consumer as a leaf of its coffret, after the drawn ones", () => {
+    const leaf = box("Projecteurs");
+    expect(leaf.xMm).toBe(box("Bar").xMm);
+    expect(leaf.yMm).toBeGreaterThan(box("Tente").yMm);
+    expect(leaf.lines[0]).toBe("10 × 150 W mono");
+    // Clicking it selects the coffret: the consumer has no object of its own.
+    expect(leaf.objectId).toBe(box("Coffret").objectId);
+    expect(new Set(layout.boxes.map((b) => b.key)).size).toBe(layout.boxes.length);
+    const coffretCentre = box("Coffret").yMm + box("Coffret").heightMm / 2;
+    expect(coffretCentre).toBeCloseTo(
+      (box("Bar").yMm + box("Bar").heightMm / 2 + leaf.yMm + leaf.heightMm / 2) / 2,
+    );
+  });
+
+  it("links it with a dashed line labelled with the socket it takes", () => {
+    const edge = layout.edges.find((candidate) => candidate.dashed)!;
+    expect(edge.label).toBe("Prise 16 A mono");
+    expect(layout.edges.filter((candidate) => candidate.dashed)).toHaveLength(1);
+    const pdf = latin1(buildSynopticPdf(network, "Virade", new Date("2026-09-24T10:00:00Z")));
+    expect(pdf).toContain("[2 1.5] 0 d");
+  });
+
+  it("lists it in the balance under its coffret", () => {
+    const coffret = flattenNetwork(network.trees).find((node) => node.device.name === "Coffret")!;
+    expect(listedLoadRows(coffret)[0]!.cells).toEqual([
+      "Projecteurs",
+      "Récepteur",
+      "10 × 150 W mono",
+      "prise 16 A de Coffret",
+      "1.5 kW",
+      expect.stringMatching(/ A$/),
+      expect.stringMatching(/ %$/),
+    ]);
+    const rows = reportRows(network, new Map()).map((row) => row.cells[0]);
+    expect(rows.indexOf("    Projecteurs")).toBeGreaterThan(rows.indexOf("  Coffret"));
   });
 });
 

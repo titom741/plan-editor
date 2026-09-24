@@ -1,6 +1,11 @@
 import {
   ELECTRICAL_ROLE_LABELS,
+  PHASE_LABELS,
   cableDesignation,
+  currentForPowerA,
+  directLoadSocket,
+  directLoadsOf,
+  directLoadsW,
   cableLengthM,
   electricalSummary,
   formatCurrentA,
@@ -46,6 +51,9 @@ const LINE_STEP_MM = LINE_SIZE_PT * PT_TO_MM * 1.3;
 const TITLE_STEP_MM = TITLE_SIZE_PT * PT_TO_MM * 1.35;
 
 export interface SynopticBox {
+  /** Unique in the layout: the object's id, or the coffret's id and an index for a listed consumer. */
+  key: string;
+  /** The object a click selects — for a listed consumer, the device it is listed on. */
   objectId: string;
   role: DeviceRole;
   /** Top-left corner, mm, y downward. */
@@ -60,7 +68,11 @@ export interface SynopticBox {
 }
 
 export interface SynopticEdge {
-  cableId: string;
+  key: string;
+  /** The object a click selects: the cable, or the device a listed consumer hangs from. */
+  objectId: string;
+  /** A listed consumer has no cable drawn (KL-048): its link is dashed, and labelled with the socket it takes. */
+  dashed: boolean;
   /** Orthogonal polyline from the parent's right edge to the child's left edge. */
   pointsMm: [number, number][];
   label: string;
@@ -99,7 +111,11 @@ function round1(value: number): string {
 /** What a device's box says under its name. Only characters the PDF's fonts can print. */
 export function boxLines(node: NetworkNode): string[] {
   const spec = node.device.electrical;
-  const lines = [electricalSummary(node.device) ?? ELECTRICAL_ROLE_LABELS[spec.role]];
+  // The listed consumers have boxes of their own; saying them again here
+  // would only push the rating off the edge of the box.
+  const lines = [
+    electricalSummary(node.device, { withListed: false }) ?? ELECTRICAL_ROLE_LABELS[spec.role],
+  ];
   if (spec.role === "source") {
     lines.push(
       `Charge ${formatPowerW(node.loadW)} · ${formatCurrentA(node.currentA)} / ${round1(
@@ -114,6 +130,26 @@ export function boxLines(node: NetworkNode): string[] {
     );
   }
   return lines;
+}
+
+/** One balance row per consumer listed on a device (KL-048): the cells of the table, in order. */
+export function listedLoadRows(node: NetworkNode): { key: string; cells: string[] }[] {
+  return directLoadsOf(node.device.electrical).map((load, index) => {
+    const socket = directLoadSocket(load);
+    const totalW = load.powerW * load.quantity;
+    return {
+      key: `${node.device.id}#${index}`,
+      cells: [
+        load.name,
+        "Récepteur",
+        `${load.quantity > 1 ? `${load.quantity} × ` : ""}${formatPowerW(load.powerW)} ${PHASE_LABELS[load.phases]}`,
+        `prise ${formatMeters(socket.ratingA)} A de ${node.device.name}`,
+        formatPowerW(totalW),
+        formatCurrentA(currentForPowerA(totalW, load.phases)),
+        `${round1(node.dropPct)} %`,
+      ],
+    };
+  });
 }
 
 /** What is written along a cable: designation, protection, laid length. */
@@ -140,7 +176,33 @@ export function layoutSynoptic(network: ElectricalNetwork): SynopticLayout {
     maxDepth = Math.max(maxDepth, node.depth);
     const lines = boxLines(node);
     const heightMm = boxHeight(lines.length);
-    const children = node.children.map(place);
+    // Drawn children first, then the consumers listed on the device
+    // (KL-048), each a leaf in the next column.
+    const drawn = node.children.map(place);
+    const listed = directLoadsOf(node.device.electrical).map((load, index) => {
+      maxDepth = Math.max(maxDepth, node.depth + 1);
+      const loadLines = [
+        `${load.quantity > 1 ? `${load.quantity} × ` : ""}${formatPowerW(load.powerW)} ${PHASE_LABELS[load.phases]}`,
+        `${formatCurrentA(currentForPowerA(load.powerW * load.quantity, load.phases))} · raccordé direct`,
+      ];
+      const loadHeight = boxHeight(loadLines.length);
+      const leaf: SynopticBox = {
+        key: `${node.device.id}#${index}`,
+        objectId: node.device.id,
+        role: "load",
+        xMm: columnX(node.depth + 1),
+        yMm: cursorY,
+        widthMm: BOX_WIDTH_MM,
+        heightMm: loadHeight,
+        title: load.name,
+        lines: loadLines,
+        severity: null,
+      };
+      cursorY += loadHeight + ROW_GAP_MM;
+      boxes.push(leaf);
+      return { leaf, load };
+    });
+    const children = [...drawn, ...listed.map((entry) => entry.leaf)];
     let yMm: number;
     if (children.length === 0) {
       yMm = cursorY;
@@ -152,6 +214,7 @@ export function layoutSynoptic(network: ElectricalNetwork): SynopticLayout {
       yMm = middle - heightMm / 2;
     }
     const box: SynopticBox = {
+      key: node.device.id,
       objectId: node.device.id,
       role: node.device.electrical.role,
       xMm: columnX(node.depth),
@@ -166,23 +229,40 @@ export function layoutSynoptic(network: ElectricalNetwork): SynopticLayout {
 
     const startX = box.xMm + box.widthMm;
     const startY = box.yMm + box.heightMm / 2;
-    node.children.forEach((child, index) => {
-      const target = children[index]!;
-      const cable = child.feeder!;
+    const link = (target: SynopticBox) => {
       const endY = target.yMm + target.heightMm / 2;
       const elbowX = startX + ELBOW_MM;
-      edges.push({
-        cableId: cable.id,
+      return {
         pointsMm: [
           [startX, startY],
           [elbowX, startY],
           [elbowX, endY],
           [target.xMm, endY],
-        ],
-        label: edgeLabel(cable),
+        ] as [number, number][],
         labelXMm: elbowX + 1.5,
         labelYMm: endY - 1.2,
+      };
+    };
+    node.children.forEach((child, index) => {
+      const cable = child.feeder!;
+      edges.push({
+        key: cable.id,
+        objectId: cable.id,
+        dashed: false,
+        ...link(drawn[index]!),
+        label: edgeLabel(cable),
         severity: worst(network.issues, [cable.id]),
+      });
+    });
+    listed.forEach(({ leaf, load }) => {
+      const socket = directLoadSocket(load);
+      edges.push({
+        key: `${leaf.key}-link`,
+        objectId: node.device.id,
+        dashed: true,
+        ...link(leaf),
+        label: `Prise ${formatMeters(socket.ratingA)} A ${PHASE_LABELS[socket.phases]}`,
+        severity: null,
       });
     });
     return box;
@@ -204,7 +284,10 @@ export function layoutSynoptic(network: ElectricalNetwork): SynopticLayout {
         children: [],
         depth: 0,
         supplyPhases: "mono",
-        loadW: device.electrical.role === "load" ? device.electrical.powerW : 0,
+        loadW:
+          device.electrical.role === "load"
+            ? device.electrical.powerW
+            : directLoadsW(device.electrical),
         currentA: 0,
         dropPct: 0,
       };
@@ -216,6 +299,7 @@ export function layoutSynoptic(network: ElectricalNetwork): SynopticLayout {
       const column = index % perRow;
       if (index > 0 && column === 0) cursorY += heightMm + ROW_GAP_MM;
       boxes.push({
+        key: node.device.id,
         objectId: node.device.id,
         role: device.electrical.role,
         xMm: columnX(column),

@@ -20,7 +20,7 @@
  */
 
 import { DEFAULT_LABEL_DISPLAY, clampLabelFontSizePx } from "../domain/display";
-import { rolesForType, type BoardOutput, type Phases } from "../domain/electrical";
+import { rolesForType, type BoardOutput, type DirectLoad, type Phases } from "../domain/electrical";
 import { PAPER_SIZE_ORDER } from "../domain/sheets";
 import { isPaletteSymbol } from "../domain/symbols";
 import type {
@@ -400,6 +400,21 @@ function readCount(value: unknown, path: string): number {
   return count;
 }
 
+/** Consumers listed on a coffret or a strip (KL-048). Absent means none; each is checked like a drawn load. */
+function readDirectLoads(value: unknown, path: string): { loads?: DirectLoad[] } {
+  if (value === undefined) return {};
+  const loads = readArray(value, path).map((item, i) => {
+    const record = readRecord(item, `${path}[${i}]`);
+    return {
+      name: readString(record.name, `${path}[${i}].name`),
+      phases: readPhases(record.phases, `${path}[${i}].phases`),
+      powerW: readPositiveNumber(record.powerW, `${path}[${i}].powerW`),
+      quantity: readCount(record.quantity, `${path}[${i}].quantity`),
+    };
+  });
+  return { loads };
+}
+
 function readOptionalId(record: Record<string, unknown>, key: string, path: string) {
   return record[key] !== undefined ? { [key]: readString(record[key], `${path}.${key}`) } : {};
 }
@@ -445,6 +460,7 @@ function readElectrical(value: unknown, path: string): ElectricalSpec {
           ? { rcdMa: readPositiveNumber(record.rcdMa, `${path}.rcdMa`) }
           : {}),
         outputs,
+        ...readDirectLoads(record.loads, `${path}.loads`),
       };
     }
     case "cable":
@@ -464,6 +480,7 @@ function readElectrical(value: unknown, path: string): ElectricalSpec {
         role,
         outlets: readCount(record.outlets, `${path}.outlets`),
         ratingA: readPositiveNumber(record.ratingA, `${path}.ratingA`),
+        ...readDirectLoads(record.loads, `${path}.loads`),
       };
     case "load":
       return {

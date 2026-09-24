@@ -763,6 +763,41 @@ describe("electrical objects (KL-045)", () => {
       });
   });
 
+  it("round-trips the consumers listed on a coffret and a strip (KL-048)", () => {
+    const project = wiredProject();
+    const listed = {
+      ...project,
+      objects: project.objects.map((object) =>
+        object.electrical?.role === "board" || object.electrical?.role === "strip"
+          ? {
+              ...object,
+              electrical: {
+                ...object.electrical,
+                loads: [{ name: "Projecteur", phases: "mono" as const, powerW: 150, quantity: 10 }],
+              },
+            }
+          : object,
+      ),
+    };
+    const result = parseProjectFile(JSON.parse(serializeProject(listed)));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.file.project).toEqual(listed);
+  });
+
+  it("refuses a listed consumer with no unit", () => {
+    const file = firstFile();
+    file.project.objects[1].electrical.loads = [
+      { name: "Projecteur", phases: "mono", powerW: 150, quantity: 0 },
+    ];
+    const result = parseProjectFile(file);
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error).toEqual({
+        code: "invalidField",
+        path: "project.objects[1].electrical.loads[0].quantity",
+      });
+  });
+
   it("keeps a cable naming a device that is no longer there", () => {
     // An unplugged end is a legitimate state; one deleted coffret must not
     // cost the whole plan.

@@ -1897,3 +1897,51 @@
   color: var(--text);
   font-style: italic;
 }
+
+/* KL-048 — compact "add" controls and listed consumers. */
+.properties-panel__add {
+  align-self: flex-start;
+  flex: 0 0 auto;
+  padding: 0.15rem 0.5rem;
+  border: 1px dashed var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.properties-panel__add:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  color: var(--text-h);
+}
+
+.properties-panel__load {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.properties-panel__load input[type="text"] {
+  min-width: 0;
+}
+
+.properties-panel__load-row {
+  display: grid;
+  grid-template-columns: 2.6rem auto minmax(3.6rem, 1fr) auto minmax(3.4rem, auto) auto;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+}
+
+.properties-panel__load-row input,
+.properties-panel__load-row select {
+  min-width: 0;
+}
+
+.electrical-dialog__listed td {
+  color: var(--text);
+}

@@ -9,6 +9,7 @@ import {
   createDeviceObject,
   currentForPowerA,
   deviceCaptionAnchorLocal,
+  directLoadSocket,
   deviceCenterWorld,
   electricalLayerId,
   electricalSummary,
@@ -25,6 +26,7 @@ import {
   type CableObject,
   type DeviceObject,
   type DeviceSpec,
+  type DirectLoad,
   type ElectricalIssue,
 } from "./electrical";
 import { objectLocalToWorld, worldToObjectLocal } from "./geometry";
@@ -479,11 +481,18 @@ describe("sizeCableForDevices", () => {
     expect(
       sized(device("M", { xM: 20, yM: 0 }, { role: "strip", outlets: 6, ratingA: 16 })).electrical,
     ).toMatchObject({ phases: "mono", ratingA: 16, sectionMm2: 2.5 });
-    // 6 kW single-phase draws 29 A: the 32 A socket, on 6 mm².
+    // 6 kW single-phase is 26 A on its plate: the 32 A socket, on 6 mm².
     expect(
       sized(device("R", { xM: 20, yM: 0 }, { role: "load", phases: "mono", powerW: 6000 }))
         .electrical,
     ).toMatchObject({ phases: "mono", ratingA: 32, sectionMm2: 6 });
+  });
+
+  it("puts a drawn fryer on the 16 A socket it would take if listed", () => {
+    expect(
+      sized(device("F", { xM: 20, yM: 0 }, { role: "load", phases: "mono", powerW: 3500 }))
+        .electrical,
+    ).toMatchObject({ phases: "mono", ratingA: 16, sectionMm2: 2.5 });
   });
 
   it("leaves a cable that feeds nothing as it was drawn", () => {
@@ -772,5 +781,156 @@ describe("nomenclature", () => {
       ["Câble 3G2.5", "H07RN-F 3G2.5", 25],
       ["Câble 5G6", "H07RN-F 5G6", 20],
     ]);
+  });
+});
+
+describe("consumers listed on a device (KL-048)", () => {
+  const src = device(
+    "Groupe",
+    { xM: 0, yM: 0 },
+    { role: "source", kind: "generator", phases: "tri", ratingA: 63 },
+  );
+  const listedBoard = (loads: DirectLoad[], outputs: BoardSpec["outputs"] = []) =>
+    device(
+      "Coffret",
+      { xM: 20, yM: 0 },
+      { role: "board", phases: "tri", ratingA: 63, rcdMa: 30, outputs, loads },
+    );
+  const main = () =>
+    cable(
+      "Principal",
+      { xM: 0, yM: 0 },
+      { xM: 20, yM: 0 },
+      { phases: "tri", sectionMm2: 16, ratingA: 63 },
+    );
+  const projectors: DirectLoad = { name: "Projecteur", phases: "mono", powerW: 150, quantity: 10 };
+  const fryer: DirectLoad = { name: "Friteuse", phases: "mono", powerW: 3500, quantity: 1 };
+
+  it("counts listed consumers in the balance, quantity included", () => {
+    const network = analyzeNetwork(addAll(project(src, listedBoard([projectors, fryer])), main()));
+    expect(network.totalLoadW).toBe(1500 + 3500);
+    const board = flattenNetwork(network.trees).find((node) => node.device.name === "Coffret")!;
+    expect(board.loadW).toBe(5000);
+    expect(board.currentA).toBeCloseTo(currentForPowerA(5000, "tri"));
+  });
+
+  it("adds listed and drawn consumers on the same coffret", () => {
+    const drawn = device("Sono", { xM: 40, yM: 0 }, { role: "load", phases: "mono", powerW: 3000 });
+    const network = analyzeNetwork(
+      addAll(
+        project(src, listedBoard([fryer]), drawn),
+        main(),
+        cable("K", { xM: 20, yM: 0 }, { xM: 40, yM: 0 }),
+      ),
+    );
+    expect(network.totalLoadW).toBe(6500);
+  });
+
+  it("gives each consumer the smallest socket that carries its nameplate current", () => {
+    // A 3.5 kW fryer draws 15.2 A on its plate: a 16 A socket, not a
+    // 20 A one, which is a breaker size and not a socket.
+    expect(directLoadSocket({ phases: "mono", powerW: 3500 })).toEqual({
+      phases: "mono",
+      ratingA: 16,
+    });
+    // 3680 W is exactly what 16 A carries.
+    expect(directLoadSocket({ phases: "mono", powerW: 3680 }).ratingA).toBe(16);
+    expect(directLoadSocket({ phases: "mono", powerW: 3700 }).ratingA).toBe(32);
+    expect(directLoadSocket({ phases: "mono", powerW: 6000 }).ratingA).toBe(32);
+    expect(directLoadSocket({ phases: "tri", powerW: 6000 }).ratingA).toBe(16);
+    expect(directLoadSocket({ phases: "tri", powerW: 200000 }).ratingA).toBe(125);
+  });
+
+  it("takes one socket per unit, alongside the drawn cables", () => {
+    const outputs = [{ phases: "mono" as const, ratingA: 16, count: 6 }];
+    const lamp = device("Lampe", { xM: 40, yM: 0 }, { role: "load", phases: "mono", powerW: 100 });
+    const crowded = addAll(
+      project(src, listedBoard([{ ...projectors, quantity: 5 }], outputs), lamp),
+      main(),
+      cable("K", { xM: 20, yM: 0 }, { xM: 40, yM: 0 }),
+    );
+    const board = crowded.objects.find((object) => object.name === "Coffret")!;
+    // Five listed units and one cable: every socket taken, none short.
+    expect(
+      messages(analyzeNetwork(crowded).issues, board.id).filter((m) => m.includes("départ")),
+    ).toEqual([]);
+    const tooMany = addAll(
+      project(src, listedBoard([{ ...projectors, quantity: 6 }], outputs), lamp),
+      main(),
+      cable("K", { xM: 20, yM: 0 }, { xM: 40, yM: 0 }),
+    );
+    const tooManyBoard = tooMany.objects.find((object) => object.name === "Coffret")!;
+    expect(messages(analyzeNetwork(tooMany).issues, tooManyBoard.id)).toContain(
+      "7 départ(s) 16 A mono pour 6 prise(s).",
+    );
+  });
+
+  it("asks for a 30 mA RCD when only listed consumers use the sockets", () => {
+    const bare = device(
+      "Coffret",
+      { xM: 20, yM: 0 },
+      { role: "board", phases: "tri", ratingA: 63, outputs: [], loads: [projectors] },
+    );
+    const network = analyzeNetwork(addAll(project(src, bare), main()));
+    expect(messages(network.issues, bare.id)[0]).toMatch(/^Pas de différentiel 30 mA/);
+  });
+
+  it("refuses a three-phase consumer on a strip or on a single-phase supply", () => {
+    const strip = device(
+      "Multiprise",
+      { xM: 20, yM: 0 },
+      {
+        role: "strip",
+        outlets: 6,
+        ratingA: 16,
+        loads: [{ name: "Chambre froide", phases: "tri", powerW: 6000, quantity: 1 }],
+      },
+    );
+    const onStrip = analyzeNetwork(
+      addAll(project(src, strip), cable("K", { xM: 0, yM: 0 }, { xM: 20, yM: 0 })),
+    );
+    expect(messages(onStrip.issues, strip.id)).toContain(
+      "Chambre froide est triphasé : il ne se branche pas sur une multiprise.",
+    );
+
+    const monoBoard = device(
+      "Coffret mono",
+      { xM: 20, yM: 0 },
+      {
+        role: "board",
+        phases: "mono",
+        ratingA: 32,
+        rcdMa: 30,
+        outputs: [],
+        loads: [{ name: "Chambre froide", phases: "tri", powerW: 6000, quantity: 1 }],
+      },
+    );
+    const onMono = analyzeNetwork(
+      addAll(project(src, monoBoard), cable("K", { xM: 0, yM: 0 }, { xM: 20, yM: 0 })),
+    );
+    expect(messages(onMono.issues, monoBoard.id)).toContain(
+      "Chambre froide est triphasé mais Coffret mono n'est alimenté qu'en monophasé.",
+    );
+  });
+
+  it("counts listed units against a strip's outlets", () => {
+    const strip = device(
+      "Multiprise",
+      { xM: 20, yM: 0 },
+      { role: "strip", outlets: 4, ratingA: 16, loads: [{ ...projectors, quantity: 5 }] },
+    );
+    const network = analyzeNetwork(
+      addAll(project(src, strip), cable("K", { xM: 0, yM: 0 }, { xM: 20, yM: 0 })),
+    );
+    expect(messages(network.issues, strip.id)).toContain("5 branchements pour 4 prises.");
+  });
+
+  it("says on the plan how many consumers a device carries, and can leave it out", () => {
+    const board = listedBoard([projectors, fryer]);
+    expect(electricalSummary(board)).toBe("63 A tri · Diff. 30 mA · 11 récepteurs (5 kW)");
+    expect(electricalSummary(board, { withListed: false })).toBe("63 A tri · Diff. 30 mA");
+    expect(electricalSummary(listedBoard([fryer]))).toBe(
+      "63 A tri · Diff. 30 mA · 1 récepteur (3.5 kW)",
+    );
   });
 });
