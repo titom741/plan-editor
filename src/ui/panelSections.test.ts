@@ -28,16 +28,27 @@ describe("toggleSection", () => {
   it("closes the menu that was open when another is opened", () => {
     // The left rail is one menu at a time: Fichier, Projet, Outils are
     // places you go to pick something and leave.
-    const onlyToolsOpen = set("file", "project");
-    expect([...toggleSection(onlyToolsOpen, "file")].sort()).toEqual(["project", "tools"]);
+    const onlyToolsOpen = set("file", "project", "electrical");
+    expect([...toggleSection(onlyToolsOpen, "file")].sort()).toEqual([
+      "electrical",
+      "project",
+      "tools",
+    ]);
+  });
+
+  it("gives Électricité a menu of its own, which closes Outils when opened", () => {
+    const onlyToolsOpen = set("file", "project", "electrical");
+    expect([...toggleSection(onlyToolsOpen, "electrical")].sort()).toEqual([
+      "file",
+      "project",
+      "tools",
+    ]);
   });
 
   it("leaves the other rail alone when a menu is opened", () => {
-    expect([...toggleSection(set("file", "project", "elements"), "project")].sort()).toEqual([
-      "elements",
-      "file",
-      "tools",
-    ]);
+    expect(
+      [...toggleSection(set("file", "project", "electrical", "elements"), "project")].sort(),
+    ).toEqual(["electrical", "elements", "file", "tools"]);
   });
 
   it("lets the right rail keep both panels open", () => {
@@ -62,20 +73,22 @@ describe("loadCollapsedSections", () => {
     installMemoryStorage();
   });
 
-  it("starts on the tools, with the two menus folded", () => {
+  it("starts on the tools, with the other menus folded", () => {
     // The palette is the panel used continuously; Fichier and Projet are
     // visited and left.
-    expect([...loadCollapsedSections()].sort()).toEqual(["file", "project"]);
+    expect([...loadCollapsedSections()].sort()).toEqual(["electrical", "file", "project"]);
   });
 
   it("round-trips through save", () => {
-    saveCollapsedSections(set("file", "tools", "elements"));
-    expect([...loadCollapsedSections()].sort()).toEqual(["elements", "file", "tools"]);
+    saveCollapsedSections(set("file", "tools", "project", "elements"));
+    expect([...loadCollapsedSections()].sort()).toEqual(["elements", "file", "project", "tools"]);
   });
 
   it("drops ids this build cannot unfold", () => {
-    saveCollapsedSections(new Set(["tools", "file", "fromTheFuture"] as PanelSectionId[]));
-    expect([...loadCollapsedSections()].sort()).toEqual(["file", "tools"]);
+    saveCollapsedSections(
+      new Set(["tools", "file", "electrical", "fromTheFuture"] as PanelSectionId[]),
+    );
+    expect([...loadCollapsedSections()].sort()).toEqual(["electrical", "file", "tools"]);
   });
 
   it("folds a stored state that left several menus open at once", () => {
@@ -83,17 +96,24 @@ describe("loadCollapsedSections", () => {
     // would show a layout this one has no way to reach again; whoever was
     // in it was drawing, so they land on the palette.
     saveCollapsedSections(set());
-    expect([...loadCollapsedSections()].sort()).toEqual(["file", "project"]);
+    expect([...loadCollapsedSections()].sort()).toEqual(["electrical", "file", "project"]);
   });
 
   it("keeps the one that was open when the stored state is already valid", () => {
-    saveCollapsedSections(set("tools", "project"));
-    expect([...loadCollapsedSections()].sort()).toEqual(["project", "tools"]);
+    saveCollapsedSections(set("tools", "project", "electrical"));
+    expect([...loadCollapsedSections()].sort()).toEqual(["electrical", "project", "tools"]);
+  });
+
+  it("keeps a state saved before Électricité existed on the palette", () => {
+    // Its folds never mention the new menu, which would read as open next
+    // to Outils; the palette the user left open is the one kept.
+    saveCollapsedSections(set("file", "project"));
+    expect([...loadCollapsedSections()].sort()).toEqual(["electrical", "file", "project"]);
   });
 
   it("survives a stored value that isn't an array", () => {
     localStorage.setItem("kl-implantation/panels/v1", "42");
-    expect([...loadCollapsedSections()].sort()).toEqual(["file", "project"]);
+    expect([...loadCollapsedSections()].sort()).toEqual(["electrical", "file", "project"]);
   });
 });
 

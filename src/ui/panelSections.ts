@@ -5,7 +5,7 @@
  * The two rails behave differently, on purpose:
  *
  * - **The left rail is a set of menus, one open at a time.** Fichier,
- *   Projet and Outils are places you go to pick something and leave; you
+ *   Projet, Outils and Électricité are places you go to pick something and leave; you
  *   do not read a plan against two of them at once, and opening one while
  *   another stays open just pushes the third off the bottom.
  * - **The right rail stacks.** Properties and Éléments are read *while*
@@ -17,7 +17,8 @@
  * would make the controls pointless.
  */
 
-export type PanelSectionId = "tools" | "file" | "project" | "properties" | "elements";
+export type PanelSectionId =
+  "tools" | "electrical" | "file" | "project" | "properties" | "elements";
 
 export interface PanelRail {
   /**
@@ -31,7 +32,10 @@ export interface PanelRail {
 }
 
 export const PANEL_RAILS: readonly PanelRail[] = [
-  { sections: ["file", "project", "tools"], exclusive: true },
+  // Électricité is a menu of its own (KL-047), not a heading inside
+  // Outils: laying out a network is a job of its own, done with its own
+  // tools, and it deserved more than the bottom of a long palette.
+  { sections: ["file", "project", "tools", "electrical"], exclusive: true },
   { sections: ["properties", "elements"], exclusive: false },
 ];
 

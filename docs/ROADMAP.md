@@ -1213,3 +1213,39 @@ récepteurs, un oublié), rendu en image : synoptique lisible sur A4 à
 l'échelle 1, erreurs en rouge (friteuse 3,5 kW sur un départ 16 A,
 2,5 mm² derrière 32 A), sono à 7,7 % de chute en orange, 194 m de 3G2.5 à
 commander. Vérifié aussi dans le navigateur.
+
+## KL-047 — L'électricité a son propre menu *(done)*
+
+Retour d'usage sur KL-045 : « il faut que l'appareillage électrique soit
+spécifique (pas de stand). Dans le menu de gauche, Électricité doit devenir
+un onglet propre, pas imbriqué dans Outils. Le titre de l'onglet doit
+toujours rester visible ; c'est ce qui est à l'intérieur qui doit défiler. »
+
+- **Un menu Électricité**, le quatrième du rail gauche, qui s'ouvre seul
+  comme les autres (ouvrir Électricité replie Outils). Il porte les cinq
+  outils, l'interrupteur « Caractéristiques sur le plan », un résumé
+  (puissance installée, erreurs, avertissements) et le bouton du schéma
+  électrique. Outils ne garde que le dessin. Une préférence enregistrée
+  avant ce menu ne le mentionne pas, ce qui le lirait comme ouvert à côté
+  d'Outils : la règle « un seul ouvert » garde la palette, et un test le dit.
+- **Les titres ne défilent plus.** Chaque panneau des rails (Fichier,
+  Projet, Outils, Électricité, Propriétés) garde son titre collé en haut de
+  sa propre zone de défilement ; seul le contenu passe dessous, sur une
+  bande opaque qui couvre aussi la marge haute du panneau.
+- **L'appareillage est un objet à part entière.** Un coffret s'affiche
+  « Type : Coffret », pas « Rectangle », et la liste des éléments le montre
+  avec l'icône de son outil. Il n'a ni bouton « Stands… », ni case
+  « Stands » dans son étiquette ; à l'inverse, un objet ordinaire n'a plus
+  de case « Électricité » qui ne pourrait rien y changer. Une grille de
+  stands restée d'avant — un rectangle devenu coffret — est gardée dans le
+  fichier mais jamais dessinée (`standGridToDraw`), et lui donner un rôle
+  électrique depuis le panneau l'efface.
+- Au passage : les boutons isolés du panneau (« Schéma électrique… »,
+  « + Ajouter un départ ») prenaient 120 px de haut, hérités d'une règle
+  faite pour une rangée de boutons ; la colonne calibre des départs était
+  trop étroite pour « 32 A ».
+
+807 tests, dont 3 nouveaux, validés par mutation : trois défauts, trois
+détectés. Vérifié dans le navigateur à 1440 × 700 : titre d'Électricité et
+de Propriétés en place après 70 et 500 px de défilement, panneau d'un
+coffret sans stands.

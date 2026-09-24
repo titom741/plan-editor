@@ -235,6 +235,14 @@ describe("standGridToDraw", () => {
     expect(standGridToDraw(withGrid, { ...DEFAULT_LABEL_DISPLAY, stands: false })).toBeNull();
   });
 
+  it("draws nothing on electrical equipment, even with a grid left over (KL-047)", () => {
+    const coffret = {
+      ...withGrid,
+      electrical: { role: "board" as const, phases: "tri" as const, ratingA: 63, outputs: [] },
+    };
+    expect(standGridToDraw(coffret, DEFAULT_LABEL_DISPLAY)).toBeNull();
+  });
+
   it("draws nothing for a rectangle without a grid, which is nearly all of them", () => {
     expect(standGridToDraw(marquee(), DEFAULT_LABEL_DISPLAY)).toBeNull();
   });

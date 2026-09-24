@@ -1908,3 +1908,19 @@ and A3 otherwise, never enlarges it, and paginates the balance, cable
 totals and alerts on A4 pages that each carry the planning-aid disclaimer.
 A box's colour is the severity of the first issue about it or its feeder;
 `analyzeNetwork` sorts issues errors first, so the first is the worst.
+
+## The electrical menu and sticky panel titles (KL-047)
+
+The left rail's exclusive sections are now `file`, `project`, `tools` and
+`electrical` (`ui/panelSections.ts`); `ElectricalPanel` renders the
+electrical tools, which `ToolsPanel` no longer shows (it filters on
+`ToolDefinition.group`). Every rail panel scrolls as a whole, and its
+`.panel__title` is `position: sticky` inside that scroll box, with an
+upward box-shadow in the background colour to cover the panel's top
+padding — one CSS rule rather than restructuring five components around a
+separate scrolling body.
+
+Electrical equipment is presented by its role, not its shape: the type
+line, the element list icon, and the label switches offered (no `stands`
+on equipment, no `electrical` on plain shapes). `standGridToDraw` refuses
+equipment, so screen, raster and PDF agree without each checking.

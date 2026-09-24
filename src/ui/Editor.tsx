@@ -90,6 +90,7 @@ import { ToolbarCustomizeDialog } from "./components/ToolbarCustomizeDialog";
 import { CommandMenu } from "./components/CommandMenu";
 import { DialogErrorFallback, ErrorBoundary } from "./components/ErrorBoundary";
 import { ToolsPanel } from "./components/ToolsPanel";
+import { ElectricalPanel } from "./components/ElectricalPanel";
 import { ShortcutsDialog } from "./components/ShortcutsDialog";
 import { CommentsDialog } from "./components/CommentsDialog";
 import { useAutosave } from "./hooks/useAutosave";
@@ -1226,7 +1227,8 @@ export default function Editor({
   const [editingStands, setEditingStands] = useState<RectangleObject | null>(null);
 
   const handleRequestStands = useCallback(() => {
-    if (selectedObject?.type === "rectangle") setEditingStands(selectedObject);
+    if (selectedObject?.type === "rectangle" && !selectedObject.electrical)
+      setEditingStands(selectedObject);
   }, [selectedObject]);
 
   const handleConfirmStands = useCallback(
@@ -1443,6 +1445,16 @@ export default function Editor({
           onLabelDisplayChange={handleLabelDisplayChange}
           collapsed={isCollapsed("tools")}
           onToggleCollapsed={() => toggleCollapsed("tools")}
+        />
+        <ElectricalPanel
+          activeToolId={activeTool}
+          onSelectTool={handleSelectTool}
+          network={electricalNetwork}
+          onOpenDiagram={() => setOpenDialog("electrical")}
+          labelDisplay={labelDisplay}
+          onLabelDisplayChange={handleLabelDisplayChange}
+          collapsed={isCollapsed("electrical")}
+          onToggleCollapsed={() => toggleCollapsed("electrical")}
         />
         <div
           className="rail-resizer rail-resizer--tools"

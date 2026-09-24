@@ -1,7 +1,17 @@
+import type { ElectricalRole } from "../../domain/electrical";
 import { useMemo, useState } from "react";
 import { getObjectDimensionSummary } from "../../domain/labels";
 import { sortLayersByOrder } from "../../domain/layers";
 import type { Layer, PlanObject } from "../../domain/types";
+
+/** An electrical object is listed as what it is, with its tool's icon, not as the shape it is drawn with (KL-047). */
+const ELECTRICAL_ROLE_ICONS: Record<ElectricalRole, string> = {
+  source: "⏻",
+  board: "▣",
+  cable: "⌇",
+  strip: "⋮",
+  load: "⊗",
+};
 
 const TYPE_ICONS: Record<PlanObject["type"], string> = {
   rectangle: "▭",
@@ -134,7 +144,9 @@ export function ElementsPanel({
                           }
                         >
                           <span aria-hidden="true" className="elements-panel__icon">
-                            {TYPE_ICONS[object.type]}
+                            {object.electrical
+                              ? ELECTRICAL_ROLE_ICONS[object.electrical.role]
+                              : TYPE_ICONS[object.type]}
                           </span>
                           <span className="elements-panel__name">{object.name}</span>
                           {dimensions && <span className="elements-panel__size">{dimensions}</span>}

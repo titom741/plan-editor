@@ -84,7 +84,12 @@ export function ElectricalSection({
     onPatch(
       next.role === "cable"
         ? { electrical: next, style: { ...object.style, ...cableStyle(next.phases) } }
-        : { electrical: next, category: object.category ?? "Électricité" },
+        : {
+            electrical: next,
+            category: object.category ?? "Électricité",
+            // Equipment is not a marquee: its stands go with its old role.
+            ...(object.type === "rectangle" ? { stands: undefined } : {}),
+          },
     );
   };
 

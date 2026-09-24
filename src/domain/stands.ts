@@ -210,5 +210,8 @@ export function labelledStandCells(
 export function standGridToDraw(object: PlanObject, display: LabelDisplay): StandGrid | null {
   if (!display.stands) return null;
   if (object.type !== "rectangle") return null;
+  // A coffret is not a marquee (KL-047): a grid left over from before the
+  // shape was made electrical is kept in the file but never drawn.
+  if (object.electrical) return null;
   return object.stands ?? null;
 }

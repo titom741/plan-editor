@@ -20,7 +20,7 @@ import { MIN_SYMBOL_SIZE_M, symbolsByGroup } from "../../domain/symbols";
 import { sortLayersByOrder } from "../../domain/layers";
 import { NumberField } from "./NumberField";
 import { ElectricalSection } from "./ElectricalSection";
-import type { ElectricalNetwork } from "../../domain/electrical";
+import { ELECTRICAL_ROLE_LABELS, type ElectricalNetwork } from "../../domain/electrical";
 import type {
   BackgroundImage,
   Calibration,
@@ -549,7 +549,13 @@ export function PropertiesPanel({
 
           <div className="properties-panel__static">
             <span>Type</span>
-            <span>{TYPE_LABELS[selected.type]}</span>
+            {/* An electrical object is a coffret or a cable, not a rectangle
+                or a line that happens to carry one (KL-047). */}
+            <span>
+              {selected.electrical
+                ? ELECTRICAL_ROLE_LABELS[selected.electrical.role]
+                : TYPE_LABELS[selected.type]}
+            </span>
           </div>
           {selected.groupName && (
             <div className="properties-panel__static">
@@ -622,7 +628,16 @@ export function PropertiesPanel({
               />
               <span>Réglage propre à cet objet</span>
             </label>
-            {LABEL_DISPLAY_KEYS.map((key) => (
+            {LABEL_DISPLAY_KEYS.filter((key) =>
+              // Each object is offered the switches that can change it:
+              // stands mean nothing on electrical equipment, electrical
+              // characteristics nothing on a plain shape.
+              key === "stands"
+                ? !selected.electrical
+                : key === "electrical"
+                  ? selected.electrical !== undefined
+                  : true,
+            ).map((key) => (
               <label key={key} className="tools-panel__toggle">
                 <input
                   type="checkbox"
@@ -996,7 +1011,7 @@ export function PropertiesPanel({
             />
           )}
 
-          {selected.type === "rectangle" && (
+          {selected.type === "rectangle" && !selected.electrical && (
             <>
               <button
                 type="button"

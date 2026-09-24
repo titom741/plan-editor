@@ -486,6 +486,68 @@
   overflow: hidden;
 }
 
+/*
+  A panel's title never scrolls away (KL-047): it is how the panel is
+  folded, and how you tell which one you are in. The title sticks to the
+  top of its own scroll box and only what is under it moves. Its gap
+  below is padding rather than margin, so the scrolling content passes
+  under an opaque band instead of showing through a transparent one.
+*/
+.side-rail > * > .panel__title,
+.properties-panel > .panel__title {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-bottom: 0;
+  padding-bottom: 0.75rem;
+  background: var(--bg);
+  /* Covers the panel's own top padding too, which the title does not
+     stick into: nothing scrolled shows above it. */
+  box-shadow: 0 -1rem 0 var(--bg);
+}
+
+.side-rail > .is-collapsed > .panel__title {
+  padding-bottom: 0;
+}
+
+.electrical-panel {
+  border-top: 1px solid var(--border);
+}
+
+.electrical-panel .panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* The action buttons are sized by the properties panel for a row; here
+   they sit alone in a column and must not grow to fill it. */
+.electrical-panel .panel__body > button,
+.properties-panel__outputs > button {
+  flex: 0 0 auto;
+}
+
+.electrical-panel__summary {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.electrical-panel__summary strong {
+  color: var(--text-h);
+}
+
+.electrical-panel__summary .is-error {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.electrical-panel__summary .is-warning {
+  color: #d97706;
+  font-weight: 600;
+}
+
 .tools-panel {
   padding: 0.85rem;
 }
@@ -623,15 +685,6 @@
 
 .tools-panel__symbol-group + .tools-panel__symbol-group {
   margin-top: 0.5rem;
-}
-
-.tools-panel__group {
-  margin: 0.75rem 0 0.35rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  opacity: 0.7;
 }
 
 .tools-panel__symbol-title {
@@ -1692,7 +1745,7 @@
 
 .properties-panel__output-row {
   display: grid;
-  grid-template-columns: 3.2rem auto minmax(0, 1fr) minmax(0, 4.5rem) auto;
+  grid-template-columns: 2.6rem auto minmax(4.2rem, 1fr) minmax(3.6rem, 1fr) auto;
   align-items: center;
   gap: 0.3rem;
 }
