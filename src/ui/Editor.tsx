@@ -148,6 +148,11 @@ const ProjectsDialog = lazy(() =>
 const ScheduleDialog = lazy(() =>
   import("./components/ScheduleDialog").then((module) => ({ default: module.ScheduleDialog })),
 );
+const ElectricalDialog = lazy(() =>
+  import("./components/ElectricalDialog").then((module) => ({
+    default: module.ElectricalDialog,
+  })),
+);
 const ExchangeDialog = lazy(() =>
   import("./components/ExchangeDialog").then((module) => ({ default: module.ExchangeDialog })),
 );
@@ -223,6 +228,7 @@ type DialogId =
   | "export"
   | "library"
   | "schedule"
+  | "electrical"
   | "projects"
   | "exchange"
   | "shortcuts"
@@ -1271,6 +1277,8 @@ export default function Editor({
           return objectImageInputRef.current?.click();
         case "schedule":
           return setOpenDialog("schedule");
+        case "electrical":
+          return setOpenDialog("electrical");
         case "exchange":
           return setOpenDialog("exchange");
         case "comments":
@@ -1687,6 +1695,17 @@ export default function Editor({
             <ScheduleDialog
               project={project}
               objects={project.objects}
+              onClose={() => closeDialog()}
+            />
+          )}
+          {openDialog === "electrical" && (
+            <ElectricalDialog
+              project={project}
+              network={electricalNetwork}
+              onSelectObject={(id) => {
+                selectOnly([id]);
+                closeDialog();
+              }}
               onClose={() => closeDialog()}
             />
           )}

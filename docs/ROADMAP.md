@@ -1170,3 +1170,46 @@ multiprise dimensionné en 3G2.5 16 A mono, boucle signalée sur un câble
 en double, « Coffret 1 est triphasé mais alimenté en monophasé » sur le
 câble créé avant le dimensionnement, câbles qui suivent le centre du
 coffret quand on le redimensionne.
+
+## KL-046 — Le synoptique unifilaire *(done)*
+
+La seconde moitié de la demande de KL-045 : un schéma électrique qui se
+lit sans le plan. **Projet › Schéma électrique…** ouvre le synoptique
+unifilaire du réseau, le bilan par équipement, le récapitulatif des câbles
+et toutes les alertes, et exporte le tout en PDF.
+
+- **Une mise en page, deux dessins.** `printing/synopticLayout.ts` place
+  les boîtes et les liaisons en millimètres, une fois ; le dialogue les
+  dessine en SVG, le PDF en chemins vectoriels. Ce que l'on voit est ce
+  qui s'imprime — la leçon de KL-042, appliquée d'emblée.
+- **De gauche à droite, une colonne par niveau** : l'alimentation, puis ce
+  qu'elle alimente, puis la suite. Une feuille par ligne, chaque parent
+  centré sur ses enfants, liaisons orthogonales portant la désignation du
+  câble, son calibre et sa longueur (« 5G16 · 63 A · 30 m »). Chaque boîte
+  dit sa puissance aval, son courant et sa chute de tension cumulée, et
+  prend la couleur de la pire alerte qui la concerne ou concerne son câble
+  d'arrivée. Les équipements non alimentés sont regroupés à part.
+- **Le PDF** : le synoptique en première page, sur A4 s'il y tient à au
+  moins 80 %, sur A3 sinon — et jamais agrandi, un schéma de deux boîtes
+  gonflé à la page se lit comme une affiche. Puis le bilan hiérarchique,
+  les câbles à commander par désignation, et les alertes, paginés. Chaque
+  page porte l'avertissement : aide au pré-dimensionnement, pas une note de
+  calcul. Une alerte sur un câble le nomme par ce qu'il alimente
+  (« Câble vers Friteuse ») : « Câble » tout court ne dit pas lequel.
+- **Le dialogue** : un clic sur une boîte, une liaison ou une alerte
+  sélectionne l'objet sur le plan et ferme le dialogue.
+
+804 tests, dont 15 nouveaux, validés par mutation : onze défauts
+introduits, neuf détectés du premier coup. Le premier survivant — un coude
+qui ne descend pas — tenait à un test qui vérifiait l'abscisse du coude et
+pas ses ordonnées. Le second était un **mutant équivalent** : les alertes
+arrivant déjà triées par gravité, « la première trouvée » et « la pire »
+sont la même chose ; le code a été simplifié pour le dire, et le test
+ajouté en chemin (une boîte portant à la fois une erreur et un
+avertissement sort en rouge) reste.
+
+Mesuré sur un PDF réel (groupe 80 A, deux coffrets, multiprise, sept
+récepteurs, un oublié), rendu en image : synoptique lisible sur A4 à
+l'échelle 1, erreurs en rouge (friteuse 3,5 kW sur un départ 16 A,
+2,5 mm² derrière 32 A), sono à 7,7 % de chute en orange, 194 m de 3G2.5 à
+commander. Vérifié aussi dans le navigateur.

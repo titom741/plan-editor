@@ -1762,3 +1762,85 @@
   border-left-color: #d97706;
   background: rgba(217, 119, 6, 0.1);
 }
+
+/* KL-046 — the electrical diagram dialog. */
+.electrical-dialog {
+  width: min(64rem, calc(100vw - 2rem));
+}
+
+.electrical-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-height: min(70vh, 48rem);
+  overflow: auto;
+}
+
+.electrical-dialog__body h3 {
+  margin: 0.6rem 0 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+
+.electrical-dialog__summary {
+  margin: 0;
+  color: var(--text-h);
+}
+
+.electrical-dialog__diagram {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+  padding: 0.5rem;
+}
+
+.electrical-dialog__diagram svg {
+  display: block;
+  font-family: Helvetica, Arial, sans-serif;
+}
+
+.electrical-dialog__svg-text {
+  fill: #334155;
+}
+
+.electrical-dialog__box,
+.electrical-dialog__edge text {
+  cursor: pointer;
+}
+
+.electrical-dialog__box:hover rect {
+  filter: brightness(0.95);
+}
+
+.electrical-dialog__issues button {
+  all: unset;
+  display: block;
+  cursor: pointer;
+}
+
+.electrical-dialog__issues button:focus-visible {
+  outline: 2px solid var(--accent-border);
+  outline-offset: 2px;
+}
+
+.electrical-dialog .schedule-dialog__table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.electrical-dialog .schedule-dialog__table-wrap th,
+.electrical-dialog .schedule-dialog__table-wrap td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.electrical-dialog__unfed td {
+  color: var(--text);
+  font-style: italic;
+}

@@ -23,6 +23,7 @@ export type CommandId =
   | "library"
   | "importObjectImage"
   | "schedule"
+  | "electrical"
   | "exchange"
   | "comments"
   | "shortcuts"
@@ -126,6 +127,14 @@ export const COMMANDS: readonly CommandDefinition[] = [
     icon: "📋",
     group: "project",
     title: "Afficher les quantités du plan",
+  },
+  {
+    id: "electrical",
+    label: "Schéma électrique…",
+    shortLabel: "Électricité",
+    icon: "⚡",
+    group: "project",
+    title: "Synoptique unifilaire, bilan de puissance et alertes du réseau électrique",
   },
   {
     id: "exchange",

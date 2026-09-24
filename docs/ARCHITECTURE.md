@@ -1890,3 +1890,21 @@ they plug into. A device's caption hangs under it
 PDF (`exportSheet.labelText`) alike — a 60 cm coffret cannot hold its
 name and rating. Electrical summaries only use characters WinAnsi can
 encode, since the PDF prints them with the standard fonts.
+
+## The single-line diagram (KL-046)
+
+`printing/synopticLayout.ts` turns an `ElectricalNetwork` into boxes,
+orthogonal edges and headings, in millimetres with y downward. It is a
+tidy tree laid left to right: one column per depth, leaves stacked one per
+row, each parent centred on its children; unfed devices are set apart
+under a heading. Text widths are never measured — neither target can say
+how wide a word is before drawing it — so box widths are fixed and the PDF
+truncates with an ellipsis.
+
+The same layout is drawn twice: as SVG in `ElectricalDialog` (clickable,
+selecting the object on the plan) and as vector paths by
+`printing/synopticPdf.ts`, which picks A4 when the diagram fits at ≥ 80 %
+and A3 otherwise, never enlarges it, and paginates the balance, cable
+totals and alerts on A4 pages that each carry the planning-aid disclaimer.
+A box's colour is the severity of the first issue about it or its feeder;
+`analyzeNetwork` sorts issues errors first, so the first is the worst.

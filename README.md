@@ -165,6 +165,19 @@ Each object can carry a quantity and unit in the properties panel.
 spreadsheet-ready CSV; ordinary lines are measured in metres and polygons
 in square metres when no explicit unit is set.
 
+**Électricité** — the **Électricité** tools place an *Alimentation*
+(réseau or groupe), a *Coffret* (arrivée mono/tri, calibre, différentiel,
+départs), a *Multiprise* or a *Récepteur* (puissance) with one click, and
+draw a *Câble* like a tracé: its ends plug into the devices they land on,
+follow them when they move, and a new cable is sized for what it feeds.
+Any existing rectangle, circle or line can take an electrical role from the
+properties panel, which also shows load, current, voltage drop and alerts
+(section too thin, tri fed in mono, overload, missing 30 mA RCD, drop over
+5 %, loops…). **Projet › Schéma électrique…** shows the single-line
+diagram, the balance per device, the cable to order and every alert, and
+exports it all as a PDF. The checks are a conservative planning aid, not a
+NF C 15-100 design note.
+
 **Local diagnostic** — **Diagnostic** exports a technical JSON report for
 troubleshooting. It stays on the machine unless you choose to share it and
 contains no object names, text, coordinates or background image pixels.
