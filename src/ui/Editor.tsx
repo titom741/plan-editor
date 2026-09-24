@@ -28,6 +28,15 @@ import {
 import type { StandGrid } from "../domain/stands";
 import type { CatalogItem } from "../domain/catalog";
 import { duplicateObjects } from "../domain/clipboard";
+import {
+  analyzeNetwork,
+  createCableObject,
+  createDeviceObject,
+  electricalLayerId,
+  isCable,
+  reconcileCables,
+  sizeCableForDevices,
+} from "../domain/electrical";
 import { calibrationFromKnownDistance, calibrationFromKnownScale } from "../domain/calibration";
 import { sortLayersByOrder } from "../domain/layers";
 import { nextObjectName } from "../domain/labels";
@@ -167,7 +176,7 @@ const MEASUREMENT_STYLE: ObjectStyle = {
 };
 
 function buildObjectFromSpec(project: Project, spec: NewObjectSpec, layerId: string) {
-  const name = nextObjectName(project, spec.type);
+  const name = nextObjectName(project, spec.type === "device" ? spec.role : spec.type);
   const isMeasurement = "measurement" in spec && spec.measurement !== undefined;
   const style = isMeasurement
     ? MEASUREMENT_STYLE
@@ -199,6 +208,12 @@ function buildObjectFromSpec(project: Project, spec: NewObjectSpec, layerId: str
       return createSymbolObject({ ...common, character: spec.character });
     case "text":
       return createTextObject({ ...common, text: "Texte" });
+    // Electrical objects bring their own look — a coffret drawn in the
+    // layer's generic style would not read as a coffret.
+    case "device":
+      return createDeviceObject({ role: spec.role, center: spec, layerId, name });
+    case "cable":
+      return createCableObject({ anchor: spec, pointsM: spec.pointsM, layerId, name });
   }
 }
 
@@ -458,10 +473,18 @@ export default function Editor({
     const rank = new Map(
       sortLayersByOrder(project.layers).map((layer, index) => [layer.id, index]),
     );
+    // Within a layer, cables go under everything else: their ends sit on
+    // the devices' centres, and must not cross out the box they plug into.
     return [...project.objects].sort(
-      (a, b) => (rank.get(a.layerId) ?? 0) - (rank.get(b.layerId) ?? 0),
+      (a, b) =>
+        (rank.get(a.layerId) ?? 0) - (rank.get(b.layerId) ?? 0) ||
+        Number(!isCable(a)) - Number(!isCable(b)),
     );
   }, [project.objects, project.layers]);
+
+  // Read once per change of the plan, and shared: the properties panel
+  // shows one object's slice of it, the diagram dialog the whole (KL-045).
+  const electricalNetwork = useMemo(() => analyzeNetwork(project), [project]);
 
   const lockedLayerIds = useMemo(
     () => new Set(project.layers.filter((layer) => layer.locked).map((layer) => layer.id)),
@@ -558,10 +581,21 @@ export default function Editor({
   // originals.
   const handleCreateObject = useCallback(
     (spec: NewObjectSpec) => {
-      if (!effectiveLayerId) return;
-      const object = buildObjectFromSpec(project, spec, effectiveLayerId);
+      const layerId =
+        spec.type === "device" || spec.type === "cable"
+          ? (electricalLayerId(project.layers) ?? effectiveLayerId)
+          : effectiveLayerId;
+      if (!layerId) return;
+      const object = buildObjectFromSpec(project, spec, layerId);
       if (object) {
-        commitChange((currentProject) => addObject(currentProject, object));
+        commitChange((currentProject) => {
+          const added = addObject(currentProject, object);
+          // A cable is sized for what it was plugged into, which is only
+          // known once its ends have been reconciled onto the devices.
+          return object.electrical?.role === "cable"
+            ? sizeCableForDevices(reconcileCables(currentProject, added), object.id)
+            : added;
+        });
         selectOnly([object.id]);
       }
       setActiveTool("select");
@@ -1276,6 +1310,7 @@ export default function Editor({
         xM: center.xM,
         yM: center.yM,
         style: item.style,
+        ...(item.electrical ? { electrical: item.electrical } : {}),
       };
       const object =
         item.shape === "circle"
@@ -1487,6 +1522,8 @@ export default function Editor({
           onDistributeSelection={handleDistributeSelection}
           onSaveComponent={handleSaveComponent}
           onEditStands={handleRequestStands}
+          objects={project.objects}
+          electricalNetwork={electricalNetwork}
           collapsed={isCollapsed("properties")}
           onToggleCollapsed={() => toggleCollapsed("properties")}
         />

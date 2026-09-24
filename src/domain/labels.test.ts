@@ -115,6 +115,7 @@ describe("getObjectDisplayLabel", () => {
       reference: false,
       quantity: false,
       stands: false,
+      electrical: false,
     };
     expect(getObjectDisplayLabel(rectangle(5, 5), display)).toBe("");
   });
@@ -134,6 +135,7 @@ describe("getObjectDisplayLabel", () => {
       reference: true,
       quantity: false,
       stands: false,
+      electrical: false,
     };
     expect(getObjectDisplayLabel(rectangle(5, 5), display)).toBe("Chapiteau");
     expect(getObjectDisplayLabel({ ...rectangle(5, 5), reference: "CHP-5X5" }, display)).toBe(
@@ -150,6 +152,7 @@ describe("getObjectDisplayLabel", () => {
       reference: false,
       quantity: true,
       stands: true,
+      electrical: true,
     };
     expect(getObjectDisplayLabel({ ...rectangle(5, 5), quantity: 1 }, display)).toBe("");
     expect(getObjectDisplayLabel(rectangle(5, 5), display)).toBe("");
@@ -223,6 +226,7 @@ describe("getObjectDisplayLabel", () => {
         reference: false,
         quantity: false,
         stands: false,
+        electrical: false,
       };
       const area = { ...rectangle(5, 5), measurement: { kind: "area" as const } };
       expect(getObjectDisplayLabel(area, display)).toBe("Chapiteau");

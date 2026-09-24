@@ -14,6 +14,7 @@ import {
   type LabelDisplay,
 } from "../domain/display";
 import { polylineMidpointM } from "../domain/measure";
+import { deviceCaptionAnchorLocal, isDevice } from "../domain/electrical";
 import { LABEL_LINE_HEIGHT, estimateTextWidthPx } from "../rendering/labelFit";
 import { getEffectivePixelsPerMeter, worldToScreen, type Viewport } from "../rendering/viewport";
 import {
@@ -410,14 +411,17 @@ function labelText(
   // top edge. Both anchors are taken in the object's *local* frame and
   // turned with it, so a tent pitched at an angle keeps its name along
   // its own side instead of somewhere off its bounding box (KL-042).
+  const hangsBelow = isDevice(object);
   const anchorM =
     object.type === "line"
       ? polylineMidpointM(object.pointsM)
       : object.type === "symbol"
         ? { xM: 0, yM: 0 }
-        : grid && object.type === "rectangle"
-          ? { xM: object.widthM / 2, yM: 0 }
-          : null;
+        : hangsBelow
+          ? deviceCaptionAnchorLocal(object)
+          : grid && object.type === "rectangle"
+            ? { xM: object.widthM / 2, yM: 0 }
+            : null;
 
   // Clear of the anchor: the last line sits one gap away, the ones above
   // it a step further. Centred on it otherwise, letters not baselines.
@@ -426,12 +430,18 @@ function labelText(
   // like a rectangle's it would be struck through its own glyph — which
   // is exactly what the first printed proof showed — and the screen
   // already draws it underneath, so the two halves would disagree.
+  //
+  // An electrical device hangs its caption under its lower edge too
+  // (KL-045), its first line's capitals one gap clear of it — where the
+  // screen puts them.
   const topOffsetPt =
     object.type === "symbol"
       ? -((object.sizeM / 2) * pointsPerMeter(content) + LABEL_GAP_PT + sizePt * CAP_HALF_HEIGHT)
-      : anchorM
-        ? LABEL_GAP_PT + (lines.length - 1) * step
-        : ((lines.length - 1) * step) / 2 - CAP_HALF_HEIGHT * sizePt;
+      : hangsBelow
+        ? -(LABEL_GAP_PT + sizePt * 2 * CAP_HALF_HEIGHT)
+        : anchorM
+          ? LABEL_GAP_PT + (lines.length - 1) * step
+          : ((lines.length - 1) * step) / 2 - CAP_HALF_HEIGHT * sizePt;
   const anchor = anchorM
     ? point(objectLocalToWorld(object, anchorM))
     : point(boundsCenterM(bounds));

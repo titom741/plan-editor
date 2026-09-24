@@ -24,6 +24,9 @@ export type { LabelDisplay };
 import type { StandGrid } from "./stands";
 export type { StandGrid };
 
+import type { ElectricalSpec } from "./electrical";
+export type { ElectricalSpec };
+
 /** A point expressed in world (meter) coordinates. */
 export interface PointM {
   xM: Meters;
@@ -200,6 +203,12 @@ export interface PlanObjectBase {
   unit?: string;
   /** Marks a drawable line/polygon as a persistent dimension annotation. */
   measurement?: MeasurementMetadata;
+  /**
+   * What this shape is electrically (KL-045): a source, a coffret, a
+   * power strip or a load on a rectangle or circle, a cable on a line.
+   * See `domain/electrical.ts`.
+   */
+  electrical?: ElectricalSpec;
   groupId?: string;
   groupName?: string;
   xM: Meters;

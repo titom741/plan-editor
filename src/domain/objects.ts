@@ -31,6 +31,7 @@ interface CommonObjectInput {
   quantity?: number;
   unit?: string;
   measurement?: import("./types").MeasurementMetadata;
+  electrical?: import("./types").ElectricalSpec;
   groupId?: string;
   groupName?: string;
   xM: number;
@@ -47,6 +48,7 @@ function materialFields(input: CommonObjectInput) {
     quantity: input.quantity,
     unit: input.unit,
     measurement: input.measurement,
+    ...(input.electrical ? { electrical: input.electrical } : {}),
     groupId: input.groupId,
     groupName: input.groupName,
   };

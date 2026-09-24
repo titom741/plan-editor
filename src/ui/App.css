@@ -625,6 +625,15 @@
   margin-top: 0.5rem;
 }
 
+.tools-panel__group {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
 .tools-panel__symbol-title {
   display: block;
   margin-bottom: 0.25rem;
@@ -1661,4 +1670,95 @@
   font-size: 0.75rem;
   color: var(--text);
   opacity: 0.75;
+}
+
+/* KL-045 — the electrical section of the properties panel. */
+.properties-panel__electrical {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.properties-panel__outputs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.properties-panel__outputs-title {
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.properties-panel__output-row {
+  display: grid;
+  grid-template-columns: 3.2rem auto minmax(0, 1fr) minmax(0, 4.5rem) auto;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.properties-panel__output-row input,
+.properties-panel__output-row select {
+  min-width: 0;
+}
+
+.properties-panel__icon-button {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  padding: 0.1rem 0.4rem;
+  cursor: pointer;
+}
+
+.properties-panel__electrical-figures {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.6rem;
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+}
+
+.properties-panel__electrical-figures dt {
+  color: var(--text);
+}
+
+.properties-panel__electrical-figures dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}
+
+.properties-panel__issues,
+.electrical-dialog__issues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.properties-panel__issues li,
+.electrical-dialog__issues li {
+  padding: 0.3rem 0.45rem;
+  border-radius: 5px;
+  border-left: 3px solid var(--border);
+  background: var(--accent-bg);
+  color: var(--text-h);
+}
+
+.properties-panel__issues .is-error,
+.electrical-dialog__issues .is-error {
+  border-left-color: #dc2626;
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.properties-panel__issues .is-warning,
+.electrical-dialog__issues .is-warning {
+  border-left-color: #d97706;
+  background: rgba(217, 119, 6, 0.1);
 }

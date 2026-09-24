@@ -3,6 +3,8 @@ import { createEmptyProject } from "../domain/project";
 import { createSheet } from "../domain/sheets";
 import { computeSheetLayout } from "../printing/sheetLayout";
 import { buildSheetPdf } from "./exportSheet";
+import { createDeviceObject } from "../domain/electrical";
+import { mmToPt } from "../printing/pdf";
 import { createLineObject, createRectangleObject, createSymbolObject } from "../domain/objects";
 import type { LabelDisplay } from "../domain/display";
 import type { PlanObject } from "../domain/types";
@@ -142,6 +144,7 @@ describe("buildSheetPdf object labels (KL-027)", () => {
         reference: true,
         quantity: false,
         stands: false,
+        electrical: false,
       }),
     );
     expect(text).toContain("Chapiteau");
@@ -152,7 +155,14 @@ describe("buildSheetPdf object labels (KL-027)", () => {
   it("lets one object override the plan and stay silent", () => {
     const quiet = {
       ...crate,
-      display: { name: false, dimensions: false, reference: false, quantity: false, stands: false },
+      display: {
+        name: false,
+        dimensions: false,
+        reference: false,
+        quantity: false,
+        stands: false,
+        electrical: false,
+      },
     };
     expect(latin1(sheetWith([quiet]))).not.toContain("Chapiteau");
   });
@@ -210,6 +220,7 @@ describe("buildSheetPdf stand labels (KL-038)", () => {
         reference: false,
         quantity: false,
         stands: false,
+        electrical: false,
       }),
     );
     expect(text).not.toContain("Boulanger");
@@ -497,6 +508,7 @@ describe("buildSheetPdf caption rotation (KL-042)", () => {
       reference: false,
       quantity: false,
       stands: true,
+      electrical: true,
     });
     const title = matrixOf(pdf, "Abc");
     const stand = matrixOf(pdf, "cbA");
@@ -745,5 +757,48 @@ describe("symbols and arrowheads (KL-044)", () => {
 
   it("leaves a plain line unfilled", () => {
     expect(filledPaths(sheetWith([shaft(false)]))).toBe(0);
+  });
+});
+
+describe("electrical devices (KL-045)", () => {
+  const viewport = { basePixelsPerMeter: 20, zoom: 1, offsetXPx: 0, offsetYPx: 0 };
+
+  function sheetWith(objects: PlanObject[]) {
+    const sheet = { ...createSheet({ name: "Plan" }), scaleDenominator: 50 };
+    return latin1(
+      buildSheetPdf({
+        project: createEmptyProject({ name: "Virade" }),
+        sheet,
+        layout: computeSheetLayout(sheet, null),
+        drawingJpegDataUrl: "data:image/jpeg;base64,/9j/2Q==",
+        pixelWidth: 800,
+        pixelHeight: 560,
+        now: new Date("2026-09-19T12:00:00Z"),
+        vectorObjects: objects,
+        vectorViewport: viewport,
+      }),
+    );
+  }
+
+  const coffret = () =>
+    createDeviceObject({ role: "board", center: { xM: 5, yM: 5 }, layerId: "l1", name: "Coffret" });
+
+  it("hangs a device's caption under it instead of cramming it inside", () => {
+    // The same shape without its electrical record centres its caption,
+    // which is what a 0.6 m box cannot hold.
+    const board = coffret();
+    const { electrical: _omit, ...plain } = board;
+    const hanging = baselineOf(sheetWith([board]), "Coffret");
+    const centred = baselineOf(sheetWith([plain as PlanObject]), "Coffret");
+    expect(hanging).not.toBeNull();
+    expect(centred).not.toBeNull();
+    // PDF's y grows upward: below is smaller, by more than the half
+    // height (0.3 m, 6 mm at 1:50) the centred caption sits above the edge.
+    expect(hanging!).toBeLessThan(centred! - mmToPt(6));
+  });
+
+  it("prints the characteristics line in the PDF's own encoding", () => {
+    // "·" is 0xB7 in WinAnsi; a "?" here would mean it fell outside it.
+    expect(sheetWith([coffret()])).toContain("(63 A tri · Diff. 30 mA) Tj");
   });
 });

@@ -21,12 +21,19 @@ export type ToolId =
   | "text"
   | "symbol"
   | "measure"
-  | "calibrate";
+  | "calibrate"
+  | "elecSource"
+  | "elecBoard"
+  | "elecCable"
+  | "elecStrip"
+  | "elecLoad";
 
 export interface ToolDefinition {
   id: ToolId;
   label: string;
   icon: string;
+  /** Which heading the tool sits under in the tools panel. Absent means the drawing tools. */
+  group?: "electrical";
 }
 
 export const TOOLS: ToolDefinition[] = [
@@ -43,4 +50,20 @@ export const TOOLS: ToolDefinition[] = [
   { id: "text", label: "Texte", icon: "T" },
   { id: "symbol", label: "Symbole", icon: "★" },
   { id: "measure", label: "Mesure", icon: "📐" },
+  // KL-045. Each places a shape that already knows what it is
+  // electrically; the cable is drawn like a tracé and plugs its ends into
+  // whatever device they land on.
+  { id: "elecSource", label: "Alimentation", icon: "⏻", group: "electrical" },
+  { id: "elecBoard", label: "Coffret", icon: "▣", group: "electrical" },
+  { id: "elecCable", label: "Câble", icon: "⌇", group: "electrical" },
+  { id: "elecStrip", label: "Multiprise", icon: "⋮", group: "electrical" },
+  { id: "elecLoad", label: "Récepteur", icon: "⊗", group: "electrical" },
 ];
+
+/** The device each click-to-place electrical tool drops. The cable tool is drawn, so it isn't here. */
+export const DEVICE_TOOL_ROLES: Partial<Record<ToolId, "source" | "board" | "strip" | "load">> = {
+  elecSource: "source",
+  elecBoard: "board",
+  elecStrip: "strip",
+  elecLoad: "load",
+};

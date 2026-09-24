@@ -58,7 +58,8 @@ import { PlanObjectShape } from "./PlanObjectShape";
 import type { LabelDisplay } from "../../domain/display";
 import { MultiSelectionOutline, SelectionOverlay } from "./SelectionOverlay";
 import type { StageSize } from "../hooks/useViewport";
-import type { ToolId } from "../tools";
+import { DEVICE_TOOL_ROLES, type ToolId } from "../tools";
+import type { DeviceRole } from "../../domain/electrical";
 
 /** Describes a freshly-drawn shape in world units — App.tsx turns this into an actual `PlanObject` via the domain factories (naming, layer assignment). PlanCanvas only knows about the *gesture*, not domain construction policy. */
 export type NewObjectSpec =
@@ -85,7 +86,11 @@ export type NewObjectSpec =
    */
   | { type: "arrow"; xM: number; yM: number; pointsM: PointM[] }
   | { type: "symbol"; xM: number; yM: number; character: string }
-  | { type: "text"; xM: number; yM: number };
+  | { type: "text"; xM: number; yM: number }
+  /** An electrical device dropped where the user clicked, `xM`/`yM` being its centre (KL-045). */
+  | { type: "device"; role: DeviceRole; xM: number; yM: number }
+  /** A cable, drawn with the tracé's gesture; `Editor` plugs its ends in. */
+  | { type: "cable"; xM: number; yM: number; pointsM: PointM[] };
 
 interface PlanCanvasProps {
   containerRef: Ref<HTMLDivElement>;
@@ -438,7 +443,9 @@ export function PlanCanvas({
       const pointsM = simplifyPolylineM(draftToCommit.pointsM, toleranceM);
       if (pointsM.length >= MIN_LINE_POINTS) {
         onCreateObject({
-          type: "line",
+          // The cable tool borrows the tracé's gesture whole; only what
+          // the finished run becomes differs.
+          type: activeTool === "elecCable" ? "cable" : "line",
           xM: draftToCommit.anchorWorld.xM,
           yM: draftToCommit.anchorWorld.yM,
           pointsM,
@@ -446,7 +453,7 @@ export function PlanCanvas({
       }
       setDraft(null);
     },
-    [viewport, onCreateObject],
+    [viewport, onCreateObject, activeTool],
   );
 
   useEffect(() => {
@@ -648,7 +655,7 @@ export function PlanCanvas({
         onDeselectAll();
         return;
       }
-      if (activeTool === "polyline") {
+      if (activeTool === "polyline" || activeTool === "elecCable") {
         // Snapped, because this is the point a *click* would place; a
         // freehand stroke re-reads the raw pointer below.
         const world = getPointerWorld(e.target.getStage());
@@ -847,6 +854,13 @@ export function PlanCanvas({
         const world = getPointerWorld(e.target.getStage());
         if (!world) return;
         onCreateObject({ type: "text", xM: world.xM, yM: world.yM });
+        return;
+      }
+      const deviceRole = DEVICE_TOOL_ROLES[activeTool];
+      if (deviceRole) {
+        const world = getPointerWorld(e.target.getStage());
+        if (!world) return;
+        onCreateObject({ type: "device", role: deviceRole, xM: world.xM, yM: world.yM });
         return;
       }
       if (activeTool === "symbol") {

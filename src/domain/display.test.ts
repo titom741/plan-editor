@@ -19,6 +19,7 @@ const ALL_OFF: LabelDisplay = {
   reference: false,
   quantity: false,
   stands: false,
+  electrical: false,
 };
 
 function crate(overrides: Partial<Parameters<typeof createRectangleObject>[0]> = {}) {
@@ -62,6 +63,7 @@ describe("getObjectDisplayLabel with display settings", () => {
         reference: true,
         quantity: true,
         stands: true,
+        electrical: true,
       }),
     ).toBe("Caisse\n2 × 1 m\nCR-2X1\n× 4");
   });
@@ -78,16 +80,27 @@ describe("getObjectDisplayLabel with display settings", () => {
         reference: true,
         quantity: true,
         stands: true,
+        electrical: true,
       }),
     ).toBe("Caisse");
   });
 
   it("treats a quantity of 1 as nothing worth saying", () => {
     expect(
-      getObjectDisplayLabel(crate({ quantity: 1 }), { ...ALL_OFF, quantity: true, stands: true }),
+      getObjectDisplayLabel(crate({ quantity: 1 }), {
+        ...ALL_OFF,
+        quantity: true,
+        stands: true,
+        electrical: true,
+      }),
     ).toBe("");
     expect(
-      getObjectDisplayLabel(crate({ quantity: 2 }), { ...ALL_OFF, quantity: true, stands: true }),
+      getObjectDisplayLabel(crate({ quantity: 2 }), {
+        ...ALL_OFF,
+        quantity: true,
+        stands: true,
+        electrical: true,
+      }),
     ).toBe("× 2");
   });
 

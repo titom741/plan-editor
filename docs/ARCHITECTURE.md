@@ -1840,3 +1840,53 @@ The switch is print state, not document state: it lives in
 `useSheetExport` beside the printed grid and the transparent PNG, and is
 never written to the project. A `.plan` file records what was drawn, and
 an enlarged caption is not what was drawn.
+
+## The electrical layer of a plan (KL-045)
+
+`domain/electrical.ts` adds an optional `electrical` record to
+`PlanObjectBase`: a **device** role (`source`, `board`, `strip`, `load`)
+on a rectangle or circle, or the `cable` role on a line. It is a property
+rather than a new object type for the same reason stands are (KL-038):
+everything a shape already does — rendering, bounds, handles, the three
+exports, snapping, the file reader — keeps working unchanged, and the
+parser only has to check that the role fits the shape (`rolesForType`).
+
+### Cables are kept plugged in at one door
+
+A cable names its devices (`fromId`, `toId`) and its end vertices sit on
+their centres. That invariant is enforced by `reconcileCables(previous,
+next)`, called from `useProjectHistory` on every `applyLiveEdit` and
+`commitChange` — the one path every edit takes — rather than by each
+gesture. Per end, first match wins: a new cable or a changed id is
+honoured (or, for a new cable naming nothing, plugged into the device its
+end was drawn on); an end that moved is re-plugged by geometry
+(`findDeviceAt`, with `PLUG_TOLERANCE_M`) or unplugged; otherwise it
+follows its device, and a deleted device unplugs it. Both ends never plug
+into the same device (the cable would collapse to a point). It returns
+`next` untouched when nothing changed, so ordinary edits cost one scan.
+
+Undo/redo bypass it deliberately: they restore snapshots that were
+already reconciled when they were made.
+
+### The network is derived, like labels
+
+`analyzeNetwork(project)` builds one tree per source from the named
+connections — never from geometry — sums load power upwards, derives
+currents (cos φ 0.9, balanced three-phase), accumulates the resistive
+voltage drop downwards, and returns sorted issues (error → warning →
+info). It is computed once per project change in `Editor` and shared by
+the properties panel (one object's slice) and the diagram dialog.
+
+`sizeCableForDevices` is applied **only when a cable is drawn**: sizing it
+for the device it feeds is a convenience at creation; resizing cables
+later because a coffret changed would silently rewrite the plan.
+
+### Drawing
+
+Cables are sorted below the other objects of their layer in
+`orderedObjects`, so their centre-anchored ends don't cross out the box
+they plug into. A device's caption hangs under it
+(`deviceCaptionAnchorLocal`), on screen (`PlanObjectShape`) and in the
+PDF (`exportSheet.labelText`) alike — a 60 cm coffret cannot hold its
+name and rating. Electrical summaries only use characters WinAnsi can
+encode, since the PDF prints them with the standard fonts.

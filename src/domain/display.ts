@@ -21,6 +21,8 @@ export interface LabelDisplay {
   quantity: boolean;
   /** The stand names written inside a marquee. No effect on an object without a grid. */
   stands: boolean;
+  /** The electrical characteristics (KL-045): "63 A tri · Diff. 30 mA", "5G6 · 32 A". No effect on a non-electrical object. */
+  electrical: boolean;
 }
 
 export const DEFAULT_LABEL_DISPLAY: LabelDisplay = {
@@ -31,6 +33,9 @@ export const DEFAULT_LABEL_DISPLAY: LabelDisplay = {
   // On by default: someone who has laid out stands wants to see them.
   // The switch is there to take them off a client's copy, not to opt in.
   stands: true,
+  // On for the same reason: characteristics are why the object was made
+  // electrical. A client's copy is where they come off.
+  electrical: true,
 };
 
 export const LABEL_DISPLAY_KEYS: readonly (keyof LabelDisplay)[] = [
@@ -39,6 +44,7 @@ export const LABEL_DISPLAY_KEYS: readonly (keyof LabelDisplay)[] = [
   "reference",
   "quantity",
   "stands",
+  "electrical",
 ];
 
 export const LABEL_DISPLAY_LABELS: Record<keyof LabelDisplay, string> = {
@@ -47,6 +53,7 @@ export const LABEL_DISPLAY_LABELS: Record<keyof LabelDisplay, string> = {
   reference: "Référence",
   quantity: "Quantité",
   stands: "Stands",
+  electrical: "Électricité",
 };
 
 /** The settings that actually apply to one object: its own override if it has one, the project's default otherwise. */

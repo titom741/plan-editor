@@ -1,4 +1,5 @@
 import type { VectorM } from "./geometry";
+import { remapCableConnections } from "./electrical";
 import { createId } from "./ids";
 import type { PlanObject } from "./types";
 
@@ -33,18 +34,29 @@ export interface DuplicateContext {
  * Only the anchor moves: `pointsM` on lines and polygons are stored
  * relative to it, so shifting the anchor shifts the whole shape and the
  * copy keeps its exact geometry, rotation included.
+ *
+ * A copied cable plugs into the copies of its devices when they were
+ * copied with it, and comes unplugged when they weren't: reaching back to
+ * the originals would draw a cable across the plan to a coffret the user
+ * never asked to connect (KL-045).
  */
 export function duplicateObjects(
   objects: readonly PlanObject[],
   context: DuplicateContext,
 ): PlanObject[] {
-  return objects.map((object) => ({
-    ...object,
-    id: createId("obj"),
-    layerId: context.existingLayerIds.has(object.layerId)
-      ? object.layerId
-      : context.fallbackLayerId,
-    xM: object.xM + context.offsetM.xM,
-    yM: object.yM + context.offsetM.yM,
-  }));
+  const idMap = new Map<string, string>();
+  const copies = objects.map((object) => {
+    const id = createId("obj");
+    idMap.set(object.id, id);
+    return {
+      ...object,
+      id,
+      layerId: context.existingLayerIds.has(object.layerId)
+        ? object.layerId
+        : context.fallbackLayerId,
+      xM: object.xM + context.offsetM.xM,
+      yM: object.yM + context.offsetM.yM,
+    };
+  });
+  return remapCableConnections(copies, idMap);
 }

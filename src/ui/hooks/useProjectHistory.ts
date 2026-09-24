@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { reconcileCables } from "../../domain/electrical";
 import type { Project } from "../../domain/types";
 import {
   createHistory,
@@ -24,7 +25,17 @@ import type { HistoryState } from "../../history/historyStack";
  *   instead of one per animation frame.
  * - `setProjectDirect` — changes that should not be undoable at all (e.g.
  *   toggling a layer's visibility).
+ *
+ * Every edit, whichever of the three it is, passes through
+ * `reconcileCables` on its way in (KL-045): this is the one door all
+ * changes use, so it is where "a cable stays plugged into the devices it
+ * names" is kept true — for a drag, a nudge, a paste, a typed coordinate
+ * and every edit written after this one, without each having to remember.
  */
+function applyEdit(present: Project, updater: (project: Project) => Project): Project {
+  return reconcileCables(present, updater(present));
+}
+
 export function useProjectHistory(initialProject: Project) {
   const [state, setState] = useState<HistoryState<Project>>(() => createHistory(initialProject));
 
@@ -33,11 +44,11 @@ export function useProjectHistory(initialProject: Project) {
   }, []);
 
   const applyLiveEdit = useCallback((updater: (project: Project) => Project) => {
-    setState((current) => replacePresent(current, updater(current.present)));
+    setState((current) => replacePresent(current, applyEdit(current.present, updater)));
   }, []);
 
   const commitChange = useCallback((updater: (project: Project) => Project) => {
-    setState((current) => pushHistory(current, updater(current.present)));
+    setState((current) => pushHistory(current, applyEdit(current.present, updater)));
   }, []);
 
   // Same mechanics as applyLiveEdit — replace present, no history entry —

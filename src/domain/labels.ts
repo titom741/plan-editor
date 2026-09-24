@@ -1,5 +1,6 @@
 import { DEFAULT_LABEL_DISPLAY, type LabelDisplay } from "./display";
 import type { PlanObject, Project } from "./types";
+import { cableLengthM, electricalSummary, isCable, type ElectricalRole } from "./electrical";
 import {
   angleAtPointDeg,
   formatAngleDeg,
@@ -31,7 +32,11 @@ export function getObjectDimensionSummary(object: PlanObject): string | null {
     case "circle":
       return `⌀ ${formatMeters(object.radiusM * 2)} m`;
     case "line":
-      return formatLengthM(polylineLengthM(object.pointsM));
+      // A cable states the length that will be laid, which is the one
+      // typed in when it differs from the drawing (KL-045).
+      return formatLengthM(
+        isCable(object) ? cableLengthM(object) : polylineLengthM(object.pointsM),
+      );
     case "polygon":
       return `${formatLengthM(polygonPerimeterM(object.pointsM))} · ${formatAreaM2(polygonAreaM2(object.pointsM))}`;
     case "text":
@@ -71,6 +76,10 @@ export function getObjectDisplayLabel(
     const dimensions = measured ?? getObjectDimensionSummary(object);
     if (dimensions) lines.push(dimensions);
   }
+  if (display.electrical) {
+    const electrical = electricalSummary(object);
+    if (electrical) lines.push(electrical);
+  }
   if (display.reference && object.reference) lines.push(object.reference);
   if (display.quantity && object.quantity !== undefined && object.quantity !== 1) {
     lines.push(`× ${formatMeters(object.quantity)}`);
@@ -102,9 +111,14 @@ function getMeasurementSummary(object: PlanObject): string | null {
  * be naming them after their implementation rather than after what they
  * asked for.
  */
-export type ObjectNameKind = PlanObject["type"] | "arrow";
+export type ObjectNameKind = PlanObject["type"] | "arrow" | ElectricalRole;
 
 const TYPE_NAME_PREFIXES: Record<ObjectNameKind, string> = {
+  source: "Alimentation",
+  board: "Coffret",
+  cable: "Câble",
+  strip: "Multiprise",
+  load: "Récepteur",
   arrow: "Flèche",
   rectangle: "Rectangle",
   circle: "Cercle",
@@ -127,8 +141,10 @@ export function nextObjectName(project: Project, kind: ObjectNameKind): string {
   const isArrow = (object: PlanObject) =>
     object.type === "line" &&
     (object.style?.arrowStart === true || object.style?.arrowEnd === true);
-  const countOfKind = project.objects.filter((object) =>
-    kind === "arrow" ? isArrow(object) : object.type === kind && !isArrow(object),
-  ).length;
+  // Likewise a coffret is a rectangle: "Coffret 2" counts coffrets, and
+  // drawing one doesn't advance "Rectangle N".
+  const kindOf = (object: PlanObject): ObjectNameKind =>
+    object.electrical?.role ?? (isArrow(object) ? "arrow" : object.type);
+  const countOfKind = project.objects.filter((object) => kindOf(object) === kind).length;
   return `${TYPE_NAME_PREFIXES[kind]} ${countOfKind + 1}`;
 }

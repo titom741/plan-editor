@@ -1,4 +1,5 @@
-import type { Layer, ObjectStyle, PlanObject } from "./types";
+import type { ElectricalSpec, Layer, ObjectStyle, PlanObject } from "./types";
+import { cableDesignation, cableLengthM, cableStyle, isCable } from "./electrical";
 import { polygonAreaM2, polylineLengthM } from "./measure";
 
 export type CatalogShape = "rectangle" | "circle" | "line" | "polygon";
@@ -15,7 +16,57 @@ export interface CatalogItem {
   pointsM?: { xM: number; yM: number }[];
   unit: string;
   style: ObjectStyle;
+  /** What the item is electrically, carried onto the object it inserts (KL-045). */
+  electrical?: ElectricalSpec;
 }
+
+/**
+ * A straight cable of `lengthM`, drawn along x. Named without its length:
+ * the run is reshaped the moment it is placed, and a name saying "25 m"
+ * on a 40 m cable is a lie the plan would print.
+ */
+function cableItem(
+  id: string,
+  name: string,
+  reference: string,
+  lengthM: number,
+  electrical: Extract<ElectricalSpec, { role: "cable" }>,
+): CatalogItem {
+  return {
+    id,
+    category: "Électricité",
+    name,
+    reference,
+    shape: "line",
+    pointsM: [
+      { xM: 0, yM: 0 },
+      { xM: lengthM, yM: 0 },
+    ],
+    unit: "m",
+    style: cableStyle(electrical.phases),
+    electrical,
+  };
+}
+
+const SOURCE_STYLE: ObjectStyle = {
+  fill: "#fde68a",
+  stroke: "#b45309",
+  strokeWidth: 2.5,
+  opacity: 1,
+};
+const BOARD_STYLE: ObjectStyle = { fill: "#fef9c3", stroke: "#ca8a04", strokeWidth: 2, opacity: 1 };
+const STRIP_STYLE: ObjectStyle = {
+  fill: "#e0f2fe",
+  stroke: "#0369a1",
+  strokeWidth: 1.5,
+  opacity: 1,
+};
+const LOAD_STYLE: ObjectStyle = {
+  fill: "#f3e8ff",
+  stroke: "#7c3aed",
+  strokeWidth: 1.5,
+  opacity: 1,
+};
 
 export const MATERIAL_CATALOG: readonly CatalogItem[] = [
   {
@@ -102,6 +153,32 @@ export const MATERIAL_CATALOG: readonly CatalogItem[] = [
     style: { fill: "#fee2e2", stroke: "#dc2626", strokeWidth: 0.07, opacity: 1 },
   },
   {
+    id: "generator-60kva",
+    category: "Électricité",
+    name: "Groupe électrogène 60 kVA",
+    reference: "GE-60",
+    shape: "rectangle",
+    widthM: 2.8,
+    heightM: 1.1,
+    unit: "u",
+    style: SOURCE_STYLE,
+    electrical: { role: "source", kind: "generator", phases: "tri", ratingA: 80 },
+  },
+  {
+    id: "grid-63a",
+    category: "Électricité",
+    name: "Branchement réseau 63 A tri",
+    reference: "RES-63",
+    shape: "rectangle",
+    widthM: 0.6,
+    heightM: 0.3,
+    unit: "u",
+    style: SOURCE_STYLE,
+    electrical: { role: "source", kind: "grid", phases: "tri", ratingA: 63 },
+  },
+  {
+    // Kept under its historical id so plans that inserted it before KL-045
+    // still count it on the same nomenclature line.
     id: "power-63a",
     category: "Électricité",
     name: "Coffret électrique 63 A",
@@ -110,8 +187,88 @@ export const MATERIAL_CATALOG: readonly CatalogItem[] = [
     widthM: 0.6,
     heightM: 0.4,
     unit: "u",
-    style: { fill: "#fef9c3", stroke: "#ca8a04", strokeWidth: 0.07, opacity: 1 },
+    style: BOARD_STYLE,
+    electrical: {
+      role: "board",
+      phases: "tri",
+      ratingA: 63,
+      rcdMa: 30,
+      outputs: [
+        { phases: "tri", ratingA: 32, count: 1 },
+        { phases: "tri", ratingA: 16, count: 2 },
+        { phases: "mono", ratingA: 16, count: 6 },
+      ],
+    },
   },
+  {
+    id: "board-32a-tri",
+    category: "Électricité",
+    name: "Coffret électrique 32 A tri",
+    reference: "ELEC-32T",
+    shape: "rectangle",
+    widthM: 0.5,
+    heightM: 0.35,
+    unit: "u",
+    style: BOARD_STYLE,
+    electrical: {
+      role: "board",
+      phases: "tri",
+      ratingA: 32,
+      rcdMa: 30,
+      outputs: [
+        { phases: "tri", ratingA: 16, count: 1 },
+        { phases: "mono", ratingA: 16, count: 6 },
+      ],
+    },
+  },
+  {
+    id: "board-16a-mono",
+    category: "Électricité",
+    name: "Coffret électrique 16 A mono",
+    reference: "ELEC-16M",
+    shape: "rectangle",
+    widthM: 0.4,
+    heightM: 0.3,
+    unit: "u",
+    style: BOARD_STYLE,
+    electrical: {
+      role: "board",
+      phases: "mono",
+      ratingA: 16,
+      rcdMa: 30,
+      outputs: [{ phases: "mono", ratingA: 16, count: 4 }],
+    },
+  },
+  {
+    id: "strip-6",
+    category: "Électricité",
+    name: "Multiprise 6 prises",
+    reference: "MP-6",
+    shape: "rectangle",
+    widthM: 0.6,
+    heightM: 0.2,
+    unit: "u",
+    style: STRIP_STYLE,
+    electrical: { role: "strip", outlets: 6, ratingA: 16 },
+  },
+  cableItem("cable-3g25-25", "Câble 3G2.5", "H07RN-F 3G2.5", 25, {
+    role: "cable",
+    phases: "mono",
+    sectionMm2: 2.5,
+    ratingA: 16,
+  }),
+  cableItem("cable-5g6-25", "Câble 5G6", "H07RN-F 5G6", 25, {
+    role: "cable",
+    phases: "tri",
+    sectionMm2: 6,
+    ratingA: 32,
+  }),
+  cableItem("cable-5g16-25", "Câble 5G16", "H07RN-F 5G16", 25, {
+    role: "cable",
+    phases: "tri",
+    sectionMm2: 16,
+    ratingA: 63,
+  }),
   {
     id: "light",
     category: "Électricité",
@@ -121,6 +278,51 @@ export const MATERIAL_CATALOG: readonly CatalogItem[] = [
     radiusM: 0.2,
     unit: "u",
     style: { fill: "#fef08a", stroke: "#a16207", strokeWidth: 0.06, opacity: 1 },
+    electrical: { role: "load", phases: "mono", powerW: 150 },
+  },
+  {
+    id: "load-fridge",
+    category: "Électricité",
+    name: "Réfrigérateur",
+    reference: "FRIGO",
+    shape: "circle",
+    radiusM: 0.3,
+    unit: "u",
+    style: LOAD_STYLE,
+    electrical: { role: "load", phases: "mono", powerW: 500 },
+  },
+  {
+    id: "load-fryer",
+    category: "Électricité",
+    name: "Friteuse 3,5 kW",
+    reference: "FRIT",
+    shape: "circle",
+    radiusM: 0.3,
+    unit: "u",
+    style: LOAD_STYLE,
+    electrical: { role: "load", phases: "mono", powerW: 3500 },
+  },
+  {
+    id: "load-sound",
+    category: "Électricité",
+    name: "Sonorisation 3 kW",
+    reference: "SONO",
+    shape: "circle",
+    radiusM: 0.3,
+    unit: "u",
+    style: LOAD_STYLE,
+    electrical: { role: "load", phases: "mono", powerW: 3000 },
+  },
+  {
+    id: "load-coldroom",
+    category: "Électricité",
+    name: "Chambre froide 6 kW tri",
+    reference: "CF-6T",
+    shape: "circle",
+    radiusM: 0.4,
+    unit: "u",
+    style: LOAD_STYLE,
+    electrical: { role: "load", phases: "tri", powerW: 6000 },
   },
   {
     id: "table-180",
@@ -250,23 +452,32 @@ export function buildSchedule(
   for (const object of objects) {
     const layer = layerNames.get(object.layerId) ?? "Calque inconnu";
     const category = object.category?.trim() || "Sans catégorie";
-    const reference = object.reference?.trim() || object.catalogId?.trim() || "—";
+    // Cables are bought by type, not by run: "Câble 1" to "Câble 12"
+    // would be twelve lines of an order that is really two. So a cable is
+    // listed under its designation, whatever it is called on the plan.
+    const cable = isCable(object) ? cableDesignation(object.electrical) : null;
+    const name = cable ? `Câble ${cable}` : object.name;
+    const reference =
+      object.reference?.trim() || (cable ? `H07RN-F ${cable}` : object.catalogId?.trim()) || "—";
     const hasManualUnit = Boolean(object.unit?.trim());
     const unit =
       object.unit?.trim() ||
       (object.type === "line" ? "m" : object.type === "polygon" ? "m²" : "u");
     const manualQuantity =
       Number.isFinite(object.quantity) && (object.quantity ?? 0) > 0 ? object.quantity! : 1;
-    const quantity =
-      !hasManualUnit && object.type === "line"
+    // A cable is bought by the metre it runs, whatever its unit says —
+    // the catalogue's own cables carry "m" and would otherwise count 1.
+    const quantity = isCable(object)
+      ? cableLengthM(object)
+      : !hasManualUnit && object.type === "line"
         ? polylineLengthM(object.pointsM)
         : !hasManualUnit && object.type === "polygon"
           ? polygonAreaM2(object.pointsM)
           : manualQuantity;
-    const key = `${layer}\u0000${category}\u0000${reference}\u0000${object.name}\u0000${unit}`;
+    const key = `${layer}\u0000${category}\u0000${reference}\u0000${name}\u0000${unit}`;
     const row = rows.get(key);
     if (row) row.quantity += quantity;
-    else rows.set(key, { layer, category, reference, name: object.name, quantity, unit });
+    else rows.set(key, { layer, category, reference, name, quantity, unit });
   }
   return [...rows.values()].sort(
     (a, b) =>

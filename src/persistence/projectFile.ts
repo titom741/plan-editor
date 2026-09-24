@@ -20,6 +20,7 @@
  */
 
 import { DEFAULT_LABEL_DISPLAY, clampLabelFontSizePx } from "../domain/display";
+import { rolesForType, type BoardOutput, type Phases } from "../domain/electrical";
 import { PAPER_SIZE_ORDER } from "../domain/sheets";
 import { isPaletteSymbol } from "../domain/symbols";
 import type {
@@ -35,6 +36,7 @@ import type {
   Project,
   Sheet,
   StandGrid,
+  ElectricalSpec,
 } from "../domain/types";
 
 /**
@@ -378,7 +380,100 @@ function readLabelDisplay(value: unknown, path: string): LabelDisplay {
       record.stands === undefined
         ? DEFAULT_LABEL_DISPLAY.stands
         : readBoolean(record.stands, `${path}.stands`),
+    // Arrived with KL-045; same reasoning as `stands`.
+    electrical:
+      record.electrical === undefined
+        ? DEFAULT_LABEL_DISPLAY.electrical
+        : readBoolean(record.electrical, `${path}.electrical`),
   };
+}
+
+function readPhases(value: unknown, path: string): Phases {
+  const phases = readString(value, path);
+  if (phases !== "mono" && phases !== "tri") fail(path);
+  return phases;
+}
+
+function readCount(value: unknown, path: string): number {
+  const count = readFiniteNumber(value, path);
+  if (!Number.isInteger(count) || count < 1) fail(path);
+  return count;
+}
+
+function readOptionalId(record: Record<string, unknown>, key: string, path: string) {
+  return record[key] !== undefined ? { [key]: readString(record[key], `${path}.${key}`) } : {};
+}
+
+/**
+ * The electrical record of an object (KL-045), validated as strictly as
+ * the geometry: a coffret whose rating is a string would print a label
+ * that lies and feed the checks a NaN.
+ *
+ * A cable naming a device that isn't in the file is *not* refused: an
+ * unplugged end is a legitimate state, and `reconcileCables` unplugs it
+ * on the first edit. Refusing would make one deleted coffret cost the
+ * whole plan.
+ */
+function readElectrical(value: unknown, path: string): ElectricalSpec {
+  const record = readRecord(value, path);
+  const role = readString(record.role, `${path}.role`);
+  switch (role) {
+    case "source": {
+      const kind = readString(record.kind, `${path}.kind`);
+      if (kind !== "grid" && kind !== "generator" && kind !== "other") fail(`${path}.kind`);
+      return {
+        role,
+        kind,
+        phases: readPhases(record.phases, `${path}.phases`),
+        ratingA: readPositiveNumber(record.ratingA, `${path}.ratingA`),
+      };
+    }
+    case "board": {
+      const outputs: BoardOutput[] = readArray(record.outputs, `${path}.outputs`).map((item, i) => {
+        const output = readRecord(item, `${path}.outputs[${i}]`);
+        return {
+          phases: readPhases(output.phases, `${path}.outputs[${i}].phases`),
+          ratingA: readPositiveNumber(output.ratingA, `${path}.outputs[${i}].ratingA`),
+          count: readCount(output.count, `${path}.outputs[${i}].count`),
+        };
+      });
+      return {
+        role,
+        phases: readPhases(record.phases, `${path}.phases`),
+        ratingA: readPositiveNumber(record.ratingA, `${path}.ratingA`),
+        ...(record.rcdMa !== undefined
+          ? { rcdMa: readPositiveNumber(record.rcdMa, `${path}.rcdMa`) }
+          : {}),
+        outputs,
+      };
+    }
+    case "cable":
+      return {
+        role,
+        phases: readPhases(record.phases, `${path}.phases`),
+        sectionMm2: readPositiveNumber(record.sectionMm2, `${path}.sectionMm2`),
+        ratingA: readPositiveNumber(record.ratingA, `${path}.ratingA`),
+        ...(record.lengthM !== undefined
+          ? { lengthM: readPositiveNumber(record.lengthM, `${path}.lengthM`) }
+          : {}),
+        ...readOptionalId(record, "fromId", path),
+        ...readOptionalId(record, "toId", path),
+      };
+    case "strip":
+      return {
+        role,
+        outlets: readCount(record.outlets, `${path}.outlets`),
+        ratingA: readPositiveNumber(record.ratingA, `${path}.ratingA`),
+      };
+    case "load":
+      return {
+        role,
+        phases: readPhases(record.phases, `${path}.phases`),
+        powerW: readPositiveNumber(record.powerW, `${path}.powerW`),
+      };
+    default:
+      fail(`${path}.role`);
+  }
 }
 
 /**
@@ -410,6 +505,17 @@ function readStandGrid(value: unknown, path: string): StandGrid {
 }
 
 function readObject(value: unknown, path: string): PlanObject {
+  const object = readObjectShape(value, path);
+  // A cable on a rectangle, or a coffret on a text, is not something the
+  // app can draw or reason about — the same kind of broken as a symbol
+  // outside the palette.
+  if (object.electrical && !rolesForType(object.type).includes(object.electrical.role)) {
+    fail(`${path}.electrical.role`);
+  }
+  return object;
+}
+
+function readObjectShape(value: unknown, path: string): PlanObject {
   const record = readRecord(value, path);
   const base = {
     id: readString(record.id, `${path}.id`),
@@ -441,6 +547,9 @@ function readObject(value: unknown, path: string): PlanObject {
       : {}),
     ...(record.groupId !== undefined
       ? { groupId: readString(record.groupId, `${path}.groupId`) }
+      : {}),
+    ...(record.electrical !== undefined
+      ? { electrical: readElectrical(record.electrical, `${path}.electrical`) }
       : {}),
     ...(record.groupName !== undefined
       ? { groupName: readString(record.groupName, `${path}.groupName`) }

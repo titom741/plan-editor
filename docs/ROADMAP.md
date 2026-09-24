@@ -1090,3 +1090,83 @@ Mesuré en relisant les octets du PDF et en regardant la planche produite,
 A3 à 1:200 : les neuf symboles sortent en glyphes pleins (aucun « ? »),
 l'étoile à l'octet 0x48, la flèche d'accès porte sa pointe, et le ➔
 tourné à 45° pivote bien sur son point. Vérifié aussi dans le navigateur.
+
+## KL-045 — Le schéma électrique d'implantation *(done)*
+
+Demandé à l'usage : « modifier la partie électrique pour pouvoir faire des
+schémas électriques d'implantation propres : coffret avec caractéristiques
+(mono, tri, ampérage, section de câble…), câble (longueur, section),
+multiprise, alimentation ». Jusqu'ici l'électricité se résumait à deux
+entrées de bibliothèque sans aucune caractéristique.
+
+- **Une propriété, pas un type.** Un coffret reste un rectangle, un câble
+  une ligne : ils bougent, tournent, s'impriment et s'exportent comme
+  tout le reste. Ce qu'ils gagnent, c'est un enregistrement `electrical`
+  (`domain/electrical.ts`) : alimentation (réseau, groupe, calibre,
+  phases), coffret (arrivée, calibre, différentiel, départs par groupes de
+  prises), câble (phases, section, prise/protection, longueur saisie),
+  multiprise (prises, calibre), récepteur (puissance, phases). Même choix
+  que les stands en KL-038.
+- **Les câbles tiennent leurs extrémités.** Un câble nomme l'équipement à
+  chaque bout, et `reconcileCables` le maintient vrai après *chaque*
+  modification — il est appelé dans `useProjectHistory`, la seule porte
+  par laquelle passent toutes les éditions. Déplacer ou redimensionner un
+  coffret emmène ses câbles ; tirer un bout sur un autre équipement le
+  rebranche ; le lâcher dans le vide le débranche ; supprimer l'équipement
+  le débranche. Les extrémités se posent sur le centre, et les câbles sont
+  dessinés sous les équipements de leur calque pour ne pas les barrer.
+- **Le réseau est lu, pas deviné.** `analyzeNetwork` part de chaque
+  alimentation et construit l'arbre ; il cumule la puissance vers l'amont
+  et la chute de tension vers l'aval, et signale : section trop faible
+  pour la protection, triphasé alimenté en mono, multiprise sur un départ
+  tri, surcharge d'un câble ou d'un équipement, départ plus gros que ce
+  qui le protège, plus de câbles que de prises, absence de différentiel
+  30 mA, chute de tension au-delà de 5 %, boucle, deux alimentations
+  reliées, câble non raccordé, équipement non alimenté. Les contrôles sont
+  une aide au pré-dimensionnement, conservatrice (1,5 mm² → 10 A,
+  2,5 → 16/20 A, 6 → 32 A, 16 → 63 A, 35 → 125 A ; cos φ 0,9 ;
+  ρ = 0,0225), pas une note de calcul NF C 15-100.
+- **Outils dédiés.** Un groupe « Électricité » dans les outils :
+  Alimentation, Coffret, Multiprise, Récepteur se posent d'un clic, à une
+  emprise réelle ; le Câble se trace comme un tracé et se branche où ses
+  bouts tombent. Un câble tracé est **dimensionné pour ce qu'il alimente**
+  à sa création (5G16 63 A vers un coffret 63 A tri) — jamais après :
+  réécrire le plan dans le dos de l'utilisateur serait pire qu'une alerte.
+  Ils vont sur le calque « Électricité » s'il existe et n'est pas
+  verrouillé.
+- **Le panneau** a une section Électricité : rôle (n'importe quel
+  rectangle, cercle ou ligne existant peut en prendre un — c'est ainsi
+  que les anciens plans se mettent à niveau), caractéristiques, départ et
+  arrivée d'un câble, puissance aval, courant, chute de tension, et les
+  alertes qui le concernent.
+- **Sur le plan**, une ligne d'étiquette « Électricité » (interrupteur
+  global et par objet, comme les autres) : « 63 A tri · Diff. 30 mA »,
+  « 5G6 · 32 A ». La légende d'un équipement **pend sous lui**, à l'écran
+  comme dans le PDF : un coffret de 60 cm ne peut pas contenir son nom et
+  son calibre, et on lisait « limen » pour « Alimentation ».
+- **Bibliothèque** : groupe 60 kVA, branchement 63 A, coffrets 63 A tri /
+  32 A tri / 16 A mono, multiprise, câbles 3G2.5 / 5G6 / 5G16, point
+  lumineux, frigo, friteuse, sono, chambre froide.
+- **Nomenclature** : un câble compte les mètres qu'il court, et les câbles
+  sont regroupés par désignation (« Câble 5G6 — H07RN-F 5G6 ») : douze
+  « Câble N » font une commande de deux lignes, pas de douze.
+- **Fichier** : `electrical` est lu aussi strictement que la géométrie,
+  et un rôle que la forme ne peut pas porter est refusé. Un câble qui
+  nomme un équipement absent est accepté (un bout débranché est un état
+  légitime). `SCHEMA_VERSION` ne bouge pas : champ optionnel.
+- **Copier-coller** : un câble copié avec ses équipements se branche sur
+  les copies ; copié seul, il est débranché plutôt que de repartir vers
+  les originaux.
+
+789 tests, dont 56 nouveaux, validés par mutation : vingt défauts
+introduits, dix-neuf détectés du premier coup. Le survivant était le tri
+des alertes par gravité : le test les produisait déjà dans l'ordre, si
+bien que supprimer le tri ne changeait rien. Il produit maintenant un
+avertissement avant l'erreur, et la mutation rejouée est détectée.
+
+Vérifié dans le navigateur : pose des équipements, câble tracé
+alimentation → coffret branché aux deux centres, câble coffret →
+multiprise dimensionné en 3G2.5 16 A mono, boucle signalée sur un câble
+en double, « Coffret 1 est triphasé mais alimenté en monophasé » sur le
+câble créé avant le dimensionnement, câbles qui suivent le centre du
+coffret quand on le redimensionne.

@@ -17,6 +17,7 @@ import {
   addBackground,
 } from "../domain/project";
 import { MAX_LABEL_FONT_SIZE_PX } from "../domain/display";
+import { createCableObject, createDeviceObject } from "../domain/electrical";
 import type { Project } from "../domain/types";
 import {
   FILE_KIND,
@@ -655,5 +656,133 @@ describe("symbols (KL-044)", () => {
         code: "invalidField",
         path: "project.objects[0].sizeM",
       });
+  });
+});
+
+describe("electrical objects (KL-045)", () => {
+  function wiredProject(): Project {
+    const project = createEmptyProject({ name: "Réseau" });
+    const layer = getDefaultTargetLayer(project.layers);
+    if (!layer) throw new Error("no default layer");
+    const source = createDeviceObject({
+      role: "source",
+      center: { xM: 0, yM: 0 },
+      layerId: layer.id,
+      name: "Groupe",
+    });
+    const board = createDeviceObject({
+      role: "board",
+      center: { xM: 20, yM: 0 },
+      layerId: layer.id,
+      name: "Coffret",
+    });
+    const load = createDeviceObject({
+      role: "load",
+      center: { xM: 30, yM: 0 },
+      layerId: layer.id,
+      name: "Frigo",
+    });
+    const strip = createDeviceObject({
+      role: "strip",
+      center: { xM: 30, yM: 10 },
+      layerId: layer.id,
+      name: "Multiprise",
+    });
+    const cable = createCableObject({
+      anchor: { xM: 0, yM: 0 },
+      pointsM: [
+        { xM: 0, yM: 0 },
+        { xM: 20, yM: 0 },
+      ],
+      layerId: layer.id,
+      name: "Câble",
+    });
+    const plugged = {
+      ...cable,
+      electrical: { ...cable.electrical, fromId: source.id, toId: board.id, lengthM: 24 },
+    };
+    return [source, board, load, strip, plugged].reduce(addObject, project);
+  }
+
+  const firstFile = () => JSON.parse(JSON.stringify(toProjectFile(wiredProject())));
+
+  it("round-trips every role with its characteristics and its connections", () => {
+    const project = wiredProject();
+    const result = parseProjectFile(JSON.parse(serializeProject(project)));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.file.project).toEqual(project);
+  });
+
+  it("refuses a role the shape cannot carry", () => {
+    // A cable on a rectangle is nothing the app can draw or reason about.
+    const file = firstFile();
+    file.project.objects[1].electrical = {
+      role: "cable",
+      phases: "mono",
+      sectionMm2: 2.5,
+      ratingA: 16,
+    };
+    const result = parseProjectFile(file);
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error).toEqual({
+        code: "invalidField",
+        path: "project.objects[1].electrical.role",
+      });
+  });
+
+  it("refuses characteristics that would feed the checks nonsense", () => {
+    for (const [index, key, value] of [
+      [0, "phases", "biphasé"],
+      [1, "ratingA", "63"],
+      [4, "sectionMm2", 0],
+      [3, "outlets", 2.5],
+      [2, "powerW", -100],
+    ] as const) {
+      const file = firstFile();
+      file.project.objects[index].electrical[key] = value;
+      const result = parseProjectFile(file);
+      expect(result.ok, `${key} = ${String(value)}`).toBe(false);
+      if (!result.ok)
+        expect(result.error).toEqual({
+          code: "invalidField",
+          path: `project.objects[${index}].electrical.${key}`,
+        });
+    }
+  });
+
+  it("refuses a coffret socket group of no sockets", () => {
+    const file = firstFile();
+    file.project.objects[1].electrical.outputs[0].count = 0;
+    const result = parseProjectFile(file);
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error).toEqual({
+        code: "invalidField",
+        path: "project.objects[1].electrical.outputs[0].count",
+      });
+  });
+
+  it("keeps a cable naming a device that is no longer there", () => {
+    // An unplugged end is a legitimate state; one deleted coffret must not
+    // cost the whole plan.
+    const file = firstFile();
+    file.project.objects[4].electrical.toId = "obj_gone";
+    const result = parseProjectFile(file);
+    expect(result.ok).toBe(true);
+  });
+
+  it("reads a label setting written before the electrical switch existed as on", () => {
+    const file = firstFile();
+    file.project.labelDisplay = {
+      name: true,
+      dimensions: true,
+      reference: false,
+      quantity: false,
+      stands: true,
+    };
+    const result = parseProjectFile(file);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.file.project.labelDisplay?.electrical).toBe(true);
   });
 });

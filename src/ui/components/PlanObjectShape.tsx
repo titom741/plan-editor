@@ -9,6 +9,7 @@ import {
   type LabelDisplay,
 } from "../../domain/display";
 import { polylineMidpointM } from "../../domain/measure";
+import { deviceCaptionAnchorLocal, isDevice } from "../../domain/electrical";
 import { LABEL_LINE_HEIGHT, fitLabelsToBox } from "../../rendering/labelFit";
 import type { PlanObject, RectangleObject, StandGrid } from "../../domain/types";
 import { metersToPixels, screenToWorld, worldToScreen } from "../../rendering/viewport";
@@ -109,6 +110,26 @@ export function PlanObjectShape({
   /** How many lines the caption occupies, which is what places it relative to the shape. */
   const labelLineCount = labelText.split("\n").length;
 
+  // An electrical device writes its caption under itself rather than
+  // inside (KL-045): it is a few decimetres wide, and its name and rating
+  // squeezed into that would be cut to a couple of letters. Same anchor
+  // as the PDF's, so the two halves agree.
+  const captionAnchor = isDevice(object) ? deviceCaptionAnchorLocal(object) : null;
+  const hangingCaption = captionAnchor ? (
+    <Text
+      text={labelText}
+      x={metersToPixels(captionAnchor.xM, viewport) - px(LINE_LABEL_BOX_PX) / 2}
+      y={metersToPixels(captionAnchor.yM, viewport) + px(4)}
+      width={px(LINE_LABEL_BOX_PX)}
+      align="center"
+      wrap="none"
+      fontSize={labelFontSizePx}
+      lineHeight={LABEL_LINE_HEIGHT}
+      fill="#0f172a"
+      listening={false}
+    />
+  ) : null;
+
   const handleSelect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     // Outside the select tool, let the click bubble up to the Stage so
     // the active tool can handle it instead (e.g. adding a polygon point,
@@ -183,7 +204,8 @@ export function PlanObjectShape({
               ownFontSizePx={object.style?.labelFontSize}
             />
           )}
-          {showLabel && (
+          {showLabel && hangingCaption}
+          {showLabel && !hangingCaption && (
             <Text
               text={labelText}
               width={widthPx}
@@ -215,7 +237,8 @@ export function PlanObjectShape({
             opacity={object.style?.opacity ?? 1}
             dash={dash}
           />
-          {showLabel && (
+          {showLabel && hangingCaption}
+          {showLabel && !hangingCaption && (
             <Text
               text={labelText}
               x={-radiusPx}
