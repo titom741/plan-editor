@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildSchedule, scheduleToCsv } from "./catalog";
+import { MATERIAL_CATALOG, buildSchedule, scheduleToCsv } from "./catalog";
+import { directLoadSocket } from "./electrical";
 import { createLineObject, createPolygonObject, createRectangleObject } from "./objects";
 
 describe("material schedule", () => {
@@ -72,5 +73,34 @@ describe("material schedule", () => {
         },
       ]),
     ).toContain('"Mobilier";"Mobilier";"T1";"Table";"2";"u"');
+  });
+});
+
+describe("material catalogue", () => {
+  it("gives every item its own id", () => {
+    const ids = MATERIAL_CATALOG.map((item) => item.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("offers a range of three-phase consumers, each on a socket that exists", () => {
+    const triLoads = MATERIAL_CATALOG.flatMap((item) =>
+      item.electrical?.role === "load" && item.electrical.phases === "tri" ? [item] : [],
+    );
+    expect(triLoads.length).toBeGreaterThanOrEqual(12);
+    // A name that says "tri" is a promise the characteristics must keep.
+    for (const item of MATERIAL_CATALOG) {
+      if (item.electrical?.role === "load" && item.name.endsWith(" tri")) {
+        expect(item.electrical.phases, item.name).toBe("tri");
+      }
+    }
+    for (const item of triLoads) {
+      if (item.electrical?.role !== "load") continue;
+      expect(item.shape, item.name).toBe("circle");
+      expect(item.electrical.powerW, item.name).toBeGreaterThan(0);
+      // Their names end up in PDFs, which print Latin-1 only.
+      for (const character of item.name)
+        expect(character.codePointAt(0)!).toBeLessThanOrEqual(0xff);
+      expect([16, 32, 63, 125]).toContain(directLoadSocket(item.electrical).ratingA);
+    }
   });
 });

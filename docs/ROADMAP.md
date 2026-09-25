@@ -1319,3 +1319,25 @@ les multiprises (et calibre) ».
 détectés. Vérifié dans le navigateur : multiprise passée en tri 32 A, son
 étiquette sur le plan, et la liste de récepteurs réduite à la chambre
 froide.
+
+## KL-050 — Des récepteurs triphasés dans la bibliothèque *(done)*
+
+Demandé à l'usage : « ajoute d'autres récepteurs triphasés dans la
+bibliothèque ». La chambre froide était la seule ; une multiprise ou un
+coffret tri n'avait donc presque rien à proposer dans « + Ajouter un
+récepteur… ».
+
+Onze récepteurs tri courants en événementiel s'y ajoutent : friteuse pro
+9 kW, plancha pro 7 kW, four professionnel 10 kW, lave-vaisselle pro 7 kW,
+remorque frigorifique 5 kW, chauffage soufflant 9 kW, climatiseur mobile
+7 kW, éclairage scène (gradateur) 12 kW, sonorisation grande scène 10 kW,
+borne de recharge 11 kW, manège / attraction 15 kW. Les puissances sont
+des ordres de grandeur à ajuster à la plaque de l'appareil ; chacun se
+pose sur le plan ou s'ajoute à un coffret ou une multiprise tri, et tombe
+sur une prise 16 ou 32 A tri.
+
+830 tests, dont 2 nouveaux : identifiants uniques dans la bibliothèque,
+et pour chaque récepteur tri une forme, une puissance, un nom imprimable
+en PDF et une prise qui existe. Validés par mutation : trois défauts, deux
+détectés du premier coup — passer deux récepteurs en mono tenait sous un
+seuil trop lâche ; un nom qui dit « tri » doit maintenant être triphasé.
