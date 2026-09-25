@@ -108,9 +108,15 @@ export interface CableSpec {
   toId?: string;
 }
 
-/** A domestic power strip. Always single-phase. */
+/**
+ * A power strip: a domestic single-phase one, or a three-phase splitter
+ * (KL-049). All its sockets are of its own phases — a single-phase plug
+ * does not go into a P17 three-phase socket, and a box that offers both
+ * is a coffret.
+ */
 export interface StripSpec {
   role: "strip";
+  phases: Phases;
   outlets: number;
   ratingA: number;
   /** Consumers plugged straight into the strip (KL-048). */
@@ -368,7 +374,7 @@ export function electricalSummary(
     case "cable":
       return `${cableDesignation(spec)} · ${formatMeters(spec.ratingA)} A`;
     case "strip":
-      return `${spec.outlets} prises ${formatMeters(spec.ratingA)} A${withListed ? listedSuffix(spec) : ""}`;
+      return `${spec.outlets} prises ${formatMeters(spec.ratingA)} A ${PHASE_LABELS[spec.phases]}${withListed ? listedSuffix(spec) : ""}`;
     case "load":
       return `${formatPowerW(spec.powerW)} ${PHASE_LABELS[spec.phases]}`;
   }
@@ -394,7 +400,7 @@ export function defaultElectricalSpec(role: ElectricalRole): ElectricalSpec {
     case "cable":
       return { role, phases: "mono", sectionMm2: 2.5, ratingA: 16 };
     case "strip":
-      return { role, outlets: 6, ratingA: 16 };
+      return { role, phases: "mono", outlets: 6, ratingA: 16 };
     case "load":
       return { role, phases: "mono", powerW: 1000 };
   }
@@ -675,8 +681,7 @@ export function sizeCableForDevices(project: Project, cableId: string): Project 
       ({ phases, ratingA } = spec);
       break;
     case "strip":
-      phases = "mono";
-      ratingA = spec.ratingA;
+      ({ phases, ratingA } = spec);
       break;
     case "load":
       // The socket it would take if listed on the coffret (KL-048): a
@@ -780,8 +785,15 @@ function deviceRatingA(spec: DeviceSpec): number | null {
 }
 
 function requiredPhases(spec: DeviceSpec): Phases | null {
-  if (spec.role === "board" || spec.role === "load") return spec.phases;
+  if (spec.role === "board" || spec.role === "load" || spec.role === "strip") return spec.phases;
   return null;
+}
+
+/** What is wrong with plugging the other kind of plug into a strip whose sockets are `strip`. */
+function stripSocketMismatch(strip: Phases): string {
+  return strip === "mono"
+    ? "une multiprise monophasée ne délivre que du monophasé."
+    : "une multiprise triphasée n'a que des prises triphasées.";
 }
 
 /** Reads the plan's electrical network and everything worth saying about it. */
@@ -920,8 +932,9 @@ export function analyzeNetwork(project: Pick<Project, "objects">): ElectricalNet
           `Câble triphasé sur ${parent.device.name}, qui n'est alimenté qu'en monophasé.`,
         );
       }
-      if (parentSpec.role === "strip" && cable.phases === "tri") {
-        issue("error", feeder.id, "Une multiprise ne délivre que du monophasé.");
+      if (parentSpec.role === "strip" && cable.phases !== parentSpec.phases) {
+        const mismatch = stripSocketMismatch(parentSpec.phases);
+        issue("error", feeder.id, mismatch.charAt(0).toUpperCase() + mismatch.slice(1));
       }
       const parentRating = deviceRatingA(parentSpec);
       if (parentRating !== null && cable.ratingA > parentRating) {
@@ -946,8 +959,12 @@ export function analyzeNetwork(project: Pick<Project, "objects">): ElectricalNet
           `${node.device.name} est triphasé mais alimenté en monophasé.`,
         );
       }
-      if (spec.role === "strip" && cable.phases === "tri") {
-        issue("error", node.device.id, "Une multiprise se branche sur un départ monophasé.");
+      if (spec.role === "strip" && spec.phases === "mono" && cable.phases === "tri") {
+        issue(
+          "error",
+          node.device.id,
+          "Une multiprise monophasée se branche sur un départ monophasé.",
+        );
       }
     }
 
@@ -971,13 +988,13 @@ export function analyzeNetwork(project: Pick<Project, "objects">): ElectricalNet
     const listed = directLoadsOf(spec);
     const listedCount = listed.reduce((sum, load) => sum + load.quantity, 0);
     for (const load of listed) {
-      if (load.phases === "tri" && (spec.role === "strip" || node.supplyPhases === "mono")) {
+      if (spec.role === "strip" && load.phases !== spec.phases) {
+        issue("error", node.device.id, `${load.name} : ${stripSocketMismatch(spec.phases)}`);
+      } else if (load.phases === "tri" && node.supplyPhases === "mono") {
         issue(
           "error",
           node.device.id,
-          spec.role === "strip"
-            ? `${load.name} est triphasé : il ne se branche pas sur une multiprise.`
-            : `${load.name} est triphasé mais ${node.device.name} n'est alimenté qu'en monophasé.`,
+          `${load.name} est triphasé mais ${node.device.name} n'est alimenté qu'en monophasé.`,
         );
       }
     }

@@ -1292,3 +1292,30 @@ un bouton « Ajouter un départ » moins haut.
 détectés. Vérifié dans le navigateur : ajout d'une friteuse et d'un point
 lumineux sur un coffret depuis la liste, puis synoptique avec deux liaisons
 en tirets et deux lignes de bilan sous le coffret.
+
+## KL-049 — Des multiprises monophasées ou triphasées *(done)*
+
+Demandé à l'usage : « il faut pouvoir choisir entre mono et triphasé pour
+les multiprises (et calibre) ».
+
+- **Une multiprise a des phases**, mono par défaut, et un calibre — qui
+  existait déjà mais tombait sous le nombre de prises ; phases et calibre
+  sont maintenant en tête, parce que c'est ce que la multiprise *est*.
+- **Toutes ses prises sont de ses phases.** Une fiche monophasée n'entre
+  pas dans une prise P17 tri, et un boîtier qui offre les deux est un
+  coffret. D'où les contrôles : une multiprise tri alimentée en mono est
+  signalée comme tout équipement tri ; un câble ou un récepteur listé
+  d'autres phases que la multiprise est refusé, dans les deux sens ; la
+  liste des récepteurs proposés ne montre que ceux qui s'y branchent.
+- Un câble tracé vers une multiprise tri 32 A naît en 5G6 32 A.
+- **Sur le plan** : « 6 prises 32 A tri » ; les multiprises mono disent
+  désormais « mono » aussi, pour que les deux se lisent sans ambiguïté.
+- **Bibliothèque** : multiprises tri 16 A et 32 A, trois prises.
+- **Fichier** : une multiprise écrite avant cette mission n'a pas de
+  `phases` et se lit monophasée — c'est ce qu'elle était. Une valeur
+  présente est validée strictement.
+
+828 tests, dont 7 nouveaux, validés par mutation : six défauts, six
+détectés. Vérifié dans le navigateur : multiprise passée en tri 32 A, son
+étiquette sur le plan, et la liste de récepteurs réduite à la chambre
+froide.

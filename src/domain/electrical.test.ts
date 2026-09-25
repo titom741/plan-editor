@@ -177,8 +177,10 @@ describe("reading electrical objects", () => {
     ).toBe("63 A tri");
     expect(electricalSummary(cable("K", { xM: 0, yM: 0 }, { xM: 1, yM: 0 }))).toBe("3G2.5 · 16 A");
     expect(
-      electricalSummary(device("M", { xM: 0, yM: 0 }, { role: "strip", outlets: 4, ratingA: 16 })),
-    ).toBe("4 prises 16 A");
+      electricalSummary(
+        device("M", { xM: 0, yM: 0 }, { role: "strip", phases: "mono", outlets: 4, ratingA: 16 }),
+      ),
+    ).toBe("4 prises 16 A mono");
     expect(
       electricalSummary(
         device("R", { xM: 0, yM: 0 }, { role: "load", phases: "mono", powerW: 3500 }),
@@ -479,7 +481,9 @@ describe("sizeCableForDevices", () => {
 
   it("feeds a power strip in single-phase and a load at the rating its power needs", () => {
     expect(
-      sized(device("M", { xM: 20, yM: 0 }, { role: "strip", outlets: 6, ratingA: 16 })).electrical,
+      sized(
+        device("M", { xM: 20, yM: 0 }, { role: "strip", phases: "mono", outlets: 6, ratingA: 16 }),
+      ).electrical,
     ).toMatchObject({ phases: "mono", ratingA: 16, sectionMm2: 2.5 });
     // 6 kW single-phase is 26 A on its plate: the 32 A socket, on 6 mm².
     expect(
@@ -517,7 +521,7 @@ describe("analyzeNetwork", () => {
   const strip = device(
     "Multiprise",
     { xM: 20, yM: 20 },
-    { role: "strip", outlets: 2, ratingA: 16 },
+    { role: "strip", phases: "mono", outlets: 2, ratingA: 16 },
   );
   const fryer = device(
     "Friteuse",
@@ -602,7 +606,7 @@ describe("analyzeNetwork", () => {
       electrical: { ...(find(wired(), toStrip.id) as CableObject).electrical, phases: "tri" },
     });
     expect(messages(analyzeNetwork(triStrip).issues, strip.id)).toContain(
-      "Une multiprise se branche sur un départ monophasé.",
+      "Une multiprise monophasée se branche sur un départ monophasé.",
     );
   });
 
@@ -612,7 +616,7 @@ describe("analyzeNetwork", () => {
     });
     const issues = messages(analyzeNetwork(triOut).issues, toFryer.id);
     expect(issues).toContain("Câble triphasé sur Multiprise, qui n'est alimenté qu'en monophasé.");
-    expect(issues).toContain("Une multiprise ne délivre que du monophasé.");
+    expect(issues).toContain("Une multiprise monophasée ne délivre que du monophasé.");
   });
 
   it("flags an overload on the cable and on the device", () => {
@@ -881,6 +885,7 @@ describe("consumers listed on a device (KL-048)", () => {
       { xM: 20, yM: 0 },
       {
         role: "strip",
+        phases: "mono",
         outlets: 6,
         ratingA: 16,
         loads: [{ name: "Chambre froide", phases: "tri", powerW: 6000, quantity: 1 }],
@@ -890,7 +895,7 @@ describe("consumers listed on a device (KL-048)", () => {
       addAll(project(src, strip), cable("K", { xM: 0, yM: 0 }, { xM: 20, yM: 0 })),
     );
     expect(messages(onStrip.issues, strip.id)).toContain(
-      "Chambre froide est triphasé : il ne se branche pas sur une multiprise.",
+      "Chambre froide : une multiprise monophasée ne délivre que du monophasé.",
     );
 
     const monoBoard = device(
@@ -917,7 +922,13 @@ describe("consumers listed on a device (KL-048)", () => {
     const strip = device(
       "Multiprise",
       { xM: 20, yM: 0 },
-      { role: "strip", outlets: 4, ratingA: 16, loads: [{ ...projectors, quantity: 5 }] },
+      {
+        role: "strip",
+        phases: "mono",
+        outlets: 4,
+        ratingA: 16,
+        loads: [{ ...projectors, quantity: 5 }],
+      },
     );
     const network = analyzeNetwork(
       addAll(project(src, strip), cable("K", { xM: 0, yM: 0 }, { xM: 20, yM: 0 })),
@@ -932,5 +943,65 @@ describe("consumers listed on a device (KL-048)", () => {
     expect(electricalSummary(listedBoard([fryer]))).toBe(
       "63 A tri · Diff. 30 mA · 1 récepteur (3.5 kW)",
     );
+  });
+});
+
+describe("three-phase power strips (KL-049)", () => {
+  const src = device(
+    "Groupe",
+    { xM: 0, yM: 0 },
+    { role: "source", kind: "generator", phases: "tri", ratingA: 63 },
+  );
+  const triStrip = (loads: DirectLoad[] = []) =>
+    device(
+      "Multiprise tri",
+      { xM: 20, yM: 0 },
+      { role: "strip", phases: "tri", outlets: 3, ratingA: 32, loads },
+    );
+  const feed = (phases: "mono" | "tri") =>
+    cable("K", { xM: 0, yM: 0 }, { xM: 20, yM: 0 }, { phases, sectionMm2: 6, ratingA: 32 });
+  const coldRoom: DirectLoad = {
+    name: "Chambre froide",
+    phases: "tri",
+    powerW: 6000,
+    quantity: 1,
+  };
+
+  it("states its phases on the plan", () => {
+    expect(electricalSummary(triStrip())).toBe("3 prises 32 A tri");
+  });
+
+  it("takes three-phase consumers without complaint when fed in three-phase", () => {
+    const network = analyzeNetwork(addAll(project(src, triStrip([coldRoom])), feed("tri")));
+    expect(network.issues).toEqual([]);
+    expect(network.totalLoadW).toBe(6000);
+  });
+
+  it("is a three-phase device: fed in single-phase, it is flagged", () => {
+    const strip = triStrip();
+    const network = analyzeNetwork(addAll(project(src, strip), feed("mono")));
+    expect(messages(network.issues, strip.id)).toContain(
+      "Multiprise tri est triphasé mais alimenté en monophasé.",
+    );
+  });
+
+  it("has only three-phase sockets: a single-phase cable or consumer is refused", () => {
+    const strip = triStrip([{ name: "Frigo", phases: "mono", powerW: 500, quantity: 1 }]);
+    const lamp = device("Lampe", { xM: 40, yM: 0 }, { role: "load", phases: "mono", powerW: 100 });
+    const out = cable("L", { xM: 20, yM: 0 }, { xM: 40, yM: 0 });
+    const network = analyzeNetwork(addAll(project(src, strip, lamp), feed("tri"), out));
+    expect(messages(network.issues, out.id)).toContain(
+      "Une multiprise triphasée n'a que des prises triphasées.",
+    );
+    expect(messages(network.issues, strip.id)).toContain(
+      "Frigo : une multiprise triphasée n'a que des prises triphasées.",
+    );
+  });
+
+  it("gets a cable sized to it: three-phase, at its rating", () => {
+    const run = cable("K", { xM: 0, yM: 0 }, { xM: 20, yM: 0 });
+    const wired = addAll(project(src, triStrip()), run);
+    const sized = find(sizeCableForDevices(wired, run.id), run.id) as CableObject;
+    expect(sized.electrical).toMatchObject({ phases: "tri", ratingA: 32, sectionMm2: 6 });
   });
 });

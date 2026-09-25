@@ -798,6 +798,27 @@ describe("electrical objects (KL-045)", () => {
       });
   });
 
+  it("reads a strip written before strips had phases as single-phase (KL-049)", () => {
+    const file = firstFile();
+    delete file.project.objects[3].electrical.phases;
+    const result = parseProjectFile(file);
+    expect(result.ok).toBe(true);
+    if (result.ok)
+      expect(result.file.project.objects[3]?.electrical).toMatchObject({ phases: "mono" });
+  });
+
+  it("refuses a strip whose phases are neither", () => {
+    const file = firstFile();
+    file.project.objects[3].electrical.phases = "biphasé";
+    const result = parseProjectFile(file);
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error).toEqual({
+        code: "invalidField",
+        path: "project.objects[3].electrical.phases",
+      });
+  });
+
   it("keeps a cable naming a device that is no longer there", () => {
     // An unplugged end is a legitimate state; one deleted coffret must not
     // cost the whole plan.

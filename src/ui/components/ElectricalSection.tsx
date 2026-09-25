@@ -277,7 +277,7 @@ export function ElectricalSection({
           </div>
           <DirectLoadsEditor
             loads={spec.loads ?? []}
-            allowTri={spec.phases === "tri"}
+            phases={spec.phases === "tri" ? "both" : "mono"}
             isLocked={isLocked}
             onFieldFocus={onFieldFocus}
             onChange={(loads) => setSpec({ ...spec, loads })}
@@ -388,6 +388,10 @@ export function ElectricalSection({
 
       {spec?.role === "strip" && (
         <>
+          {/* Phases and rating first: they are what the strip *is*; the
+              socket count and the consumers follow from them (KL-049). */}
+          {phaseSelect(spec.phases, (phases) => setSpec({ ...spec, phases }))}
+          {ratingSelect(spec.ratingA, (ratingA) => setSpec({ ...spec, ratingA }), "Calibre")}
           <NumberField
             label="Nombre de prises"
             valueM={spec.outlets}
@@ -395,10 +399,9 @@ export function ElectricalSection({
             disabled={isLocked}
             onCommit={(value) => setSpec({ ...spec, outlets: Math.max(1, Math.round(value)) })}
           />
-          {ratingSelect(spec.ratingA, (ratingA) => setSpec({ ...spec, ratingA }), "Calibre")}
           <DirectLoadsEditor
             loads={spec.loads ?? []}
-            allowTri={false}
+            phases={spec.phases}
             isLocked={isLocked}
             onFieldFocus={onFieldFocus}
             onChange={(loads) => setSpec({ ...spec, loads })}
@@ -454,8 +457,12 @@ const LOAD_PRESETS = MATERIAL_CATALOG.flatMap((item) =>
 
 interface DirectLoadsEditorProps {
   loads: readonly DirectLoad[];
-  /** False on a strip or a single-phase box, which cannot take a three-phase consumer. */
-  allowTri: boolean;
+  /**
+   * Which consumers the device has sockets for: both on a three-phase
+   * coffret, single-phase on a single-phase one, and exactly its own
+   * phases on a strip, whose sockets are all alike (KL-049).
+   */
+  phases: Phases | "both";
   isLocked: boolean;
   onFieldFocus: () => void;
   onChange: (loads: DirectLoad[]) => void;
@@ -469,7 +476,7 @@ interface DirectLoadsEditorProps {
  */
 function DirectLoadsEditor({
   loads,
-  allowTri,
+  phases,
   isLocked,
   onFieldFocus,
   onChange,
@@ -533,8 +540,8 @@ function DirectLoadsEditor({
               onFocus={onFieldFocus}
               onChange={(e) => update(index, { phases: e.target.value as Phases })}
             >
-              <option value="mono">mono</option>
-              {(allowTri || load.phases === "tri") && <option value="tri">tri</option>}
+              {(phases !== "tri" || load.phases === "mono") && <option value="mono">mono</option>}
+              {(phases !== "mono" || load.phases === "tri") && <option value="tri">tri</option>}
             </select>
             <button
               type="button"
@@ -558,15 +565,23 @@ function DirectLoadsEditor({
           const choice = e.target.value;
           if (choice === "") return;
           const preset = LOAD_PRESETS.find((candidate) => candidate.name === choice);
-          add(preset ?? { name: "Récepteur", phases: "mono", powerW: 1000 });
+          add(
+            preset ?? {
+              name: "Récepteur",
+              phases: phases === "tri" ? "tri" : "mono",
+              powerW: phases === "tri" ? 5000 : 1000,
+            },
+          );
         }}
       >
         <option value="">+ Ajouter un récepteur…</option>
-        {LOAD_PRESETS.filter((preset) => allowTri || preset.phases === "mono").map((preset) => (
-          <option key={preset.name} value={preset.name}>
-            {preset.name} ({formatPowerW(preset.powerW)} {preset.phases})
-          </option>
-        ))}
+        {LOAD_PRESETS.filter((preset) => phases === "both" || preset.phases === phases).map(
+          (preset) => (
+            <option key={preset.name} value={preset.name}>
+              {preset.name} ({formatPowerW(preset.powerW)} {preset.phases})
+            </option>
+          ),
+        )}
         <option value="__custom">Autre récepteur</option>
       </select>
     </div>

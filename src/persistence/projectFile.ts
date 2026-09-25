@@ -478,6 +478,9 @@ function readElectrical(value: unknown, path: string): ElectricalSpec {
     case "strip":
       return {
         role,
+        // Strips were single-phase only before KL-049; a file from then
+        // lacks the key, and means exactly that.
+        phases: record.phases === undefined ? "mono" : readPhases(record.phases, `${path}.phases`),
         outlets: readCount(record.outlets, `${path}.outlets`),
         ratingA: readPositiveNumber(record.ratingA, `${path}.ratingA`),
         ...readDirectLoads(record.loads, `${path}.loads`),

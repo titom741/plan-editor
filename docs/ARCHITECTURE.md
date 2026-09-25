@@ -1940,3 +1940,10 @@ uses the same rule for a drawn load, so the two agree.
 In the synoptic they are leaves of their device with dashed links; boxes
 and edges now carry a `key` distinct from the `objectId` a click selects,
 since a listed consumer selects the device it hangs from.
+
+## Three-phase strips (KL-049)
+
+`StripSpec.phases` makes a strip single- or three-phase; all its sockets
+share those phases, so `requiredPhases` treats a strip like any device,
+and a cable or listed consumer of the other phases is an error on the
+strip. Files written before the field existed read as `"mono"`.

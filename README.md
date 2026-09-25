@@ -167,7 +167,7 @@ in square metres when no explicit unit is set.
 
 **Électricité** — the **Électricité** tools place an *Alimentation*
 (réseau or groupe), a *Coffret* (arrivée mono/tri, calibre, différentiel,
-départs), a *Multiprise* or a *Récepteur* (puissance) with one click, and
+départs), a *Multiprise* (mono or tri, with its rating) or a *Récepteur* (puissance) with one click, and
 draw a *Câble* like a tracé: its ends plug into the devices they land on,
 follow them when they move, and a new cable is sized for what it feeds.
 Any existing rectangle, circle or line can take an electrical role from the
