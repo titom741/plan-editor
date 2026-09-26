@@ -302,6 +302,13 @@ one it took — the file it wrote is shown in the top bar.
 
 If you need the path on screen, that is what the macOS app is for.
 
+**Dossier d'enregistrement** (menu Fichier) sets the folder "Enregistrer
+sous" opens in — and "Ouvrir" too in the macOS app. The dialog still
+lets you pick another place each time. The macOS app shows the full
+path; Chrome and Edge remember the folder but only ever tell the page its
+name; Safari and Firefox download into their own downloads folder, set in
+their preferences.
+
 ## Lint & build
 
 ```bash

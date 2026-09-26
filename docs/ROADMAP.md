@@ -1407,3 +1407,41 @@ mobilier…). Il faut ajouter toilette (Toi Toi), colonne de tri. »
 837 tests, dont 6 nouveaux, validés par mutation : six défauts, six
 détectés. Vérifié dans le navigateur : les onglets et leurs comptes,
 les six groupes d'Électricité, l'onglet Sanitaires.
+
+## KL-053 — Un dossier d'enregistrement par défaut *(done)*
+
+Demandé à l'usage : « pour la sauvegarde, ne peut-on pas définir dans un
+réglage le dossier ? » — avec, si besoin, un exécutable plutôt que le
+navigateur. L'exécutable existait déjà : la coquille macOS de KL-031, dont
+le pont natif gagne une action. Choix de Tom : la fenêtre s'ouvre dans ce
+dossier, le choix restant libre à chaque fois, plutôt qu'un enregistrement
+sans fenêtre.
+
+- **Menu Fichier › Dossier d'enregistrement…** Le réglage dit ce que
+  l'hôte peut faire, au lieu d'afficher un bouton qui ne marcherait pas :
+  - **app macOS** : un `NSOpenPanel` de dossier (`chooseFolder`, nouvelle
+    action du pont) ; le chemin complet est affiché, conservé dans les
+    préférences de l'application web et renvoyé au pont, qui ouvre
+    « Enregistrer sous » **et** « Ouvrir » dedans (`directoryURL`). Un
+    dossier disparu depuis est ignoré, pas refusé : la fenêtre s'ouvre
+    alors là où macOS l'avait laissée ;
+  - **Chrome, Edge** : `showDirectoryPicker`, et le
+    `FileSystemDirectoryHandle` obtenu est rangé dans IndexedDB (une base
+    de réglages à part), puis passé en `startIn` à la fenêtre
+    d'enregistrement. Le navigateur ne donne que le nom du dossier, jamais
+    son chemin — le dialogue le dit. Sans réglage, la fenêtre porte
+    désormais un `id`, si bien que le navigateur la rouvre au moins dans le
+    dernier dossier utilisé ;
+  - **Safari, Firefox** : pas d'API de dossier ; le dialogue explique que
+    le fichier part dans leur dossier de téléchargements, réglable dans
+    leurs propres préférences.
+- Un « Enregistrer » qui doit demander (premier enregistrement de la
+  session) passe par le même dossier.
+
+849 tests web, dont 12 nouveaux, validés par mutation : dix défauts, dix
+détectés ; 17 tests Swift, dont 2 nouveaux pour le dossier de départ
+(dossier existant retenu ; dossier disparu, fichier ou valeur vide
+ignorés). Vérifié dans le navigateur : le dialogue et son texte selon
+l'hôte. L'app macOS a été reconstruite (`scripts/build-macos.sh`) ; les
+fenêtres natives elles-mêmes demandent quelqu'un devant l'écran et n'ont
+pas été manipulées.

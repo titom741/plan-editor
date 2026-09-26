@@ -68,9 +68,17 @@ async function send(message: Record<string, unknown>): Promise<NativeFileResult>
   }
 }
 
-/** Shows the system save panel and writes the file the user chose. */
-export function nativeSaveAs(suggestedName: string, contents: string): Promise<NativeFileResult> {
-  return send({ action: "saveAs", suggestedName, contents });
+/**
+ * Shows the system save panel and writes the file the user chose. The
+ * panel opens in `directory` when given — the folder set in the app's
+ * settings (KL-053).
+ */
+export function nativeSaveAs(
+  suggestedName: string,
+  contents: string,
+  directory?: string,
+): Promise<NativeFileResult> {
+  return send({ action: "saveAs", suggestedName, contents, ...(directory ? { directory } : {}) });
 }
 
 /** Overwrites a file already chosen in this session, with no panel. */
@@ -78,9 +86,14 @@ export function nativeSave(path: string, contents: string): Promise<NativeFileRe
   return send({ action: "save", path, contents });
 }
 
-/** Shows the system open panel and reads the file the user picked. */
-export function nativeOpen(): Promise<NativeFileResult> {
-  return send({ action: "open" });
+/** Shows the system open panel, in `directory` when given, and reads the file the user picked. */
+export function nativeOpen(directory?: string): Promise<NativeFileResult> {
+  return send({ action: "open", ...(directory ? { directory } : {}) });
+}
+
+/** Shows the system folder panel, starting in `directory`, and answers with the folder chosen (KL-053). */
+export function nativeChooseFolder(directory?: string): Promise<NativeFileResult> {
+  return send({ action: "chooseFolder", ...(directory ? { directory } : {}) });
 }
 
 /** A document the shell handed over — opened from the Finder or the Dock. */

@@ -2,6 +2,7 @@ import { deserializeProject, serializeProject } from "../persistence/projectFile
 import type { ParseError, ParseResult } from "../persistence/projectFile";
 import type { Project } from "../domain/types";
 import { isNativeBridgeAvailable, nativeOpen, nativeSave, nativeSaveAs } from "./nativeBridge";
+import type { SaveFolder } from "../persistence/saveFolder";
 
 /**
  * Saving a project to, and opening one from, a file the user picks —
@@ -68,6 +69,10 @@ interface SaveFilePicker {
   (options: {
     suggestedName: string;
     types: { description: string; accept: Record<string, string[]> }[];
+    /** Where the dialog opens: the folder set in the settings (KL-053). */
+    startIn?: FileSystemDirectoryHandle;
+    /** Lets the browser remember the last folder used for this kind of save. */
+    id?: string;
   }): Promise<{
     /** The file the user settled on — which may not be `suggestedName`, and is all a browser will name. */
     name: string;
@@ -111,12 +116,20 @@ export type SaveOutcome =
  * A dismissed dialog reports `cancelled`. Cancelling is a decision, and
  * telling the user their save failed for it would be a lie.
  */
-export async function saveProjectFileAs(project: Project): Promise<SaveOutcome> {
+export async function saveProjectFileAs(
+  project: Project,
+  /** The folder set in the settings (KL-053): the dialog opens there. */
+  folder: SaveFolder | null = null,
+): Promise<SaveOutcome> {
   const contents = serializeProject(project);
   const suggestedName = suggestedFileName(project);
 
   if (isNativeBridgeAvailable()) {
-    const result = await nativeSaveAs(suggestedName, contents);
+    const result = await nativeSaveAs(
+      suggestedName,
+      contents,
+      folder?.kind === "path" ? folder.path : undefined,
+    );
     if (result.status === "cancelled") return { status: "cancelled" };
     if (result.status === "failed") return { status: "failed", message: result.message };
     return { status: "saved", destination: { kind: "path", path: result.path, name: result.name } };
@@ -134,6 +147,9 @@ export async function saveProjectFileAs(project: Project): Promise<SaveOutcome> 
   try {
     const handle = await picker({
       suggestedName,
+      // Without a folder set, the id still lets the browser reopen where
+      // the last project was saved rather than in Documents every time.
+      ...(folder?.kind === "handle" ? { startIn: folder.handle } : { id: "plan-editor-projects" }),
       types: [
         {
           description: "Projet d'implantation",
@@ -165,6 +181,7 @@ export async function saveProjectFileAs(project: Project): Promise<SaveOutcome> 
 export async function saveProjectFile(
   project: Project,
   destination: SaveDestination,
+  folder: SaveFolder | null = null,
 ): Promise<SaveOutcome> {
   if (destination?.kind === "path" && isNativeBridgeAvailable()) {
     const result = await nativeSave(destination.path, serializeProject(project));
@@ -172,7 +189,7 @@ export async function saveProjectFile(
     if (result.status === "failed") return { status: "failed", message: result.message };
     return { status: "saved", destination };
   }
-  return saveProjectFileAs(project);
+  return saveProjectFileAs(project, folder);
 }
 
 /**
@@ -180,11 +197,11 @@ export async function saveProjectFile(
  * `null` when there is no bridge, so the caller falls back to its hidden
  * `<input type="file">`.
  */
-export async function openProjectFileNatively(): Promise<
-  { result: ParseResult; destination: SaveDestination } | { cancelled: true } | null
-> {
+export async function openProjectFileNatively(
+  folder: SaveFolder | null = null,
+): Promise<{ result: ParseResult; destination: SaveDestination } | { cancelled: true } | null> {
   if (!isNativeBridgeAvailable()) return null;
-  const opened = await nativeOpen();
+  const opened = await nativeOpen(folder?.kind === "path" ? folder.path : undefined);
   if (opened.status === "cancelled") return { cancelled: true };
   if (opened.status === "failed" || opened.contents === undefined) {
     return { result: { ok: false, error: { code: "notJson" } }, destination: null };

@@ -103,4 +103,27 @@ struct FileBridgeTests {
         #expect(types.contains { $0.identifier == "public.json" })
         #expect(types.contains { $0.preferredFilenameExtension == "kli" })
     }
+
+    @Test("a panel starts in the folder set in the settings, when it still exists")
+    func startingDirectoryExisting() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bridge-folder-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        #expect(FileBridge.startingDirectory(from: ["directory": folder.path])?.path == folder.path)
+    }
+
+    @Test("a folder that is gone, a file, or nothing at all gives no starting folder")
+    func startingDirectoryIgnored() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bridge-\(UUID().uuidString).kli")
+        try "{}".write(to: file, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        #expect(FileBridge.startingDirectory(from: ["directory": "/nowhere-that-exists"]) == nil)
+        #expect(FileBridge.startingDirectory(from: ["directory": file.path]) == nil)
+        #expect(FileBridge.startingDirectory(from: ["directory": ""]) == nil)
+        #expect(FileBridge.startingDirectory(from: [:]) == nil)
+    }
 }

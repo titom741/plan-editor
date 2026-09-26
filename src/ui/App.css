@@ -2096,3 +2096,31 @@
 .library-dialog__section > div:first-of-type > .library-dialog__group-title {
   margin-top: 0;
 }
+
+/* KL-053 — the save folder setting. */
+.save-folder-dialog {
+  width: min(34rem, 95vw);
+}
+
+.save-folder-dialog__current {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.save-folder-dialog__current span {
+  font-size: 0.75rem;
+  color: var(--text);
+}
+
+.save-folder-dialog__current strong {
+  overflow-wrap: anywhere;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-h);
+}

@@ -1955,3 +1955,17 @@ in `CATALOG_CATEGORY_ORDER`, unknown (user) categories after them
 alphabetically, and splits Électricité into groups by electrical role. The
 library dialog renders those sections under category tabs whose counts
 are computed after the search, so the tabs show where the matches are.
+
+## The save folder setting (KL-053)
+
+`persistence/saveFolder.ts` remembers where "Enregistrer sous" opens: a
+path in `localStorage` for the macOS shell, a `FileSystemDirectoryHandle`
+in a separate IndexedDB database (`kl-implantation-settings`) for Chrome
+and Edge — handles don't survive JSON but IndexedDB stores them as is.
+`Editor` loads it once and hands it to `saveProjectFileAs`,
+`saveProjectFile` and `openProjectFileNatively`, which pass it on as the
+bridge's `directory` or the picker's `startIn`. The Swift side only
+resolves `directory` to a panel's `directoryURL`
+(`FileBridge.startingDirectory`, which ignores a folder that no longer
+exists) and adds a `chooseFolder` action; it stores nothing, so the
+setting has one home.

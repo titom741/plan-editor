@@ -19,6 +19,7 @@ export type CommandId =
   | "recentProjects"
   | "saveFile"
   | "saveFileAs"
+  | "saveFolder"
   | "export"
   | "library"
   | "importObjectImage"
@@ -95,6 +96,14 @@ export const COMMANDS: readonly CommandDefinition[] = [
     icon: "🗂",
     group: "file",
     title: "Enregistrer sous un autre nom de fichier",
+  },
+  {
+    id: "saveFolder",
+    label: "Dossier d'enregistrement…",
+    shortLabel: "Dossier",
+    icon: "📁",
+    group: "file",
+    title: "Choisir le dossier où « Enregistrer sous » et « Ouvrir » s'ouvrent",
   },
   {
     id: "export",

@@ -13,6 +13,7 @@ export interface NativeBridgeResponses {
   saveAs?: (message: Record<string, unknown>) => unknown;
   save?: (message: Record<string, unknown>) => unknown;
   open?: (message: Record<string, unknown>) => unknown;
+  chooseFolder?: (message: Record<string, unknown>) => unknown;
 }
 
 export interface NativeBridgeStub {

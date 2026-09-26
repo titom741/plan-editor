@@ -26,10 +26,16 @@ Lancer d'abord `scripts/build-macos.sh` (pour les ressources web), puis
 ouvrir `macos/PlanEditorMac/Package.swift` dans Xcode, sélectionner le
 schéma **PlanEditorMac** et lancer avec ⌘R.
 
+## Fichiers
+
+Un pont Swift (`FileBridge.swift`) expose `NSSavePanel` et `NSOpenPanel` à
+l'application web : « Enregistrer sous » et « Ouvrir » passent par les
+fenêtres natives et affichent le chemin complet. Le réglage **Dossier
+d'enregistrement** (menu Fichier) choisit, via un `NSOpenPanel` de
+dossier, le dossier où ces fenêtres s'ouvrent ; il est conservé avec les
+préférences de l'application web et renvoyé au pont à chaque ouverture.
+
 ## Limites actuelles
 
-`WKWebView` n'expose pas File System Access : « Enregistrer sous »
-retombe donc sur le téléchargement, sans dialogue natif de choix de
-dossier. L'étape suivante est un pont Swift (`NSOpenPanel` /
-`NSSavePanel`) pour les ouvertures et enregistrements natifs, puis la
-signature et la notarisation pour distribuer un `.app`.
+La signature Developer ID et la notarisation restent à faire pour
+distribuer le `.app` : le script signe en ad hoc par défaut.

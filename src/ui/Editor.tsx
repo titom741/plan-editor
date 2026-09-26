@@ -91,6 +91,8 @@ import { CommandMenu } from "./components/CommandMenu";
 import { DialogErrorFallback, ErrorBoundary } from "./components/ErrorBoundary";
 import { ToolsPanel } from "./components/ToolsPanel";
 import { ElectricalPanel } from "./components/ElectricalPanel";
+import { SaveFolderDialog } from "./components/SaveFolderDialog";
+import { loadSaveFolder, storeSaveFolder, type SaveFolder } from "../persistence/saveFolder";
 import { ShortcutsDialog } from "./components/ShortcutsDialog";
 import { CommentsDialog } from "./components/CommentsDialog";
 import { useAutosave } from "./hooks/useAutosave";
@@ -234,7 +236,8 @@ type DialogId =
   | "exchange"
   | "shortcuts"
   | "comments"
-  | "customizeToolbar";
+  | "customizeToolbar"
+  | "saveFolder";
 
 interface EditorProps {
   /** The project the session starts from — restored from storage, or a fresh one. Read once: from here on the editor owns the document. */
@@ -1098,6 +1101,25 @@ export default function Editor({
    */
   const [saveDestination, setSaveDestination] = useState<SaveDestination>(null);
 
+  /**
+   * The folder set in "Dossier d'enregistrement" (KL-053). Read once at
+   * startup — a directory handle lives in IndexedDB, so it arrives a beat
+   * after the first render — and written back whenever the setting changes.
+   */
+  const [saveFolder, setSaveFolder] = useState<SaveFolder | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void loadSaveFolder().then((folder) => {
+      if (!cancelled) setSaveFolder(folder);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const handleSaveFolderChange = useCallback((folder: SaveFolder | null) => {
+    void storeSaveFolder(folder).then(setSaveFolder);
+  }, []);
+
   const reportSaveOutcome = useCallback((outcome: Awaited<ReturnType<typeof saveProjectFile>>) => {
     // Cancelling is a decision, not a failure, and says nothing.
     if (outcome.status === "failed") setFileError(`L'enregistrement a échoué : ${outcome.message}`);
@@ -1105,14 +1127,14 @@ export default function Editor({
   }, []);
 
   const handleSaveToFile = useCallback(() => {
-    void saveProjectFile(project, saveDestination)
+    void saveProjectFile(project, saveDestination, saveFolder)
       .then(reportSaveOutcome)
       .catch((error: unknown) =>
         setFileError(
           `L'enregistrement a échoué : ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
-  }, [project, saveDestination, reportSaveOutcome]);
+  }, [project, saveDestination, saveFolder, reportSaveOutcome]);
 
   /**
    * "Save as" always asks where the file goes. It also renames the
@@ -1127,14 +1149,14 @@ export default function Editor({
     if (!name) return;
     const renamed = { ...project, name, updatedAt: new Date().toISOString() };
     commitChange(() => renamed);
-    void saveProjectFileAs(renamed)
+    void saveProjectFileAs(renamed, saveFolder)
       .then(reportSaveOutcome)
       .catch((error: unknown) =>
         setFileError(
           `L'enregistrement a échoué : ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
-  }, [project, commitChange, reportSaveOutcome]);
+  }, [project, commitChange, saveFolder, reportSaveOutcome]);
 
   /**
    * A `.kli` double-clicked in the Finder. The shell reads the file and
@@ -1156,7 +1178,7 @@ export default function Editor({
   );
 
   const handleRequestOpenProject = useCallback(() => {
-    void openProjectFileNatively()
+    void openProjectFileNatively(saveFolder)
       .then((opened) => {
         // No bridge: fall back to the hidden file input, which is what
         // every browser has.
@@ -1173,7 +1195,7 @@ export default function Editor({
         setSaveDestination(opened.destination);
       })
       .catch(() => projectFileInputRef.current?.click());
-  }, [replaceDocument]);
+  }, [replaceDocument, saveFolder]);
 
   const handleProjectFileInputChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1271,6 +1293,8 @@ export default function Editor({
           return handleSaveToFile();
         case "saveFileAs":
           return handleSaveToFileAs();
+        case "saveFolder":
+          return setOpenDialog("saveFolder");
         case "export":
           return setOpenDialog("export");
         case "library":
@@ -1767,6 +1791,13 @@ export default function Editor({
         <ShortcutsDialog
           shortcuts={shortcuts}
           onChange={(next) => setShortcuts(saveShortcuts(next))}
+          onClose={() => closeDialog()}
+        />
+      )}
+      {openDialog === "saveFolder" && (
+        <SaveFolderDialog
+          folder={saveFolder}
+          onChange={handleSaveFolderChange}
           onClose={() => closeDialog()}
         />
       )}

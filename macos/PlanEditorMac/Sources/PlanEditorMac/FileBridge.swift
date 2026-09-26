@@ -62,7 +62,9 @@ final class FileBridge: NSObject, WKScriptMessageHandlerWithReply {
         case "save":
             save(body: body, reply: reply)
         case "open":
-            open(reply: reply)
+            open(body: body, reply: reply)
+        case "chooseFolder":
+            chooseFolder(body: body, reply: reply)
         default:
             reply(["error": "Action inconnue : \(action)"], nil)
         }
@@ -83,6 +85,10 @@ final class FileBridge: NSObject, WKScriptMessageHandlerWithReply {
         panel.allowsOtherFileTypes = true
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
+        // The folder set in the app's settings, when there is one (KL-053).
+        if let directory = Self.startingDirectory(from: body) {
+            panel.directoryURL = directory
+        }
 
         present(panel) { response in
             guard response == .OK, let url = panel.url else {
@@ -103,11 +109,14 @@ final class FileBridge: NSObject, WKScriptMessageHandlerWithReply {
         reply(Self.write(contents, to: URL(fileURLWithPath: path)), nil)
     }
 
-    private func open(reply: @escaping (Any?, String?) -> Void) {
+    private func open(body: [String: Any], reply: @escaping (Any?, String?) -> Void) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = ProjectDocument.contentTypes
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
+        if let directory = Self.startingDirectory(from: body) {
+            panel.directoryURL = directory
+        }
 
         present(panel) { response in
             guard response == .OK, let url = panel.url else {
@@ -126,7 +135,45 @@ final class FileBridge: NSObject, WKScriptMessageHandlerWithReply {
         }
     }
 
+    /// Lets the user pick the folder projects are saved to (KL-053). The
+    /// choice is kept by the web side, which passes it back as `directory`
+    /// with every save and open: one setting, stored once, with the rest of
+    /// the app's preferences.
+    private func chooseFolder(body: [String: Any], reply: @escaping (Any?, String?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choisir ce dossier"
+        panel.message = "Dossier où les projets sont enregistrés par défaut"
+        if let directory = Self.startingDirectory(from: body) {
+            panel.directoryURL = directory
+        }
+
+        present(panel) { response in
+            guard response == .OK, let url = panel.url else {
+                reply(["cancelled": true], nil)
+                return
+            }
+            reply(["path": url.path, "name": url.lastPathComponent], nil)
+        }
+    }
+
     // MARK: - Helpers
+
+    /// The folder a panel should open in: the request's `directory`, when it
+    /// names a folder that still exists. A folder since deleted or renamed
+    /// is ignored rather than refused — the panel then opens where macOS
+    /// last left it, which is better than no panel at all.
+    static func startingDirectory(from body: [String: Any]) -> URL? {
+        guard let path = body["directory"] as? String, !path.isEmpty else { return nil }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+              isDirectory.boolValue
+        else { return nil }
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }
 
     /// Writes atomically: a half-written project file is worse than none,
     /// and this is the only copy of the document the user owns.

@@ -381,3 +381,65 @@ describe("describeSaveDestination", () => {
     expect(describeSaveDestination(null)).toBeNull();
   });
 });
+
+describe("the save folder setting (KL-053)", () => {
+  const folderPath = { kind: "path" as const, path: "/Users/tom/Plans", name: "Plans" };
+
+  it("opens the macOS save panel in the folder set", async () => {
+    let directory: unknown;
+    installNativeBridge({
+      saveAs: (message) => {
+        directory = message.directory;
+        return { path: "/Users/tom/Plans/a.kli", name: "a.kli" };
+      },
+    });
+    await saveProjectFileAs(named("A"), folderPath);
+    expect(directory).toBe("/Users/tom/Plans");
+  });
+
+  it("opens the macOS open panel there too, and sends nothing when unset", async () => {
+    const seen: unknown[] = [];
+    installNativeBridge({
+      open: (message) => {
+        seen.push(message.directory);
+        return { cancelled: true };
+      },
+    });
+    await openProjectFileNatively(folderPath);
+    await openProjectFileNatively(null);
+    expect(seen).toEqual(["/Users/tom/Plans", undefined]);
+  });
+
+  it("carries the folder through a plain save that has to ask", async () => {
+    let directory: unknown;
+    installNativeBridge({
+      saveAs: (message) => {
+        directory = message.directory;
+        return { path: "/Users/tom/Plans/a.kli", name: "a.kli" };
+      },
+    });
+    await saveProjectFile(named("A"), null, folderPath);
+    expect(directory).toBe("/Users/tom/Plans");
+  });
+
+  it("starts a browser's save picker in the folder handle, or lets it remember one", async () => {
+    const options: Record<string, unknown>[] = [];
+    (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker = (
+      given: Record<string, unknown>,
+    ) => {
+      options.push(given);
+      return Promise.resolve({
+        name: "a.kli",
+        createWritable: () =>
+          Promise.resolve({ write: () => Promise.resolve(), close: () => Promise.resolve() }),
+      });
+    };
+    const handle = { kind: "directory", name: "Plans" } as unknown as FileSystemDirectoryHandle;
+    await saveProjectFileAs(named("A"), { kind: "handle", handle, name: "Plans" });
+    await saveProjectFileAs(named("A"), null);
+    expect(options[0]?.startIn).toBe(handle);
+    expect(options[0]?.id).toBeUndefined();
+    expect(options[1]?.startIn).toBeUndefined();
+    expect(options[1]?.id).toBe("plan-editor-projects");
+  });
+});
