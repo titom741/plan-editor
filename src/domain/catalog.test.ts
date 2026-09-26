@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MATERIAL_CATALOG, buildSchedule, scheduleToCsv } from "./catalog";
+import { MATERIAL_CATALOG, buildSchedule, groupCatalog, scheduleToCsv } from "./catalog";
 import { directLoadSocket } from "./electrical";
 import { createLineObject, createPolygonObject, createRectangleObject } from "./objects";
 
@@ -117,5 +117,72 @@ describe("material catalogue", () => {
         expect(character.codePointAt(0)!).toBeLessThanOrEqual(0xff);
       expect([16, 32, 63, 125]).toContain(directLoadSocket(item.electrical).ratingA);
     }
+  });
+});
+
+describe("groupCatalog (KL-052)", () => {
+  const sections = groupCatalog(MATERIAL_CATALOG);
+  const section = (category: string) => sections.find((s) => s.category === category)!;
+
+  it("orders categories from structures to drawing aids", () => {
+    expect(sections.map((s) => s.category)).toEqual([
+      "Structures",
+      "Mobilier",
+      "Sanitaires",
+      "Déchets",
+      "Services",
+      "Sécurité",
+      "Électricité",
+      "Véhicules",
+      "Architecture",
+      "Dessin",
+    ]);
+  });
+
+  it("puts a category it doesn't know after the known ones, alphabetically", () => {
+    const own = (category: string) => ({ ...MATERIAL_CATALOG[0]!, id: category, category });
+    const grouped = groupCatalog([own("Zones"), own("Animations"), ...MATERIAL_CATALOG]);
+    expect(grouped.map((s) => s.category).slice(-2)).toEqual(["Animations", "Zones"]);
+  });
+
+  it("splits Électricité by role, and leaves the other categories whole", () => {
+    expect(section("Électricité").groups.map((g) => g.label)).toEqual([
+      "Alimentations",
+      "Coffrets",
+      "Câbles",
+      "Multiprises",
+      "Récepteurs monophasés",
+      "Récepteurs triphasés",
+    ]);
+    expect(section("Mobilier").groups.map((g) => g.label)).toEqual([null]);
+  });
+
+  it("loses nothing and counts every item once", () => {
+    const listed = sections.flatMap((s) => s.groups.flatMap((g) => g.items.map((i) => i.id)));
+    expect(listed.sort()).toEqual(MATERIAL_CATALOG.map((i) => i.id).sort());
+    for (const s of sections) {
+      expect(s.count).toBe(s.groups.reduce((sum, g) => sum + g.items.length, 0));
+    }
+  });
+
+  it("has toilets and sorting points where one would look for them", () => {
+    const names = (category: string) =>
+      section(category).groups.flatMap((g) => g.items.map((i) => i.name));
+    expect(names("Sanitaires")).toEqual(
+      expect.arrayContaining([
+        "Toilette mobile (type Toi Toi)",
+        "Toilette PMR",
+        "Sanitaire mobile",
+      ]),
+    );
+    expect(names("Déchets")).toEqual(
+      expect.arrayContaining(["Colonne de tri 3 flux", "Colonne de tri 2 flux", "Point déchets"]),
+    );
+  });
+
+  it("keeps an electrical-category item with no role in a group of its own", () => {
+    const plain = { ...MATERIAL_CATALOG[0]!, id: "x", category: "Électricité" };
+    const grouped = groupCatalog([plain]);
+    expect(grouped[0]!.groups).toEqual([{ label: "Autres", items: [plain] }]);
   });
 });

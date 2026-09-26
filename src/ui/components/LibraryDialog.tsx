@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { MATERIAL_CATALOG, type CatalogItem } from "../../domain/catalog";
+import { MATERIAL_CATALOG, groupCatalog, type CatalogItem } from "../../domain/catalog";
 import type { ComponentTemplate } from "../../persistence/componentStorage";
 import {
   addCustomCatalogItem,
@@ -67,16 +67,24 @@ export function LibraryDialog({
 
   const customIds = new Set(customItems.map((item) => item.id));
   const allItems = useMemo(() => [...customItems, ...MATERIAL_CATALOG], [customItems]);
-  const categories = useMemo(
-    () => ["Toutes", ...new Set(allItems.map((item) => item.category))],
-    [allItems],
-  );
-  const filtered = allItems.filter((item) => {
+  // What the search and the hidden items leave, before the category is
+  // applied: the tabs count *this*, so they say where the matches are.
+  const searched = allItems.filter((item) => {
     if (!managing && hiddenIds.has(item.id)) return false;
-    const matchesCategory = category === "Toutes" || item.category === category;
     const haystack = `${item.name} ${item.reference} ${item.category}`.toLocaleLowerCase("fr");
-    return matchesCategory && haystack.includes(query.trim().toLocaleLowerCase("fr"));
+    return haystack.includes(query.trim().toLocaleLowerCase("fr"));
   });
+  const sections = groupCatalog(searched);
+  const shown =
+    category === "Toutes" ? sections : sections.filter((section) => section.category === category);
+  const filtered = shown.flatMap((section) => section.groups.flatMap((group) => group.items));
+  // Saved components have no category of their own: they show under
+  // "Toutes" only, first, since they are what this user built.
+  const matchingTemplates = templates.filter(
+    (template) =>
+      category === "Toutes" &&
+      template.name.toLocaleLowerCase("fr").includes(query.trim().toLocaleLowerCase("fr")),
+  );
   const editedItem =
     editing && editing !== "new" ? customItems.find((item) => item.id === editing) : undefined;
 
@@ -104,16 +112,33 @@ export function LibraryDialog({
             placeholder="Rechercher un matériel…"
             aria-label="Rechercher"
           />
-          <select
-            value={category}
-            onChange={(event) => setCategory(event.target.value)}
-            aria-label="Catégorie"
-          >
-            {categories.map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
         </div>
+        {editing === null && (
+          <div className="library-dialog__categories" role="tablist" aria-label="Catégories">
+            {[
+              { category: "Toutes", count: searched.length },
+              // The tab of a category the search has emptied stays if it
+              // is the one open, so the user isn't moved without asking.
+              ...groupCatalog(allItems.filter((item) => managing || !hiddenIds.has(item.id)))
+                .map((section) => ({
+                  category: section.category,
+                  count: sections.find((s) => s.category === section.category)?.count ?? 0,
+                }))
+                .filter((entry) => entry.count > 0 || entry.category === category),
+            ].map((entry) => (
+              <button
+                key={entry.category}
+                type="button"
+                role="tab"
+                aria-selected={category === entry.category}
+                className={`library-dialog__category${category === entry.category ? " is-active" : ""}`}
+                onClick={() => setCategory(entry.category)}
+              >
+                {entry.category} <span>{entry.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {editing !== null ? (
           <CatalogItemForm
             item={editedItem}
@@ -127,94 +152,116 @@ export function LibraryDialog({
               setEditing(null);
             }}
           />
-        ) : (
-          <div className="library-dialog__grid">
-            {templates
-              .filter(
-                (template) =>
-                  category === "Toutes" &&
-                  template.name
-                    .toLocaleLowerCase("fr")
-                    .includes(query.trim().toLocaleLowerCase("fr")),
-              )
-              .map((template) => (
-                <div key={template.id} className="library-card">
-                  <button
-                    type="button"
-                    className="library-card__template"
-                    onClick={() => onInsertTemplate(template)}
-                  >
-                    <strong>{template.name}</strong>
-                    <span>Composant personnel</span>
-                    <small>{template.objects.length} objet(s)</small>
-                  </button>
-                  <button
-                    type="button"
-                    className="dialog__close"
-                    onClick={() => onDeleteTemplate(template.id)}
-                    aria-label={`Supprimer ${template.name}`}
-                  >
-                    🗑
-                  </button>
+        ) : null}
+        {editing === null && (
+          <div className="library-dialog__sections">
+            {matchingTemplates.length > 0 && (
+              <section className="library-dialog__section">
+                <h3 className="library-dialog__section-title">
+                  Composants personnels <span>{matchingTemplates.length}</span>
+                </h3>
+                <div className="library-dialog__grid">
+                  {matchingTemplates.map((template) => (
+                    <div key={template.id} className="library-card">
+                      <button
+                        type="button"
+                        className="library-card__template"
+                        onClick={() => onInsertTemplate(template)}
+                      >
+                        <strong>{template.name}</strong>
+                        <span>Composant personnel</span>
+                        <small>{template.objects.length} objet(s)</small>
+                      </button>
+                      <button
+                        type="button"
+                        className="dialog__close"
+                        onClick={() => onDeleteTemplate(template.id)}
+                        aria-label={`Supprimer ${template.name}`}
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            {filtered.map((item) => (
-              <div
-                key={item.id}
-                className={`library-card${hiddenIds.has(item.id) ? " is-hidden-item" : ""}`}
-              >
-                <button
-                  type="button"
-                  className="library-card__insert"
-                  onClick={() => onInsert(item)}
-                >
-                  <span
-                    className="library-card__preview"
-                    style={{ background: item.style.fill, borderColor: item.style.stroke }}
-                    aria-hidden="true"
-                  />
-                  <strong>{item.name}</strong>
-                  <span>
-                    {item.category} · {item.reference}
-                  </span>
-                  <small>{describeCatalogSize(item)}</small>
-                </button>
-                {managing && (
-                  <div className="library-card__actions">
-                    <button
-                      type="button"
-                      onClick={() => setHiddenIds(toggleHiddenCatalogId(item.id))}
-                      title={
-                        hiddenIds.has(item.id)
-                          ? "Rétablir dans la bibliothèque"
-                          : "Masquer de la bibliothèque"
-                      }
-                    >
-                      {hiddenIds.has(item.id) ? "👁" : "🚫"}
-                    </button>
-                    {customIds.has(item.id) && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setEditing(item.id)}
-                          title="Modifier ce matériel"
-                        >
-                          ✎
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCustomItems(deleteCustomCatalogItem(item.id))}
-                          title="Supprimer ce matériel"
-                        >
-                          🗑
-                        </button>
-                      </>
-                    )}
-                  </div>
+              </section>
+            )}
+            {shown.map((section) => (
+              <section key={section.category} className="library-dialog__section">
+                {category === "Toutes" && (
+                  <h3 className="library-dialog__section-title">
+                    {section.category} <span>{section.count}</span>
+                  </h3>
                 )}
-              </div>
+                {section.groups.map((group) => (
+                  <div key={group.label ?? "all"}>
+                    {group.label && <h4 className="library-dialog__group-title">{group.label}</h4>}
+                    <div className="library-dialog__grid">
+                      {group.items.map((item) => (
+                        <div
+                          key={item.id}
+                          className={`library-card${hiddenIds.has(item.id) ? " is-hidden-item" : ""}`}
+                        >
+                          <button
+                            type="button"
+                            className="library-card__insert"
+                            onClick={() => onInsert(item)}
+                          >
+                            <span
+                              className="library-card__preview"
+                              style={{
+                                background: item.style.fill,
+                                borderColor: item.style.stroke,
+                              }}
+                              aria-hidden="true"
+                            />
+                            <strong>{item.name}</strong>
+                            {/* The section already names the category. */}
+                            <span>{item.reference}</span>
+                            <small>{describeCatalogSize(item)}</small>
+                          </button>
+                          {managing && (
+                            <div className="library-card__actions">
+                              <button
+                                type="button"
+                                onClick={() => setHiddenIds(toggleHiddenCatalogId(item.id))}
+                                title={
+                                  hiddenIds.has(item.id)
+                                    ? "Rétablir dans la bibliothèque"
+                                    : "Masquer de la bibliothèque"
+                                }
+                              >
+                                {hiddenIds.has(item.id) ? "👁" : "🚫"}
+                              </button>
+                              {customIds.has(item.id) && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditing(item.id)}
+                                    title="Modifier ce matériel"
+                                  >
+                                    ✎
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCustomItems(deleteCustomCatalogItem(item.id))}
+                                    title="Supprimer ce matériel"
+                                  >
+                                    🗑
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </section>
             ))}
-            {filtered.length === 0 && <p>Aucun matériel ne correspond à la recherche.</p>}
+            {filtered.length === 0 && matchingTemplates.length === 0 && (
+              <p>Aucun matériel ne correspond à la recherche.</p>
+            )}
           </div>
         )}
         {editing === null && (

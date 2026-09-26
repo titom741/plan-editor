@@ -1374,3 +1374,36 @@ bibliothèque, trois détectés. Les onglets sont de l'interface pure,
 vérifiés dans le navigateur : Alertes ouvert d'office avec sa pastille,
 les trois autres onglets affichent leur contenu, la liste de récepteurs
 montre 24 modèles mono et 12 tri sur un coffret tri.
+
+## KL-052 — Une bibliothèque rangée par type, des toilettes et des colonnes de tri *(done)*
+
+Demandé à l'usage : « range aussi la bibliothèque par type (électricité,
+mobilier…). Il faut ajouter toilette (Toi Toi), colonne de tri. »
+
+- **Des onglets de catégories**, à la place de la liste déroulante : Toutes,
+  puis Structures, Mobilier, Sanitaires, Déchets, Services, Sécurité,
+  Électricité, Véhicules, Architecture, Dessin — ce dont un plan
+  d'événement se construit d'abord, puis la sécurité, le réseau, les
+  véhicules et les aides au dessin. Une catégorie créée par l'utilisateur
+  suit, dans l'ordre alphabétique. Chaque onglet dit combien d'éléments il
+  contient *pour la recherche en cours*, si bien qu'on voit où sont les
+  résultats avant de changer d'onglet.
+- **« Toutes » affiche des sections titrées**, et Électricité — près de
+  cinquante éléments — est découpée par rôle : Alimentations, Coffrets,
+  Câbles, Multiprises, Récepteurs monophasés, Récepteurs triphasés. Une
+  liste de récepteurs n'est pas l'endroit où chercher un coffret.
+- **La recherche et les onglets restent en place**, seules les sections
+  défilent. Les composants personnels ont leur propre section en tête de
+  « Toutes ». La carte d'un matériel ne répète plus sa catégorie, déjà
+  écrite au-dessus.
+- **Deux nouvelles catégories.** *Sanitaires* : toilette mobile (type
+  Toi Toi) 1,1 × 1,2 m, toilette PMR 1,6 × 1,6 m, urinoir 4 places,
+  lave-mains, bloc sanitaire sur remorque, et le sanitaire mobile existant.
+  *Déchets* : colonnes de tri 3 flux et 2 flux, conteneur 660 L, bac
+  240 L, borne à verre, et le point déchets existant. Les deux éléments
+  déplacés gardent leur identifiant ; les objets déjà posés gardent la
+  catégorie qu'ils avaient.
+
+837 tests, dont 6 nouveaux, validés par mutation : six défauts, six
+détectés. Vérifié dans le navigateur : les onglets et leurs comptes,
+les six groupes d'Électricité, l'onglet Sanitaires.

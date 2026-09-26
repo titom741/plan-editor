@@ -1947,3 +1947,11 @@ since a listed consumer selects the device it hangs from.
 share those phases, so `requiredPhases` treats a strip like any device,
 and a cable or listed consumer of the other phases is an error on the
 strip. Files written before the field existed read as `"mono"`.
+
+## The library by category (KL-052)
+
+`groupCatalog` (domain/catalog.ts) arranges catalogue items into sections
+in `CATALOG_CATEGORY_ORDER`, unknown (user) categories after them
+alphabetically, and splits Électricité into groups by electrical role. The
+library dialog renders those sections under category tabs whose counts
+are computed after the search, so the tabs show where the matches are.

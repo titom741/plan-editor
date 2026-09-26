@@ -260,9 +260,9 @@
 
 .library-dialog__filters {
   display: grid;
-  grid-template-columns: 1fr 14rem;
+  grid-template-columns: 1fr;
   gap: 0.75rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 .library-dialog__filters input,
 .library-dialog__filters select {
@@ -2016,4 +2016,83 @@
 
 .electrical-dialog__listed td {
   color: var(--text);
+}
+
+/* KL-052 — the library arranged by category. The search and the category
+   tabs stay put; only the sections scroll. */
+.library-dialog {
+  display: flex;
+  flex-direction: column;
+  height: min(85vh, 52rem);
+  overflow: hidden;
+}
+
+.library-dialog__categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.library-dialog__category {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.library-dialog__category span {
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+
+.library-dialog__category.is-active {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.library-dialog__sections {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-top: 0.75rem;
+}
+
+.library-dialog__section + .library-dialog__section {
+  margin-top: 1.25rem;
+}
+
+.library-dialog__section-title {
+  margin: 0 0 0.6rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-h);
+}
+
+.library-dialog__section-title span,
+.library-dialog__group-title span {
+  font-weight: 400;
+  color: var(--text);
+}
+
+.library-dialog__group-title {
+  margin: 0.8rem 0 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.library-dialog__section > div:first-of-type > .library-dialog__group-title {
+  margin-top: 0;
 }

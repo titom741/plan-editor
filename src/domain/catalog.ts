@@ -724,7 +724,7 @@ export const MATERIAL_CATALOG: readonly CatalogItem[] = [
   },
   {
     id: "toilet",
-    category: "Services",
+    category: "Sanitaires",
     name: "Sanitaire mobile",
     reference: "WC-MOB",
     shape: "rectangle",
@@ -735,11 +735,121 @@ export const MATERIAL_CATALOG: readonly CatalogItem[] = [
   },
   {
     id: "waste",
-    category: "Services",
+    category: "Déchets",
     name: "Point déchets",
     reference: "DECH",
     shape: "circle",
     radiusM: 0.35,
+    unit: "u",
+    style: { fill: "#d1fae5", stroke: "#047857", strokeWidth: 0.06, opacity: 0.9 },
+  },
+  {
+    id: "toilet-cabin",
+    category: "Sanitaires",
+    name: "Toilette mobile (type Toi Toi)",
+    reference: "WC-CAB",
+    shape: "rectangle",
+    widthM: 1.1,
+    heightM: 1.2,
+    unit: "u",
+    style: { fill: "#cffafe", stroke: "#0891b2", strokeWidth: 0.07, opacity: 0.9 },
+  },
+  {
+    id: "toilet-pmr",
+    category: "Sanitaires",
+    name: "Toilette PMR",
+    reference: "WC-PMR",
+    shape: "rectangle",
+    widthM: 1.6,
+    heightM: 1.6,
+    unit: "u",
+    style: { fill: "#cffafe", stroke: "#0891b2", strokeWidth: 0.07, opacity: 0.9 },
+  },
+  {
+    id: "urinal-4",
+    category: "Sanitaires",
+    name: "Urinoir 4 places",
+    reference: "URIN-4",
+    shape: "rectangle",
+    widthM: 1.2,
+    heightM: 1.2,
+    unit: "u",
+    style: { fill: "#cffafe", stroke: "#0891b2", strokeWidth: 0.07, opacity: 0.9 },
+  },
+  {
+    id: "handwash",
+    category: "Sanitaires",
+    name: "Lave-mains",
+    reference: "LAVE-M",
+    shape: "rectangle",
+    widthM: 0.6,
+    heightM: 0.6,
+    unit: "u",
+    style: { fill: "#cffafe", stroke: "#0891b2", strokeWidth: 0.07, opacity: 0.9 },
+  },
+  {
+    id: "toilet-trailer",
+    category: "Sanitaires",
+    name: "Bloc sanitaire (remorque)",
+    reference: "WC-REM",
+    shape: "rectangle",
+    widthM: 6,
+    heightM: 2.5,
+    unit: "u",
+    style: { fill: "#cffafe", stroke: "#0891b2", strokeWidth: 0.07, opacity: 0.9 },
+  },
+  {
+    id: "sorting-3",
+    category: "Déchets",
+    name: "Colonne de tri 3 flux",
+    reference: "TRI-3",
+    shape: "rectangle",
+    widthM: 1.8,
+    heightM: 0.6,
+    unit: "u",
+    style: { fill: "#d1fae5", stroke: "#047857", strokeWidth: 0.06, opacity: 0.9 },
+  },
+  {
+    id: "sorting-2",
+    category: "Déchets",
+    name: "Colonne de tri 2 flux",
+    reference: "TRI-2",
+    shape: "rectangle",
+    widthM: 1.2,
+    heightM: 0.6,
+    unit: "u",
+    style: { fill: "#d1fae5", stroke: "#047857", strokeWidth: 0.06, opacity: 0.9 },
+  },
+  {
+    id: "bin-660",
+    category: "Déchets",
+    name: "Conteneur 660 L",
+    reference: "CONT-660",
+    shape: "rectangle",
+    widthM: 1.37,
+    heightM: 0.78,
+    unit: "u",
+    style: { fill: "#d1fae5", stroke: "#047857", strokeWidth: 0.06, opacity: 0.9 },
+  },
+  {
+    id: "bin-240",
+    category: "Déchets",
+    name: "Bac 240 L",
+    reference: "BAC-240",
+    shape: "rectangle",
+    widthM: 0.58,
+    heightM: 0.74,
+    unit: "u",
+    style: { fill: "#d1fae5", stroke: "#047857", strokeWidth: 0.06, opacity: 0.9 },
+  },
+  {
+    id: "glass-bank",
+    category: "Déchets",
+    name: "Borne à verre",
+    reference: "VERRE",
+    shape: "rectangle",
+    widthM: 1.2,
+    heightM: 1.2,
     unit: "u",
     style: { fill: "#d1fae5", stroke: "#047857", strokeWidth: 0.06, opacity: 0.9 },
   },
@@ -872,4 +982,79 @@ export function scheduleToCsv(rows: readonly ScheduleRow[]): string {
   ]
     .map((cells) => cells.map(csvCell).join(";"))
     .join("\r\n");
+}
+
+/**
+ * The order the library shows its categories in (KL-052): what an event
+ * plan is built from first — structures, furniture, facilities — then
+ * safety, the electrical network, vehicles and drawing aids. A category
+ * not listed here (a user's own) follows, alphabetically.
+ */
+export const CATALOG_CATEGORY_ORDER: readonly string[] = [
+  "Structures",
+  "Mobilier",
+  "Sanitaires",
+  "Déchets",
+  "Services",
+  "Sécurité",
+  "Électricité",
+  "Véhicules",
+  "Architecture",
+  "Dessin",
+];
+
+/** How the Électricité category is split: by what the item is on the network. */
+const ELECTRICAL_GROUPS: readonly { label: string; matches: (item: CatalogItem) => boolean }[] = [
+  { label: "Alimentations", matches: (item) => item.electrical?.role === "source" },
+  { label: "Coffrets", matches: (item) => item.electrical?.role === "board" },
+  { label: "Câbles", matches: (item) => item.electrical?.role === "cable" },
+  { label: "Multiprises", matches: (item) => item.electrical?.role === "strip" },
+  {
+    label: "Récepteurs monophasés",
+    matches: (item) => item.electrical?.role === "load" && item.electrical.phases === "mono",
+  },
+  {
+    label: "Récepteurs triphasés",
+    matches: (item) => item.electrical?.role === "load" && item.electrical.phases === "tri",
+  },
+];
+
+export interface CatalogSection {
+  category: string;
+  /** One group per sub-type; a single unlabelled group for categories that aren't split. */
+  groups: { label: string | null; items: CatalogItem[] }[];
+  count: number;
+}
+
+/**
+ * The library arranged for reading (KL-052): one section per category in
+ * {@link CATALOG_CATEGORY_ORDER}, and Électricité — some fifty items —
+ * split by role, since a list of consumers is no place to look for a
+ * coffret. Items keep their catalogue order within a group; empty groups
+ * and sections are left out.
+ */
+export function groupCatalog(items: readonly CatalogItem[]): CatalogSection[] {
+  const rank = (category: string) => {
+    const index = CATALOG_CATEGORY_ORDER.indexOf(category);
+    return index === -1 ? CATALOG_CATEGORY_ORDER.length : index;
+  };
+  const categories = [...new Set(items.map((item) => item.category))].sort(
+    (a, b) => rank(a) - rank(b) || a.localeCompare(b, "fr"),
+  );
+  return categories.map((category) => {
+    const members = items.filter((item) => item.category === category);
+    if (category !== "Électricité") {
+      return { category, groups: [{ label: null, items: members }], count: members.length };
+    }
+    const groups = ELECTRICAL_GROUPS.map((group) => ({
+      label: group.label,
+      items: members.filter(group.matches),
+    }));
+    const others = members.filter((item) => !ELECTRICAL_GROUPS.some((g) => g.matches(item)));
+    return {
+      category,
+      groups: [...groups, { label: "Autres", items: others }].filter((g) => g.items.length > 0),
+      count: members.length,
+    };
+  });
 }
