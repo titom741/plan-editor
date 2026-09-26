@@ -1825,8 +1825,80 @@
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  max-height: min(70vh, 48rem);
+  /* A fixed height, so switching tabs doesn't make the dialog jump; the
+     summary and the tabs stay put and only the open tab scrolls. */
+  height: min(70vh, 48rem);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.electrical-dialog__tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.electrical-dialog__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.8rem;
+  margin-bottom: -1px;
+  border: 1px solid transparent;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.electrical-dialog__tab:hover {
+  color: var(--text-h);
+}
+
+.electrical-dialog__tab.is-active {
+  border-color: var(--border);
+  border-bottom-color: var(--bg);
+  background: var(--bg);
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.electrical-dialog__tab:focus-visible {
+  outline: 2px solid var(--accent-border);
+  outline-offset: 1px;
+}
+
+.electrical-dialog__badge {
+  min-width: 1.3rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.3rem;
+  text-align: center;
+}
+
+.electrical-dialog__badge.is-error {
+  background: #dc2626;
+  color: #fff;
+}
+
+.electrical-dialog__badge.is-warning {
+  background: #d97706;
+  color: #fff;
+}
+
+.electrical-dialog__panel {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
 }
 
 .electrical-dialog__body h3 {

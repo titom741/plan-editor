@@ -1341,3 +1341,36 @@ et pour chaque récepteur tri une forme, une puissance, un nom imprimable
 en PDF et une prise qui existe. Validés par mutation : trois défauts, deux
 détectés du premier coup — passer deux récepteurs en mono tenait sous un
 seuil trop lâche ; un nom qui dit « tri » doit maintenant être triphasé.
+
+## KL-051 — Récepteurs monophasés, et un schéma électrique par onglets *(done)*
+
+Demandé à l'usage : « ajoute aussi des récepteurs monophasés dans la
+bibliothèque et, dans schéma électrique, affiche les éléments (synoptique,
+alertes, bilan et câbles) par onglets, en commençant par alertes, car les
+câbles sont tout en bas, non visibles. »
+
+- **Vingt récepteurs monophasés de plus** : percolateur, machine à café
+  pro, bouilloire, crêpière, gaufrier, plancha, micro-ondes, tireuse à
+  bière, machine à glaçons, vitrine réfrigérée, congélateur, chauffage
+  d'appoint, régie son / DJ, enceinte amplifiée, écran LED, guirlande,
+  projecteur halogène, caisse / terminal de paiement, station de recharge
+  de téléphones, pompe à eau. Tous tiennent sur une prise 16 A, ce qu'un
+  test vérifie.
+- **La liste « + Ajouter un récepteur… » est groupée** en Monophasé et
+  Triphasé : avec trente-six modèles, une liste à plat cachait les
+  quelques-uns qui vont sur une prise tri. Les noms sans puissance
+  (« Point lumineux ») la reçoivent entre parenthèses.
+- **Le schéma électrique a quatre onglets** — Alertes, Synoptique, Bilan,
+  Câbles — ouvert sur Alertes, qui est ce que l'on vient y traiter. Le
+  nombre d'alertes est une pastille rouge s'il y a une erreur, orange s'il
+  n'y a que des avertissements ; celui des désignations de câbles figure
+  sur l'onglet Câbles. Le dialogue a une hauteur fixe : le résumé et les
+  onglets restent en place, seul l'onglet ouvert défile, et changer
+  d'onglet ne fait pas sauter la fenêtre. L'onglet Câbles dit « Aucun câble
+  sur le plan » plutôt que de disparaître.
+
+831 tests, dont 1 nouveau, validés par mutation : trois défauts dans la
+bibliothèque, trois détectés. Les onglets sont de l'interface pure,
+vérifiés dans le navigateur : Alertes ouvert d'office avec sa pastille,
+les trois autres onglets affichent leur contenu, la liste de récepteurs
+montre 24 modèles mono et 12 tri sur un coffret tri.

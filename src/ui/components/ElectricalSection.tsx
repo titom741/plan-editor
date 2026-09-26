@@ -575,13 +575,22 @@ function DirectLoadsEditor({
         }}
       >
         <option value="">+ Ajouter un récepteur…</option>
-        {LOAD_PRESETS.filter((preset) => phases === "both" || preset.phases === phases).map(
-          (preset) => (
-            <option key={preset.name} value={preset.name}>
-              {preset.name} ({formatPowerW(preset.powerW)} {preset.phases})
-            </option>
-          ),
-        )}
+        {/* Grouped by phases: with thirty-odd presets, a flat list hides
+            the few that fit a three-phase socket among the many that don't. */}
+        {(["mono", "tri"] as const)
+          .filter((group) => phases === "both" || group === phases)
+          .map((group) => (
+            <optgroup key={group} label={group === "mono" ? "Monophasé" : "Triphasé"}>
+              {LOAD_PRESETS.filter((preset) => preset.phases === group).map((preset) => (
+                <option key={preset.name} value={preset.name}>
+                  {/* Most names state their power; the few that don't get it added. */}
+                  {/\d/.test(preset.name)
+                    ? preset.name
+                    : `${preset.name} (${formatPowerW(preset.powerW)})`}
+                </option>
+              ))}
+            </optgroup>
+          ))}
         <option value="__custom">Autre récepteur</option>
       </select>
     </div>

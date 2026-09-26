@@ -82,6 +82,21 @@ describe("material catalogue", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it("offers a range of single-phase consumers, each on a socket that exists", () => {
+    const monoLoads = MATERIAL_CATALOG.flatMap((item) =>
+      item.electrical?.role === "load" && item.electrical.phases === "mono" ? [item] : [],
+    );
+    expect(monoLoads.length).toBeGreaterThanOrEqual(24);
+    for (const item of monoLoads) {
+      if (item.electrical?.role !== "load") continue;
+      expect(item.electrical.powerW, item.name).toBeGreaterThan(0);
+      for (const character of item.name)
+        expect(character.codePointAt(0)!).toBeLessThanOrEqual(0xff);
+      // Everything domestic fits a 16 A socket; nothing single-phase here needs more.
+      expect(directLoadSocket(item.electrical).ratingA, item.name).toBe(16);
+    }
+  });
+
   it("offers a range of three-phase consumers, each on a socket that exists", () => {
     const triLoads = MATERIAL_CATALOG.flatMap((item) =>
       item.electrical?.role === "load" && item.electrical.phases === "tri" ? [item] : [],
