@@ -113,6 +113,7 @@ import {
 } from "./panelSections";
 import { CSS_PIXELS_PER_INCH, useSheetExport } from "./hooks/useSheetExport";
 import { useViewport } from "./hooks/useViewport";
+import { useFullscreen } from "./hooks/useFullscreen";
 import {
   describeParseError,
   readProjectFile,
@@ -269,6 +270,7 @@ export default function Editor({
   } = useProjectHistory(initialProject);
 
   const [activeTool, setActiveTool] = useState<ToolId>("select");
+  const fullscreen = useFullscreen();
   /**
    * The character the symbol tool will place. Session state, not
    * document state: it is which symbol the user is currently stamping,
@@ -1422,6 +1424,11 @@ export default function Editor({
         saveStatus={saveStatus}
         onFitPlan={() => navigationBounds && fitBounds(navigationBounds)}
         canFitPlan={navigationBounds !== null}
+        fullscreen={
+          fullscreen.available
+            ? { active: fullscreen.active, onToggle: fullscreen.toggle }
+            : undefined
+        }
         pinnedIds={pinnedCommands}
         onRunCommand={runCommand}
       />

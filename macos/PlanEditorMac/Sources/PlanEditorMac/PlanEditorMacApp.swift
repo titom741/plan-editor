@@ -72,6 +72,9 @@ struct PlanEditorWebView: NSViewRepresentable {
         let bridge = FileBridge()
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
+        // The editor's « Plein écran » button uses the Fullscreen API, which a
+        // web view only honours with this switched on (KL-054).
+        configuration.preferences.isElementFullscreenEnabled = true
         configuration.userContentController.addScriptMessageHandler(
             bridge,
             contentWorld: .page,

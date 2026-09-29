@@ -18,6 +18,8 @@ interface ToolbarProps {
   saveStatus: SaveStatus;
   onFitPlan: () => void;
   canFitPlan: boolean;
+  /** Full screen (KL-054): absent when the host doesn't allow it. */
+  fullscreen?: { active: boolean; onToggle: () => void };
   /** The commands the user chose to keep within one click. Everything else lives in the left-hand menus. */
   pinnedIds: readonly CommandId[];
   onRunCommand: (id: CommandId) => void;
@@ -110,6 +112,7 @@ export function Toolbar({
   saveStatus,
   onFitPlan,
   canFitPlan,
+  fullscreen,
   pinnedIds,
   onRunCommand,
 }: ToolbarProps) {
@@ -222,6 +225,21 @@ export function Toolbar({
         >
           Cadrer le plan
         </button>
+        {fullscreen && (
+          <button
+            type="button"
+            className="toolbar__button"
+            onClick={fullscreen.onToggle}
+            aria-pressed={fullscreen.active}
+            title={
+              fullscreen.active
+                ? "Quitter le plein écran (Échap)"
+                : "Donner tout l'écran au plan — menus de l'application et fenêtre compris"
+            }
+          >
+            {fullscreen.active ? "⤡ Quitter le plein écran" : "⤢ Plein écran"}
+          </button>
+        )}
         Zoom&nbsp;: {Math.round(zoom * 100)}&nbsp;%
       </div>
     </header>

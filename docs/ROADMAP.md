@@ -1445,3 +1445,26 @@ ignorés). Vérifié dans le navigateur : le dialogue et son texte selon
 l'hôte. L'app macOS a été reconstruite (`scripts/build-macos.sh`) ; les
 fenêtres natives elles-mêmes demandent quelqu'un devant l'écran et n'ont
 pas été manipulées.
+
+## KL-054 — Le plan en plein écran *(done)*
+
+Demandé à l'usage, depuis Virade où l'éditeur est désormais embarqué : « il
+faudrait pouvoir cacher la barre de menu de gauche pour avoir plus d'espace, ou
+avoir un bouton plein écran dans le module plan editor ».
+
+- **« ⤢ Plein écran »**, à côté de « Cadrer le plan », donne tout l'écran à
+  l'éditeur par l'API Fullscreen : barre du navigateur, menu de l'application
+  hôte et cadre de la fenêtre compris. Il devient « ⤡ Quitter le plein écran »,
+  et Échap en sort aussi — l'état suit l'événement `fullscreenchange`, pas le
+  bouton, pour rester juste quelle que soit la façon d'en sortir.
+- **Il n'apparaît que là où l'hôte l'autorise** (`fullscreenEnabled`) : un cadre
+  sans `allow="fullscreen"`, une vue web sans la préférence, et il n'y a pas de
+  bouton plutôt qu'un bouton qui ne fait rien. La coquille macOS active
+  `isElementFullscreenEnabled` ; Virade, de son côté, autorise son cadre.
+- Le dialecte préfixé de WebKit (`webkitRequestFullscreen`…) est pris en repli ;
+  un refus (hôte qui dit non) est absorbé plutôt que levé dans un clic.
+
+853 tests, dont 4 nouveaux (`ui/fullscreen.ts`, testé avec un document de
+substitution). Le navigateur intégré de la session refuse le plein écran : le
+bouton y apparaît et encaisse le refus sans erreur, mais le passage effectif en
+plein écran n'a pas pu y être vu.
