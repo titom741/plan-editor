@@ -272,3 +272,31 @@ describe("files inside a host", () => {
     expect(createUrl).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("projects saved before the host kept them", () => {
+  it("are listed apart, and moved into the host on import", async () => {
+    const earlier = createEmptyProject({ name: "Plan de 2025" });
+    await saveAutosavedProject(earlier); // no host yet: IndexedDB
+    const { host, plans } = fakeHost();
+    installParent({ planEditorHost: host });
+
+    const { listLocalProjects, importLocalProject } = await import("./projectStorage");
+    expect((await listLocalProjects()).map((project) => project.name)).toEqual(["Plan de 2025"]);
+    expect(await listStoredProjects()).toEqual([]);
+
+    expect(await importLocalProject(earlier.id)).toBe(true);
+    expect(plans.get(earlier.id)?.name).toBe("Plan de 2025");
+    expect(await listLocalProjects()).toEqual([]);
+  });
+
+  it("stay where they are when the host refuses them", async () => {
+    const earlier = createEmptyProject({ name: "Plan de 2025" });
+    await saveAutosavedProject(earlier);
+    installParent({
+      planEditorHost: fakeHost({ save: () => Promise.reject(new Error("arrêté")) }).host,
+    });
+    const { listLocalProjects, importLocalProject } = await import("./projectStorage");
+    expect(await importLocalProject(earlier.id)).toBe(false);
+    expect(await listLocalProjects()).toHaveLength(1);
+  });
+});

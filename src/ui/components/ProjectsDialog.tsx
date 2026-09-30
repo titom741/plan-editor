@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import {
   deleteStoredProject,
   duplicateStoredProject,
+  importLocalProject,
+  listLocalProjects,
   listProjectVersions,
   listStoredProjects,
   loadProjectVersion,
@@ -34,9 +36,20 @@ export function ProjectsDialog({ currentProject, onOpen, onClose }: ProjectsDial
   const [error, setError] = useState<string | null>(null);
   // KL-055 — inside a host, the library is the host's: the words say so.
   const host = getPlanHost();
+  /** Inside a host: projects still in this window's own library, from before the host kept them. */
+  const [local, setLocal] = useState<StoredProjectSummary[]>([]);
   useEffect(() => {
     void listStoredProjects().then(setProjects);
+    if (getPlanHost()) void listLocalProjects().then(setLocal);
   }, []);
+  const importLocal = async (project: StoredProjectSummary) => {
+    if (!(await importLocalProject(project.id))) {
+      setError(`« ${project.name} » n'a pas pu être importé.`);
+      return;
+    }
+    setLocal((current) => current.filter((item) => item.id !== project.id));
+    setProjects(await listStoredProjects());
+  };
   const open = async (id: string) => {
     const result = await loadStoredProject(id);
     if (result.status === "loaded") onOpen(result.file.project);
@@ -202,6 +215,33 @@ export function ProjectsDialog({ currentProject, onOpen, onClose }: ProjectsDial
               </li>
             ))}
           </ul>
+        )}
+        {host && local.length > 0 && (
+          <>
+            <h3 className="projects-dialog__subtitle">Restés dans cette fenêtre</h3>
+            <p>
+              Enregistrés avant que {host.name} ne garde les plans : ils ne sont dans aucune de ses
+              sauvegardes. Les importer les range dans l&apos;année en cours.
+            </p>
+            <ul className="projects-dialog__list">
+              {local.map((project) => (
+                <li key={project.id}>
+                  <div>
+                    <strong>{project.name}</strong>
+                    <small>
+                      {project.location || "Sans lieu"} · {project.objectCount} élément(s) ·{" "}
+                      {dateLabel(project.savedAt)}
+                    </small>
+                  </div>
+                  <div className="projects-dialog__actions">
+                    <button type="button" onClick={() => void importLocal(project)}>
+                      Importer dans {host.name}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
         <div className="dialog__actions">
           <button type="button" onClick={onClose}>

@@ -1496,5 +1496,10 @@ fichier séparé ? » — et que tous les fichiers aillent dans le dossier de l'
   Virade », et « Projets récents » devient « Plans enregistrés dans Virade »,
   avec l'année de chacun et les années clôturées en lecture seule.
 
-863 tests, dont 10 nouveaux (`persistence/planHost.test.ts`, hôte et fenêtre de
-substitution).
+- Les projets **restés dans la bibliothèque du navigateur** d'avant l'hôte ne
+  disparaissent pas de la vue : « Récents » les liste à part (« Restés dans
+  cette fenêtre ») avec « Importer dans Virade », qui ne retire la copie locale
+  qu'une fois l'hôte en possession du plan.
+
+866 tests, dont 13 nouveaux (`persistence/planHost.test.ts`, hôte et fenêtre de
+substitution ; nommage des exports).

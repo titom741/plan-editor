@@ -160,6 +160,15 @@ export async function saveAutosavedProject(project: Project): Promise<SaveResult
 export async function listStoredProjects(): Promise<StoredProjectSummary[]> {
   const host = getPlanHost();
   if (host) return hostList(host);
+  return listLocalProjects();
+}
+
+/**
+ * The projects kept in this browser's own library, host or not. Inside a
+ * host they are the ones saved before the host took the library over
+ * (KL-055), offered for import rather than silently left behind.
+ */
+export async function listLocalProjects(): Promise<StoredProjectSummary[]> {
   const db = await openDatabase();
   if (!db) return [];
   try {
@@ -198,6 +207,11 @@ export async function listStoredProjects(): Promise<StoredProjectSummary[]> {
 export async function loadStoredProject(id: string): Promise<LoadResult> {
   const host = getPlanHost();
   if (host) return hostLoad(host, id);
+  return loadLocalProject(id);
+}
+
+/** A project of this browser's own library, host or not. */
+export async function loadLocalProject(id: string): Promise<LoadResult> {
   const db = await openDatabase();
   if (!db) return { status: "unavailable" };
   try {
@@ -220,6 +234,11 @@ export async function loadStoredProject(id: string): Promise<LoadResult> {
 export async function deleteStoredProject(id: string): Promise<boolean> {
   const host = getPlanHost();
   if (host) return hostRemove(host, id);
+  return deleteLocalProject(id);
+}
+
+/** Removes a project from this browser's own library, host or not. */
+export async function deleteLocalProject(id: string): Promise<boolean> {
   const db = await openDatabase();
   if (!db) return false;
   try {
@@ -250,6 +269,18 @@ async function putProjectFile(key: string, project: Project): Promise<SaveResult
   } finally {
     db.close();
   }
+}
+
+/**
+ * Moves a project of this browser's library into the host's (KL-055). The
+ * local copy is removed only once the host has it.
+ */
+export async function importLocalProject(id: string): Promise<boolean> {
+  const loaded = await loadLocalProject(id);
+  if (loaded.status !== "loaded") return false;
+  if ((await putStoredProject(loaded.file.project)).status !== "saved") return false;
+  await deleteLocalProject(id);
+  return true;
 }
 
 /** Writes a project into the library — the host's when there is one. Versions stay local either way. */
