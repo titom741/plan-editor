@@ -293,8 +293,12 @@ export default function Editor({
     const listener = (event: Event) => {
       const detail = (event as CustomEvent<FileDelivered>).detail;
       if (detail.error) setFileError(detail.error);
-      else if (detail.path)
-        setDeliveredNotice(`« ${detail.fileName} » est rangé dans ${detail.path}`);
+      else if (detail.path) {
+        // The year's folder and its section say where; the rest of the path
+        // is the same every time.
+        const folder = detail.path.split("/").slice(-3, -1).join(" › ");
+        setDeliveredNotice(`« ${detail.path.split("/").pop()} » est rangé dans ${folder}.`);
+      }
     };
     window.addEventListener(FILE_DELIVERED_EVENT, listener);
     return () => window.removeEventListener(FILE_DELIVERED_EVENT, listener);

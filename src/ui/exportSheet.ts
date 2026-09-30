@@ -693,7 +693,9 @@ function download(blob: Blob, fileName: string): void {
 
 /** Filename for an exported sheet: the project's slug plus the extension, reusing the project-file naming so exports sit together alphabetically. */
 export function exportFileName(project: Project, extension: "pdf" | "png"): string {
-  return `${suggestedFileName(project).replace(/\.kl\.json$/, "")}.${extension}`;
+  // The project extension became `.kli`; stripping only the old `.kl.json`
+  // named every export `plan.kli.pdf`.
+  return `${suggestedFileName(project).replace(/\.(kli|kl\.json)$/, "")}.${extension}`;
 }
 
 export function downloadSheetPdf(content: SheetContent): void {
