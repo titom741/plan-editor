@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { createDemoProject } from "../domain/project";
+import { createDemoProject, createEmptyProject } from "../domain/project";
 import type { Project } from "../domain/types";
 import { loadAutosavedProject } from "../persistence/projectStorage";
+import { getPlanHost } from "../persistence/planHost";
 import { describeParseError } from "./projectFileActions";
 import { AppErrorFallback, ErrorBoundary } from "./components/ErrorBoundary";
 import "./App.css";
@@ -33,8 +34,28 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    void loadAutosavedProject().then((result) => {
+    const host = getPlanHost();
+    void loadAutosavedProject().then(async (result) => {
       if (cancelled) return;
+      // Inside a host (KL-055), a year without a plan starts on a blank
+      // one filed under it — the demo is an onboarding example, not a
+      // plan anyone wants saved into their event.
+      if (host && result.status !== "loaded") {
+        const scope = await host.scope().catch(() => "");
+        if (cancelled) return;
+        setRestored({
+          project: createEmptyProject({
+            name: scope ? `Plan d'implantation ${scope}` : "Plan d'implantation",
+          }),
+          notice:
+            result.status === "empty"
+              ? null
+              : result.status === "unavailable"
+                ? `${host.name} n'a pas répondu : le dernier plan n'a pas pu être rouvert. Un plan vide est ouvert ; retrouve les autres dans « Projets récents ».`
+                : `Le dernier plan n'a pas pu être rouvert : ${describeParseError(result.error)} Un plan vide est ouvert.`,
+        });
+        return;
+      }
       switch (result.status) {
         case "loaded":
           setRestored({ project: result.file.project, notice: null });

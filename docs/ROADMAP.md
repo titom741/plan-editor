@@ -1468,3 +1468,33 @@ avoir un bouton plein écran dans le module plan editor ».
 substitution). Le navigateur intégré de la session refuse le plein écran : le
 bouton y apparaît et encaisse le refus sans erreur, mais le passage effectif en
 plein écran n'a pas pu y être vu.
+
+## KL-055 — Les plans enregistrés par l'hôte *(done)*
+
+Demandé à l'usage, depuis Virade : « est-ce que le plan d'implantation ne
+pourrait pas être enregistré en même temps que le reste, pour ne pas avoir un
+fichier séparé ? » — et que tous les fichiers aillent dans le dossier de l'année.
+
+- **Un hôte peut tenir la bibliothèque.** Quand la fenêtre parente (même
+  origine) expose `planEditorHost` (`persistence/planHost.ts`), la bibliothèque
+  de projets, la sauvegarde automatique et la réouverture au lancement passent
+  par lui au lieu d'IndexedDB. Virade y range chaque plan dans l'année, dans sa
+  base, et l'emporte dans chaque sauvegarde. Ailleurs — onglet, cadre d'une
+  autre origine, coquille macOS — rien ne change.
+- **Seuls des primitifs traversent** : le projet voyage en texte JSON et repasse
+  par `parseProjectFile`, comme un fichier choisi à la main ; les objets de
+  l'hôte viennent d'un autre royaume JavaScript, où `instanceof` ment.
+- **Les versions datées restent locales** : l'hôte garde les plans, pas la
+  trace de chacune de leurs étapes.
+- **Les exports** (PDF, PNG, schéma électrique, CSV, copie du projet) sont
+  remis à l'hôte (`ui/deliverFile.ts`), qui les range sans dialogue — dans
+  Virade, le dossier `Implantation` de l'année — et l'éditeur dit où. Si l'hôte
+  refuse, le fichier est téléchargé quand même. Les fenêtres d'enregistrement
+  s'ouvrent dans le dossier que l'hôte indique.
+- Un an sans plan s'ouvre sur un plan vide à son nom (« Plan d'implantation
+  2026 ») plutôt que sur la démonstration ; l'indicateur dit « Enregistré dans
+  Virade », et « Projets récents » devient « Plans enregistrés dans Virade »,
+  avec l'année de chacun et les années clôturées en lecture seule.
+
+863 tests, dont 10 nouveaux (`persistence/planHost.test.ts`, hôte et fenêtre de
+substitution).

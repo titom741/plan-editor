@@ -25,6 +25,7 @@ import {
 } from "../printing/standLabels";
 import type { SheetLayout } from "../printing/sheetLayout";
 import { suggestedFileName } from "./projectFileActions";
+import { deliverFile } from "./deliverFile";
 
 /**
  * Assembling the printed sheet: the rasterised plan, plus the frame,
@@ -687,14 +688,7 @@ function toBlobPart(bytes: Uint8Array): ArrayBuffer {
 }
 
 function download(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  deliverFile(blob, fileName);
 }
 
 /** Filename for an exported sheet: the project's slug plus the extension, reusing the project-file naming so exports sit together alphabetically. */

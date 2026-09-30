@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { canPickFolderInBrowser, type SaveFolder } from "../../persistence/saveFolder";
 import { isNativeBridgeAvailable, nativeChooseFolder } from "../nativeBridge";
+import { getPlanHost } from "../../persistence/planHost";
 
 interface SaveFolderDialogProps {
   folder: SaveFolder | null;
@@ -18,6 +19,43 @@ export function SaveFolderDialog({ folder, onChange, onClose }: SaveFolderDialog
   const native = isNativeBridgeAvailable();
   const browser = !native && canPickFolderInBrowser();
   const [error, setError] = useState<string | null>(null);
+  const host = getPlanHost();
+
+  // KL-055 — inside a host the folder is the host's to decide.
+  if (host) {
+    return (
+      <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
+        <section
+          className="dialog save-folder-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="save-folder-title"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <div className="dialog__header">
+            <h2 id="save-folder-title">Dossier d&apos;enregistrement</h2>
+            <button type="button" className="dialog__close" onClick={onClose} aria-label="Fermer">
+              ✕
+            </button>
+          </div>
+          <p>
+            Le plan lui-même est enregistré dans {host.name}, au fil des modifications, et part dans
+            ses sauvegardes. Les fichiers enregistrés ou exportés (PDF, image, copie du projet) vont
+            par défaut dans le dossier de l&apos;année :
+          </p>
+          <div className="save-folder-dialog__current">
+            <span>Dossier</span>
+            <strong>{folder?.kind === "path" ? folder.path : "choisi par " + host.name}</strong>
+          </div>
+          <div className="dialog__actions">
+            <button type="button" onClick={onClose}>
+              Fermer
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   const choose = async () => {
     setError(null);

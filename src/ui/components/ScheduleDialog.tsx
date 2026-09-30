@@ -1,6 +1,7 @@
 import { buildSchedule, scheduleToCsv } from "../../domain/catalog";
 import type { PlanObject, Project } from "../../domain/types";
 import { buildSchedulePdf } from "../../printing/schedulePdf";
+import { deliverFile } from "../deliverFile";
 
 interface ScheduleDialogProps {
   project: Project;
@@ -16,12 +17,7 @@ function safeName(name: string) {
 }
 
 function downloadBlob(blob: Blob, fileName: string) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  deliverFile(blob, fileName);
 }
 
 export function ScheduleDialog({ project, objects, onClose }: ScheduleDialogProps) {

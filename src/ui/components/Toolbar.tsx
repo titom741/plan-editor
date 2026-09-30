@@ -1,6 +1,7 @@
 import { getCommand, type CommandId } from "../commands";
 import { useState } from "react";
 import type { SaveStatus } from "../hooks/useAutosave";
+import { getPlanHost } from "../../persistence/planHost";
 
 interface ToolbarProps {
   projectName: string;
@@ -39,11 +40,41 @@ function formatTime(iso: string): string {
  * title attribute spells that out, and the failure states point at the
  * one action that actually protects the project — exporting a file.
  */
-function describeSaveStatus(status: SaveStatus): {
+function describeSaveStatus(
+  status: SaveStatus,
+  host: string | null,
+): {
   label: string;
   title: string;
   modifier: string;
 } {
+  // KL-055 — inside a host the save is not local: it is the host's, and
+  // goes into its backups. Saying so is the whole point of the indicator.
+  if (host !== null) {
+    switch (status.state) {
+      case "saving":
+        return {
+          label: "Enregistrement…",
+          title: `Enregistrement dans ${host}.`,
+          modifier: "saving",
+        };
+      case "saved":
+        return {
+          label: `Enregistré dans ${host} ${formatTime(status.savedAt)}`,
+          title: `Le plan est enregistré dans ${host}, avec le reste, et part dans ses sauvegardes.`,
+          modifier: "saved",
+        };
+      case "unavailable":
+      case "error":
+        return {
+          label: "Échec de l'enregistrement",
+          title: `${host} n'a pas pu enregistrer le plan (année clôturée, ou service arrêté). Enregistre-le dans un fichier pour ne rien perdre.`,
+          modifier: "warning",
+        };
+      default:
+        break;
+    }
+  }
   switch (status.state) {
     case "idle":
       return { label: "", title: "", modifier: "idle" };
@@ -116,7 +147,7 @@ export function Toolbar({
   pinnedIds,
   onRunCommand,
 }: ToolbarProps) {
-  const save = describeSaveStatus(saveStatus);
+  const save = describeSaveStatus(saveStatus, getPlanHost()?.name ?? null);
   const pinned = pinnedIds.map(getCommand).filter((command) => command !== undefined);
   // The name is a draft while the field has focus, so the commits that
   // land on every keystroke don't yank a half-typed name back. Outside

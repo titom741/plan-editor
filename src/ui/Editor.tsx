@@ -142,6 +142,7 @@ import {
   type ComponentTemplate,
 } from "../persistence/componentStorage";
 import "./App.css";
+import { FILE_DELIVERED_EVENT, type FileDelivered } from "./deliverFile";
 
 const LibraryDialog = lazy(() =>
   import("./components/LibraryDialog").then((module) => ({ default: module.LibraryDialog })),
@@ -283,6 +284,21 @@ export default function Editor({
     pointB: PointM;
   } | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  /**
+   * Where the host filed the last export (KL-055). A download says nothing,
+   * so neither does this; a host that files without a dialog must say where.
+   */
+  const [deliveredNotice, setDeliveredNotice] = useState<string | null>(null);
+  useEffect(() => {
+    const listener = (event: Event) => {
+      const detail = (event as CustomEvent<FileDelivered>).detail;
+      if (detail.error) setFileError(detail.error);
+      else if (detail.path)
+        setDeliveredNotice(`« ${detail.fileName} » est rangé dans ${detail.path}`);
+    };
+    window.addEventListener(FILE_DELIVERED_EVENT, listener);
+    return () => window.removeEventListener(FILE_DELIVERED_EVENT, listener);
+  }, []);
   // One state rather than eight booleans: these are all modal, so "which
   // one is open" is a single fact. Eight independent flags could represent
   // two dialogs stacked on top of each other — a state the app has no UI
@@ -1432,13 +1448,19 @@ export default function Editor({
         pinnedIds={pinnedCommands}
         onRunCommand={runCommand}
       />
-      {(restoreNotice || fileError) && (
+      {(restoreNotice || fileError || deliveredNotice) && (
         <div className="app-notice" role="status">
-          <span>{fileError ?? restoreNotice}</span>
+          <span>{fileError ?? deliveredNotice ?? restoreNotice}</span>
           <button
             type="button"
             className="app-notice__dismiss"
-            onClick={() => (fileError ? setFileError(null) : onDismissRestoreNotice())}
+            onClick={() =>
+              fileError
+                ? setFileError(null)
+                : deliveredNotice
+                  ? setDeliveredNotice(null)
+                  : onDismissRestoreNotice()
+            }
             title="Fermer"
           >
             ✕

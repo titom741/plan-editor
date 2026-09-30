@@ -28,6 +28,7 @@ import { parseProjectFile, toProjectFile } from "./projectFile";
 import type { ParseError, ProjectFile } from "./projectFile";
 import type { Project } from "../domain/types";
 import { createId } from "../domain/ids";
+import { getPlanHost, hostList, hostLoad, hostRemove, hostSave } from "./planHost";
 
 const DATABASE_NAME = "kl-implantation";
 const DATABASE_VERSION = 1;
@@ -45,6 +46,10 @@ export interface StoredProjectSummary {
   updatedAt: string;
   savedAt: string;
   objectCount: number;
+  /** Inside a host (KL-055): the year, or other group, the plan is filed under. */
+  scope?: string;
+  /** Inside a host: a plan it keeps but no longer lets anyone change. */
+  readOnly?: boolean;
 }
 
 export interface StoredVersionSummary {
@@ -108,6 +113,8 @@ function openDatabase(): Promise<IDBDatabase | null> {
  * untrusted in exactly the same way.
  */
 export async function loadAutosavedProject(): Promise<LoadResult> {
+  const host = getPlanHost();
+  if (host) return hostLoad(host, null);
   const db = await openDatabase();
   if (!db) return { status: "unavailable" };
   try {
@@ -125,6 +132,8 @@ export async function loadAutosavedProject(): Promise<LoadResult> {
 }
 
 export async function saveAutosavedProject(project: Project): Promise<SaveResult> {
+  const host = getPlanHost();
+  if (host) return hostSave(host, project);
   const db = await openDatabase();
   if (!db) return { status: "unavailable" };
   const file = toProjectFile(project);
@@ -149,6 +158,8 @@ export async function saveAutosavedProject(project: Project): Promise<SaveResult
 }
 
 export async function listStoredProjects(): Promise<StoredProjectSummary[]> {
+  const host = getPlanHost();
+  if (host) return hostList(host);
   const db = await openDatabase();
   if (!db) return [];
   try {
@@ -185,6 +196,8 @@ export async function listStoredProjects(): Promise<StoredProjectSummary[]> {
 }
 
 export async function loadStoredProject(id: string): Promise<LoadResult> {
+  const host = getPlanHost();
+  if (host) return hostLoad(host, id);
   const db = await openDatabase();
   if (!db) return { status: "unavailable" };
   try {
@@ -205,6 +218,8 @@ export async function loadStoredProject(id: string): Promise<LoadResult> {
 }
 
 export async function deleteStoredProject(id: string): Promise<boolean> {
+  const host = getPlanHost();
+  if (host) return hostRemove(host, id);
   const db = await openDatabase();
   if (!db) return false;
   try {
@@ -237,6 +252,13 @@ async function putProjectFile(key: string, project: Project): Promise<SaveResult
   }
 }
 
+/** Writes a project into the library — the host's when there is one. Versions stay local either way. */
+function putStoredProject(project: Project): Promise<SaveResult> {
+  const host = getPlanHost();
+  if (host) return hostSave(host, project);
+  return putProjectFile(`${PROJECT_KEY_PREFIX}${project.id}`, project);
+}
+
 export async function renameStoredProject(id: string, name: string): Promise<boolean> {
   const loaded = await loadStoredProject(id);
   if (loaded.status !== "loaded") return false;
@@ -246,7 +268,7 @@ export async function renameStoredProject(id: string, name: string): Promise<boo
     name: name.trim() || loaded.file.project.name,
     updatedAt: now,
   };
-  return (await putProjectFile(`${PROJECT_KEY_PREFIX}${id}`, project)).status === "saved";
+  return (await putStoredProject(project)).status === "saved";
 }
 
 export async function duplicateStoredProject(id: string, name?: string): Promise<Project | null> {
@@ -260,7 +282,7 @@ export async function duplicateStoredProject(id: string, name?: string): Promise
     createdAt: now,
     updatedAt: now,
   };
-  const result = await putProjectFile(`${PROJECT_KEY_PREFIX}${copy.id}`, copy);
+  const result = await putStoredProject(copy);
   return result.status === "saved" ? copy : null;
 }
 

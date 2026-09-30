@@ -3,6 +3,7 @@ import type { ParseError, ParseResult } from "../persistence/projectFile";
 import type { Project } from "../domain/types";
 import { isNativeBridgeAvailable, nativeOpen, nativeSave, nativeSaveAs } from "./nativeBridge";
 import type { SaveFolder } from "../persistence/saveFolder";
+import { deliverFile } from "./deliverFile";
 
 /**
  * Saving a project to, and opening one from, a file the user picks —
@@ -52,16 +53,7 @@ export function suggestedFileName(project: Project): string {
 /** Triggers a download of the project as a `.kli` file. */
 export function downloadProjectFile(project: Project): void {
   const blob = new Blob([serializeProject(project)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = suggestedFileName(project);
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  // Freed on the next tick rather than immediately: revoking synchronously
-  // can cancel the download in some browsers before it has started reading.
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  deliverFile(blob, suggestedFileName(project));
 }
 
 /** The slice of File System Access this app uses. Declared here because the DOM lib doesn't ship it and Safari/WKWebView don't implement it. */

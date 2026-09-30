@@ -19,6 +19,7 @@
  * Every function here tolerates storage being absent, full or corrupt: a
  * preference that cannot be read is simply not set.
  */
+import { getPlanHost } from "./planHost";
 
 export type SaveFolder =
   | { kind: "path"; path: string; name: string }
@@ -104,6 +105,20 @@ function isDirectoryHandle(value: unknown): value is FileSystemDirectoryHandle {
  * two never coexist in practice, since each host only ever writes its own.
  */
 export async function loadSaveFolder(): Promise<SaveFolder | null> {
+  // KL-055 — inside a host, files go where the host files everything else
+  // (in Virade, the year's « Implantation » folder); the setting is the
+  // host's, not this editor's.
+  const host = getPlanHost();
+  if (host) {
+    const folder = await host.exportFolder().catch(() => null);
+    if (typeof folder === "string" && folder !== "") {
+      return {
+        kind: "path",
+        path: folder,
+        name: folder.split("/").filter(Boolean).pop() ?? folder,
+      };
+    }
+  }
   const path = readPath();
   if (path) return path;
   const handle = await run("readonly", (store) => store.get(HANDLE_KEY));

@@ -6,6 +6,7 @@ import {
   objectsToSvg,
 } from "../../exchange/exportFormats";
 import type { PlanObject, Project } from "../../domain/types";
+import { deliverFile } from "../deliverFile";
 
 interface ExchangeDialogProps {
   project: Project;
@@ -234,10 +235,5 @@ function slug(value: string): string {
 
 /** Hands the browser a generated text file. Revoked on the next tick — the click has already consumed the URL. */
 function download(text: string, type: string, name: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  deliverFile(new Blob([text], { type }), name);
 }

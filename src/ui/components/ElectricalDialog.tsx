@@ -21,6 +21,7 @@ import {
   listedLoadRows,
   severityStroke,
 } from "../../printing/synopticLayout";
+import { deliverFile } from "../deliverFile";
 
 interface ElectricalDialogProps {
   project: Project;
@@ -81,12 +82,10 @@ export function ElectricalDialog({
 
   const downloadPdf = () => {
     const bytes = buildSynopticPdf(network, project.name, new Date());
-    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/pdf" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${safeName(project.name)}-schema-electrique.pdf`;
-    anchor.click();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
+    deliverFile(
+      new Blob([bytes as BlobPart], { type: "application/pdf" }),
+      `${safeName(project.name)}-schema-electrique.pdf`,
+    );
   };
 
   return (
